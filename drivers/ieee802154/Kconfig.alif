@@ -1,0 +1,64 @@
+# Alif 802.15.4 RF driver configuration options
+
+# Copyright (c) 2023 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+
+menuconfig IEEE802154_ALIF
+	bool "Alif IEEE 802.15.4 Driver"
+	default y
+	depends on NETWORKING
+	depends on DT_HAS_ALIF_AHI_IEEE802154_ENABLED
+	select IEEE802154_ALIF_SUPPORT
+
+if IEEE802154_ALIF
+
+config IEEE802154_ALIF_INIT_PRIO
+	int "Alif IEEE 802.15.4 initialization priority"
+	default 80
+	help
+	  Set the driver initialization priority number.
+
+config IEEE802154_ALIF_MAC154_CCA_MODE
+	int "Transmission CCA mode (0 = ED, 1 = CS, 2 = ED or CS, 3 = ED and CS)"
+	default 1
+	help
+	  CCA mode used in transmissions. ED = Energy Detection, CS = Carrier Sense
+
+config IEEE802154_ALIF_CCA_TICKS
+	int "CCA measurement count"
+	default 4
+	help
+	  Energy measurement count in energy detection over which average energy is measured in 128us ticks.
+
+config IEEE802154_ALIF_CCA_THRESHOLD
+	int "CCA threshold in Energy detection mode"
+	default -60
+	help
+	  energy detection measumerement in dBm over which the channel is considered busy.
+
+config IEEE802154_ALIF_POWER_LEVEL
+	int "Default power level of transmitter"
+	default 0
+	help
+	  Transmitter default power level in dBm.
+
+config IEEE802154_ALIF_CLOCK_ACCURACY
+	int "Timer accuracy (ppm)"
+	default 10
+	help
+	  Timer accuracy of the 802.15.4 system is dependent on the clock selection of the system.
+
+config IEEE802154_ALIF_RX_BUFFERS
+	int "Amount of RX buffers allocated for received packets"
+	default 5
+	help
+	  Amount of RX buffers available in reception for parallel packet processing.
+
+config IEEE802154_ALIF_RX_TASK_STACK_SIZE
+	int "RX stack size"
+	default 768
+	help
+	  Stack size of the reception task handling received packets from the RF.
+
+endif
