@@ -62,6 +62,10 @@ config IPM_MBOX
 	select MBOX
 	help
 	  IPM driver using a MBOX driver as the backend mechanism.
+config ARM_MHUV2
+	bool "Driver for Arm Message Handling Unit(MHUv2)"
+	help
+	  Enable MHUv2 driver for Arm Message Handling Unit(MHU)
 
 source "drivers/ipm/Kconfig.nrfx"
 source "drivers/ipm/Kconfig.imx"

@@ -75,6 +75,61 @@
 		status = "disabled";
 	};
 
+	peripheral@40000000 {
+		#address-cells = < 0x1 >;
+		#size-cells = < 0x1 >;
+		ranges = < 0x0 0x40000000 0x2000000 >;
+
+		seservice0r: mhu@40040000 {
+			compatible = "arm,mhuv2";
+			reg = < 0x40040000 0x1000 >;
+			interrupts = < 37 0 >;
+			interrupt-names = "rx";
+		};
+		seservice0s: mhu@40050000 {
+			compatible = "arm,mhuv2";
+			reg = < 0x40050000 0x1000 >;
+			interrupts = < 38 0 >;
+			interrupt-names = "tx";
+		};
+		seservice1r: mhu@40060000 {
+			compatible = "arm,mhuv2";
+			reg = < 0x40060000 0x1000 >;
+			interrupts = < 39 0 >;
+			interrupt-names = "rx";
+		};
+		seservice1s: mhu@40070000 {
+			compatible = "arm,mhuv2";
+			reg = < 0x40070000 0x1000 >;
+			interrupts = < 40 0 >;
+			interrupt-names = "tx";
+		};
+		rtsshp_rtsshe_mhu0_r: mhu@40080000 {
+			compatible = "arm,mhuv2";
+			reg = < 0x40080000 0x1000 >;
+			interrupts = < 41 0 >;
+			interrupt-names = "rx";
+		};
+		rtsshe_rtsshp_mhu0_s: mhu@40090000 {
+			compatible = "arm,mhuv2";
+			reg = < 0x40090000 0x1000 >;
+			interrupts = < 42 0 >;
+			interrupt-names = "tx";
+		};
+		rtsshp_rtsshe_mhu1_r: mhu@400a0000 {
+			compatible = "arm,mhuv2";
+			reg = < 0x400A0000 0x1000 >;
+			interrupts = < 43 0 >;
+			interrupt-names = "rx";
+		};
+		rtsshe_rtsshp_mhu1_s: mhu@400b0000 {
+			compatible = "arm,mhuv2";
+			reg = < 0x400B0000 0x1000 >;
+			interrupts = < 44 0 >;
+			interrupt-names = "tx";
+		};
+	};
+
 	uart0: uart@49018000 {
 		compatible = "ns16550";
 		reg = <0x49018000 0x100>;
@@ -876,6 +931,13 @@
 };
 
 &{/} {
+	se_service: se_service {
+		compatible = "alif,secure-enclave-services";
+		mhuv2-send-node = <&seservice0s>;
+		mhuv2-recv-node = <&seservice0r>;
+		status = "okay";
+	};
+
 	clocks {
 		lfrc: lfrc {
 			compatible = "fixed-clock";

@@ -1,0 +1,22 @@
+# Copyright (c) 2024 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+description: ARM MHUv2 (Message Handling Unit v2)
+
+compatible: "arm,mhuv2"
+
+include: base.yaml
+
+properties:
+    reg:
+      required: true
+
+    interrupts:
+      required: true
+
+    interrupt-names:
+      required: true
+      description: |
+        interrupt-names should be either 'tx' for sender interrupt or
+        'rx' for receiver interrupt.

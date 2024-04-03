@@ -27,6 +27,10 @@
 		pwm-led0 = &pwm_led0_green;
 		sw0 = &button0;
 		watchdog0 = &wdog0;
+		rtsshemhu0r = &rtsshp_rtsshe_mhu0_r;
+		rtsshemhu0s = &rtsshe_rtsshp_mhu0_s;
+		rtsshemhu1r = &rtsshp_rtsshe_mhu1_r;
+		rtsshemhu1s = &rtsshe_rtsshp_mhu1_s;
 	};
 
 	leds {

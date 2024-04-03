@@ -39,6 +39,33 @@
 	};
 };
 
+&{/soc/peripheral@40000000} {
+	apss_rtsshe_mhu0_r: mhu@40000000 {
+		compatible = "arm,mhuv2";
+		reg = < 0x40000000 0x1000 >;
+		interrupts = < 33 3 >;
+		interrupt-names = "rx";
+	};
+	rtsshe_apss_mhu0_s: mhu@40010000 {
+		compatible = "arm,mhuv2";
+		reg = < 0x40010000 0x1000 >;
+		interrupts = < 34 3 >;
+		interrupt-names = "tx";
+	};
+	apss_rtsshe_mhu1_r: mhu@40020000 {
+		compatible = "arm,mhuv2";
+		reg = < 0x40020000 0x1000 >;
+		interrupts = < 35 3 >;
+		interrupt-names = "rx";
+	};
+	rtsshe_apss_mhu1_s: mhu@40030000 {
+		compatible = "arm,mhuv2";
+		reg = < 0x40030000 0x1000 >;
+		interrupts = < 36 3 >;
+		interrupt-names = "tx";
+	};
+};
+
 &{/} {
 	cpus {
 		#address-cells = <1>;

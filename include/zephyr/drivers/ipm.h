@@ -97,6 +97,25 @@ typedef int (*ipm_set_enabled_t)(const struct device *ipmdev, int enable);
  */
 typedef void (*ipm_complete_t)(const struct device *ipmdev);
 
+/**
+ * @typedef ipm_poll_in_t
+ * @brief API to receive data in poll mode
+ *
+ * See @a ipm_poll_in() for argument definitions.
+ */
+typedef int (*ipm_poll_in_t)(const struct device *ipmdev, uint32_t id,
+			const void *data, int size, k_timeout_t timeout);
+
+/**
+ * @typedef ipm_poll_out_t
+ * @brief API to send data in poll mode
+ *
+ * See @a ipm_poll_out() for argument definitions.
+ */
+typedef int (*ipm_poll_out_t)(const struct device *ipmdev, uint32_t id,
+			const void *data, int siz, k_timeout_t timeout);
+
+
 __subsystem struct ipm_driver_api {
 	ipm_send_t send;
 	ipm_register_callback_t register_callback;
@@ -106,6 +125,8 @@ __subsystem struct ipm_driver_api {
 #ifdef CONFIG_IPM_CALLBACK_ASYNC
 	ipm_complete_t complete;
 #endif
+	ipm_poll_out_t	poll_out;
+	ipm_poll_in_t	poll_in;
 };
 
 /**
@@ -260,6 +281,82 @@ static inline void z_impl_ipm_complete(const struct device *ipmdev)
 		api->complete(ipmdev);
 	}
 #endif
+}
+
+/**
+ * @brief Send data to the device.
+ *
+ * This routine checks if the transmitter is full. When the
+ * transmitter is not full, it writes data to data
+ * register. It waits and blocks the calling thread. This
+ * function is a blocking call.
+ *
+ * @param ipmdev IPM device instance.
+ * @param id Message identifier. Values are constrained by
+ *        @a ipm_max_data_size_get since many boards only allow for a
+ *        subset of bits in a 32-bit register to store the ID.
+ * @param data Pointer to the data sent in the message.
+ * @param size Size of the data.
+ * @param timeout Timeout value in ms.
+ *
+ * @retval 0 If data sent.
+ * @retval -ENOSYS If the operation is not implemented.
+ * @retval -ENOTSUP If the operation is unsupported.
+ * @retval -EBUSY If busy.
+ * @retval -EAGAIN If timeout.
+ */
+__syscall int ipm_poll_out(const struct device *ipmdev, uint32_t id,
+			const void *data, int size, k_timeout_t timeout);
+
+static inline int z_impl_ipm_poll_out(const struct device *ipmdev, uint32_t id,
+				const void *data, int size, k_timeout_t timeout)
+{
+	const struct ipm_driver_api *api =
+		(const struct ipm_driver_api *)ipmdev->api;
+
+	if (api->poll_out == NULL) {
+		return -ENOSYS;
+	}
+
+	return api->poll_out(ipmdev, id, data, size, timeout);
+}
+
+/**
+ * @brief Receive data from the device.
+ *
+ * This routine checks if the receiver has valid data.  When the
+ * receiver has valid data, it reads data from the device,
+ * stores to the location pointed to by data, and returns 0 to the
+ * calling thread. This function is a blocking call.
+ *
+ * @param ipmdev IPM device instance.
+ * @param id Message identifier. Values are constrained by
+ *        @a ipm_max_data_size_get since many boards only allow for a
+ *        subset of bits in a 32-bit register to store the ID.
+ * @param data Pointer to the data sent in the message.
+ * @param size Size of the data.
+ * @param timeout Timeout value in ms.
+ *
+ * @retval 0 If data arrived.
+ * @retval -ENOSYS If the operation is not implemented.
+ * @retval -ENOTSUP If the operation is unsupported.
+ * @retval -EBUSY If busy.
+ * @retval -EAGAIN If timeout.
+ */
+__syscall int ipm_poll_in(const struct device *ipmdev, uint32_t id,
+			const void *data, int size, k_timeout_t timeout);
+
+static inline int z_impl_ipm_poll_in(const struct device *ipmdev, uint32_t id,
+				const void *data, int size, k_timeout_t timeout)
+{
+	const struct ipm_driver_api *api =
+		(const struct ipm_driver_api *)ipmdev->api;
+
+	if (api->poll_in == NULL) {
+		return -ENOSYS;
+	}
+
+	return api->poll_in(ipmdev, id, data, size, timeout);
 }
 
 #ifdef __cplusplus

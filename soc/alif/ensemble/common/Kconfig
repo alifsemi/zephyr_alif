@@ -11,6 +11,14 @@ config RTSS_HP
 	bool "RTSS_HP core"
 	help
 	  Enable RTSS_HP core.
+	  
+config SOC_SUPPORT_ARM_MHUV2
+	bool "SoC support communication through Arm MHUv2"
+	depends on SOC_FAMILY_ENSEMBLE
+	select IPM
+	select ARM_MHUV2
+	help
+	  SoC support communication through Arm MHUv2	  
 
 config USE_ALIF_HAL_UTIMER
 	bool "UTIMER ll driver access"
