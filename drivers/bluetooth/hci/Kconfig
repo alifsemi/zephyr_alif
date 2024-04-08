@@ -182,6 +182,11 @@ config BT_PSOC6_BLESS
 	help
 	  PSOC 6 BLESS driver with BLE Controller which operates in
 	  Single CPU mode.
+config BT_ALIF
+	bool "Alifsemi HCI driver"
+	select BT_UART
+	help
+	  "Alif Semiconductor HCI bluetooth interface"
 
 config BT_DA1453X
 	bool "DA1453x HCI driver"
