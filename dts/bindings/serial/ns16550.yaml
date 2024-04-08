@@ -18,6 +18,10 @@ properties:
     type: int
     description: divisor latch fraction (DLF, if supported)
 
+  fifo-size:
+    type: int
+    description: Size of FIFO
+
   io-mapped:
     type: boolean
     description: specify registers are IO mapped or memory mapped
