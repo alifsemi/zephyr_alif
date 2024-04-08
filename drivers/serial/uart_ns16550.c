@@ -716,16 +716,12 @@ static int uart_ns16550_configure(const struct device *dev,
 #endif
 			);
 
-	if ((ns16550_inbyte(dev_cfg, IIR(dev)) & IIR_FE) == IIR_FE) {
-#ifdef CONFIG_UART_NS16550_VARIANT_NS16750
-		dev_data->fifo_size = 64;
-#elif defined(CONFIG_UART_NS16550_VARIANT_NS16950)
-		dev_data->fifo_size = 128;
-#else
-		dev_data->fifo_size = 16;
-#endif
-	} else {
-		dev_data->fifo_size = 1;
+	if (!dev_data->fifo_size) {
+		if ((ns16550_inbyte(dev_cfg, IIR(dev)) & IIR_FE) == IIR_FE) {
+			dev_data->fifo_size = CONFIG_UART_NS16550_FIFO_SIZE;
+		} else {
+			dev_data->fifo_size = 1;
+		}
 	}
 
 	/* clear the port */
@@ -1968,6 +1964,7 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 			COND_CODE_1(DT_INST_PROP_OR(n, hw_flow_control, 0),          \
 				    (UART_CFG_FLOW_CTRL_RTS_CTS),                    \
 				    (UART_CFG_FLOW_CTRL_NONE)),                      \
+		.fifo_size = DT_INST_PROP_OR(n, fifo_size, 0),                       \
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, dlf),                            \
 			(.dlf = DT_INST_PROP_OR(n, dlf, 0),))			     \
 		DEV_DATA_ASYNC(n)						     \
