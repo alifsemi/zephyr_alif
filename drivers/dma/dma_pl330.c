@@ -19,6 +19,10 @@ LOG_MODULE_REGISTER(dma_pl330);
 
 #define BYTE_WIDTH(burst_size) (1 << (burst_size))
 
+#if !DT_INST_NODE_HAS_PROP(0, microcode)
+static uint8_t __aligned(4) dma_pl330_mcode_buf[TOTAL_MICROCODE_SIZE];
+#endif
+
 static int dma_pl330_submit(const struct device *dev, uint64_t dst,
 			    uint64_t src, uint32_t channel, uint32_t size);
 
@@ -576,7 +580,11 @@ static const struct dma_pl330_config pl330_config = {
 #ifdef CONFIG_DMA_64BIT
 	.control_reg_base = DT_INST_REG_ADDR_BY_NAME(0, control_regs),
 #endif
+#if DT_INST_NODE_HAS_PROP(0, microcode)
 	.mcode_base = DT_INST_PROP_BY_IDX(0, microcode, 0),
+#else
+	.mcode_base = POINTER_TO_UINT(&dma_pl330_mcode_buf),
+#endif
 };
 
 static struct dma_pl330_dev_data pl330_data;

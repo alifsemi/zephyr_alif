@@ -31,7 +31,6 @@ properties:
     required: true
   microcode:
     type: array
-    required: true
     description: microcode's physical memory address
   "#dma-cells":
     const: 1
