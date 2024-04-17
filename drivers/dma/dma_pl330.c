@@ -12,6 +12,7 @@
 #include <soc.h>
 #include <zephyr/sys/__assert.h>
 #include "dma_pl330.h"
+#include <soc_memory_map.h>
 
 #define LOG_LEVEL CONFIG_DMA_LOG_LEVEL
 #include <zephyr/logging/log.h>
@@ -284,7 +285,7 @@ static int dma_pl330_start_dma_ch(const struct device *dev,
 		    (secure << DMA_SECURE_SHIFT) + (ch << DMA_CH_SHIFT)),
 		    reg_base + DMAC_PL330_DBGINST0);
 
-	sys_write32(channel_cfg->dma_exec_addr,
+	sys_write32(local_to_global(UINT_TO_POINTER(channel_cfg->dma_exec_addr)),
 		    reg_base + DMAC_PL330_DBGINST1);
 
 	sys_write32(0x0, reg_base + DMAC_PL330_DBGCMD);
@@ -495,8 +496,10 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 	channel_cfg->direction = cfg->channel_direction;
 	channel_cfg->dst_addr_adj = cfg->head_block->dest_addr_adj;
 
-	channel_cfg->src_addr = cfg->head_block->source_address;
-	channel_cfg->dst_addr = cfg->head_block->dest_address;
+	channel_cfg->src_addr =
+		local_to_global(UINT_TO_POINTER(cfg->head_block->source_address));
+	channel_cfg->dst_addr =
+		local_to_global(UINT_TO_POINTER(cfg->head_block->dest_address));
 	channel_cfg->trans_size = cfg->head_block->block_size;
 
 	channel_cfg->dma_callback = cfg->dma_callback;
