@@ -50,6 +50,13 @@
 
 #define MAX_DMA_CHANNELS	DT_INST_PROP(0, dma_channels)
 
+#define DMAC_PL330_INTEN	0x20
+#define DMAC_PL330_INTMIS	0x28
+#define DMAC_PL330_INTCLR	0x2C
+#define DMAC_PL330_FSRD		0x30
+#define DMAC_PL330_FSRC		0x34
+#define DMAC_PL330_FTRD		0x38
+#define DMAC_PL330_FTR0		0x40
 #define DMAC_PL330_CS0		0x100
 #define DMAC_PL330_DBGSTATUS	0xd00
 #define DMAC_PL330_DBGCMD	0xd04
@@ -76,6 +83,8 @@
 #define CONTROL_OFFSET		0x4
 #define HIGHER_32_ADDR_MASK	0x0f
 #define DST_ADDR_SHIFT		0x4
+
+#define DMA_MAX_EVENTS		32
 
 #define MICROCODE_SIZE_MAX	0x400
 #define TOTAL_MICROCODE_SIZE	(MAX_DMA_CHANNELS * MICROCODE_SIZE_MAX)
@@ -106,6 +115,7 @@
 #define OP_DMA_LD		0x4
 #define OP_DMA_ST		0x8
 #define OP_DMA_SEV		0x34
+#define OP_DMA_WMB		0x13
 #define OP_DMA_END		0x00
 #define OP_DMA_LP_BK_JMP1	0x38
 #define OP_DMA_LP_BK_JMP2	0x3c
@@ -164,10 +174,13 @@ struct dma_pl330_config {
 #ifdef CONFIG_DMA_64BIT
 	mem_addr_t control_reg_base;
 #endif
+	uint8_t num_irqs;
+	void (*irq_configure)(void);
 };
 
 struct dma_pl330_dev_data {
 	struct dma_pl330_ch_config channels[MAX_DMA_CHANNELS];
+	int event_irq[DMA_MAX_EVENTS];
 };
 
 #endif

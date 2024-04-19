@@ -15,6 +15,17 @@ description: |
                   #dma-cells = <1>;
             };
 
+  Example using Interrupt
+  The interrupt name should be used along with the interrupts.
+  The driver fetches the enabled channels using the interrupt-names
+
+    pl330: pl330@48300000 {
+                compatible = "arm,dma-pl330";
+                  ...
+                interrupts = <0 3>, <1 3>, <32 3>;
+                interrupt-names = "channel0", "channel1", "abort";
+           };
+
   If PCIe EP client uses channel 0 for Tx DMA and channel 1 for Rx DMA
      pcie0_ep: pcie@4e100000 {
                   compatible = "brcm,iproc-pcie-ep";
@@ -32,6 +43,8 @@ properties:
   microcode:
     type: array
     description: microcode's physical memory address
+  interrupts:
+    description: optional
   "#dma-cells":
     const: 1
 

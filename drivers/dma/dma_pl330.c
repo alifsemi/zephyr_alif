@@ -173,6 +173,7 @@ static int dma_pl330_setup_ch(const struct device *dev,
 	struct dma_pl330_ch_config *channel_cfg;
 	int secure = ch_dat->nonsec_mode ? SRC_PRI_NONSEC_VALUE :
 				SRC_PRI_SEC_VALUE;
+	unsigned int irq = dev_data->event_irq[ch];
 
 	channel_cfg = &dev_data->channels[ch];
 	dma_exec_addr = channel_cfg->dma_exec_addr;
@@ -255,6 +256,15 @@ static int dma_pl330_setup_ch(const struct device *dev,
 		offset = offset + 2;
 	}
 
+	sys_write8(OP_DMA_WMB, dma_exec_addr + offset);
+	offset = offset + 1;
+
+	if (channel_cfg->dma_callback) {
+		dma_pl330_gen_op(OP_DMA_SEV, dma_exec_addr + offset,
+				((irq & 0x1f) << 3));
+		offset = offset + 2;
+	}
+
 	sys_write8(OP_DMA_END, dma_exec_addr + offset);
 	sys_write8(OP_DMA_END, dma_exec_addr + offset + 1);
 	sys_write8(OP_DMA_END, dma_exec_addr + offset + 2);
@@ -270,6 +280,9 @@ static int dma_pl330_start_dma_ch(const struct device *dev,
 	struct dma_pl330_ch_config *channel_cfg;
 	uint32_t count = 0U;
 	uint32_t data;
+	uint32_t inten;
+	unsigned int irq_key;
+	uint32_t irq = dev_data->event_irq[ch];
 
 	channel_cfg = &dev_data->channels[ch];
 	do {
@@ -280,6 +293,8 @@ static int dma_pl330_start_dma_ch(const struct device *dev,
 		k_busy_wait(1);
 	} while ((data & DATA_MASK) != 0);
 
+	irq_key = irq_lock();
+
 	sys_write32(((ch << DMA_INTSR1_SHIFT) +
 		    (DMA_INTSR0 << DMA_INTSR0_SHIFT) +
 		    (secure << DMA_SECURE_SHIFT) + (ch << DMA_CH_SHIFT)),
@@ -288,7 +303,14 @@ static int dma_pl330_start_dma_ch(const struct device *dev,
 	sys_write32(local_to_global(UINT_TO_POINTER(channel_cfg->dma_exec_addr)),
 		    reg_base + DMAC_PL330_DBGINST1);
 
+	if (channel_cfg->dma_callback) {
+		inten = sys_read32(reg_base + DMAC_PL330_INTEN) | (1 << irq);
+		sys_write32(inten, reg_base + DMAC_PL330_INTEN);
+	}
+
 	sys_write32(0x0, reg_base + DMAC_PL330_DBGCMD);
+
+	irq_unlock(irq_key);
 
 	count = 0U;
 	do {
@@ -367,10 +389,12 @@ static int dma_pl330_xfer(const struct device *dev, uint64_t dst,
 		goto err;
 	}
 
-	ret = dma_pl330_wait(dev_cfg->reg_base, channel);
-	if (ret) {
-		LOG_ERR("Failed waiting to finish DMA PL330");
-		goto err;
+	if (!channel_cfg->dma_callback) {
+		ret = dma_pl330_wait(dev_cfg->reg_base, channel);
+		if (ret) {
+			LOG_ERR("Failed waiting to finish DMA PL330");
+			goto err;
+		}
 	}
 
 	*xfer_size = size;
@@ -555,6 +579,61 @@ static int dma_pl330_transfer_stop(const struct device *dev, uint32_t channel)
 	return 0;
 }
 
+static void dma_pl330_isr(const struct device *dev)
+{
+	const struct dma_pl330_config *const dev_cfg = dev->config;
+	struct dma_pl330_dev_data *const dev_data = dev->data;
+	struct dma_pl330_ch_config *channel_cfg;
+	int err = 0;
+	uint32_t intmis, fsrc, ch;
+	uint32_t reg_base = dev_cfg->reg_base;
+
+	/* First make sure there is no Abort in Manager */
+	if (sys_read32(reg_base + DMAC_PL330_FSRD) & 0x1) {
+		LOG_ERR("DMA Manager thread is faulting = %x",
+			sys_read32(reg_base + DMAC_PL330_FTRD));
+	}
+
+	/*
+	 *	Read Channel Fault status
+	 */
+	fsrc = sys_read32(reg_base + DMAC_PL330_FSRC);
+	if (fsrc) {
+		for (ch = 0; ch < MAX_DMA_CHANNELS; ch++) {
+			if (fsrc & (1 << ch)) {
+				channel_cfg = &dev_data->channels[ch];
+
+				LOG_ERR("DMA Channel %d is faulting = %x",
+					ch, sys_read32(reg_base + DMAC_PL330_FTR0 + (ch * 4)));
+
+				if (channel_cfg->dma_callback) {
+					channel_cfg->dma_callback(
+						dev, channel_cfg->user_data, ch, -EIO);
+				}
+			}
+		}
+	} else {
+		/*
+		 *	Issue channel callback
+		 *	Here the assumption is that channel number and irq number
+		 *	are mapped one-to-one
+		 */
+		intmis = sys_read32(reg_base + DMAC_PL330_INTMIS);
+
+		for (ch = 0; ch < MAX_DMA_CHANNELS; ch++) {
+			if (intmis & (1 << ch)) {
+				sys_write32((1 << ch), reg_base + DMAC_PL330_INTCLR);
+
+				channel_cfg = &dev_data->channels[ch];
+				if (channel_cfg->dma_callback) {
+					channel_cfg->dma_callback(
+						dev, channel_cfg->user_data, ch, err);
+				}
+			}
+		}
+	}
+}
+
 static int dma_pl330_initialize(const struct device *dev)
 {
 	const struct dma_pl330_config *const dev_cfg = dev->config;
@@ -568,6 +647,8 @@ static int dma_pl330_initialize(const struct device *dev)
 		k_mutex_init(&channel_cfg->ch_mutex);
 	}
 
+	dev_cfg->irq_configure();
+
 	LOG_INF("Device %s initialized", dev->name);
 	return 0;
 }
@@ -577,6 +658,35 @@ static DEVICE_API(dma, pl330_driver_api) = {
 	.start = dma_pl330_transfer_start,
 	.stop = dma_pl330_transfer_stop,
 };
+
+#define IRQ_CONFIGURE(n, inst)                                                 \
+	IRQ_CONNECT(DT_INST_IRQ_BY_IDX(inst, n, irq),                              \
+		    DT_INST_IRQ_BY_IDX(inst, n, priority), dma_pl330_isr,              \
+		    DEVICE_DT_INST_GET(inst), 0);                                      \
+	irq_enable(DT_INST_IRQ_BY_IDX(inst, n, irq));
+
+#define CHANNEL_TO_EVENTIRQ(n, inst)                                             \
+			IF_ENABLED(DT_IRQ_HAS_NAME(DT_DRV_INST(inst), channel##n),          \
+				(dev_data->event_irq[n] = n;))
+
+#define CONFIGURE_ALL_IRQS(inst, n) LISTIFY(n, IRQ_CONFIGURE, (), inst)
+
+#define ASSIGN_CHANNELS_TO_EVENTIRQ(inst, n)                                     \
+			LISTIFY(n, CHANNEL_TO_EVENTIRQ, (), inst)
+
+static void dma_pl330_irq_configure(void)
+{
+	const struct device *const dev = DEVICE_DT_GET(DT_DRV_INST(0));
+	struct dma_pl330_dev_data *dev_data = dev->data;
+	uint8_t event_index;
+
+	CONFIGURE_ALL_IRQS(0, DT_NUM_IRQS(DT_DRV_INST(0)));
+
+	for (event_index = 0; event_index < DMA_MAX_EVENTS; event_index++) {
+		dev_data->event_irq[event_index] = -1;
+	}
+	ASSIGN_CHANNELS_TO_EVENTIRQ(0, DT_INST_PROP(0, dma_channels))
+}
 
 static const struct dma_pl330_config pl330_config = {
 	.reg_base = DT_INST_REG_ADDR(0),
@@ -588,11 +698,13 @@ static const struct dma_pl330_config pl330_config = {
 #else
 	.mcode_base = POINTER_TO_UINT(&dma_pl330_mcode_buf),
 #endif
+	.irq_configure = dma_pl330_irq_configure,
+	.num_irqs = DT_NUM_IRQS(DT_DRV_INST(0)),
 };
 
 static struct dma_pl330_dev_data pl330_data;
 
 DEVICE_DT_INST_DEFINE(0, &dma_pl330_initialize, NULL,
-		    &pl330_data, &pl330_config,
-		    POST_KERNEL, CONFIG_DMA_INIT_PRIORITY,
-		    &pl330_driver_api);
+			&pl330_data, &pl330_config,
+			POST_KERNEL, CONFIG_DMA_INIT_PRIORITY,
+			&pl330_driver_api);
