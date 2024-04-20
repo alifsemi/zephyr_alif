@@ -79,6 +79,7 @@
 #define DMA_INTSR0		0xa0
 #define DMA_SECURE_SHIFT	17
 #define DMA_CH_SHIFT		8
+#define DMA_DBG_CHN			1
 
 #define CONTROL_OFFSET		0x4
 #define HIGHER_32_ADDR_MASK	0x0f
@@ -117,6 +118,7 @@
 #define OP_DMA_SEV		0x34
 #define OP_DMA_WMB		0x13
 #define OP_DMA_END		0x00
+#define OP_DMA_KILL		0x01
 #define OP_DMA_LP_BK_JMP1	0x38
 #define OP_DMA_LP_BK_JMP2	0x3c
 #define SZ_CMD_DMAMOV		0x6

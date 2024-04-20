@@ -339,6 +339,41 @@ static int dma_pl330_wait(uint32_t reg_base, int ch)
 	return 0;
 }
 
+static int dma_pl330_stop_dma_ch(const struct device *dev,
+				  uint32_t reg_base, int ch)
+{
+	struct dma_pl330_dev_data *const dev_data = dev->data;
+	int ret;
+	uint32_t data, inten, count = 0U;
+	uint32_t irq = dev_data->event_irq[ch];
+
+	do {
+		data = sys_read32(reg_base + DMAC_PL330_DBGSTATUS);
+		if ((data & DATA_MASK) == 0) {
+			break;
+		}
+
+		if (++count > DMA_TIMEOUT_US) {
+			return -ETIMEDOUT;
+		}
+		k_busy_wait(1);
+	} while (1);
+
+	sys_write32(((OP_DMA_KILL << DMA_INTSR0_SHIFT) +
+		(ch << DMA_CH_SHIFT) + DMA_DBG_CHN),
+		reg_base + DMAC_PL330_DBGINST0);
+	sys_write32(0, reg_base + DMAC_PL330_DBGINST1);
+	sys_write32(0x0, reg_base + DMAC_PL330_DBGCMD);
+
+	ret = dma_pl330_wait(reg_base, ch);
+	inten = sys_read32(reg_base + DMAC_PL330_INTEN);
+	inten = inten & ~(1U << irq);
+	sys_write32(inten, reg_base + DMAC_PL330_INTEN);
+	sys_write32((1 << irq), reg_base + DMAC_PL330_INTCLR);
+
+	return ret;
+}
+
 static int dma_pl330_xfer(const struct device *dev, uint64_t dst,
 			  uint64_t src, uint32_t size, uint32_t channel,
 			  uint32_t *xfer_size)
@@ -571,12 +606,26 @@ static int dma_pl330_transfer_start(const struct device *dev,
 
 static int dma_pl330_transfer_stop(const struct device *dev, uint32_t channel)
 {
+	const struct dma_pl330_config *const dev_cfg = dev->config;
+	uint32_t reg_base = dev_cfg->reg_base;
+	uint32_t cs0_reg = reg_base + DMAC_PL330_CS0;
+	unsigned int irq_key;
+	int ret = 0;
+
 	if (channel >= MAX_DMA_CHANNELS) {
 		return -EINVAL;
 	}
 
-	/* Nothing as of now */
-	return 0;
+	if ((sys_read32(cs0_reg + channel * 8) & CH_STATUS_MASK) == 0) {
+		return 0;
+	}
+
+	irq_key = irq_lock();
+
+	ret = dma_pl330_stop_dma_ch(dev, reg_base, channel);
+
+	irq_unlock(irq_key);
+	return ret;
 }
 
 static void dma_pl330_isr(const struct device *dev)
@@ -606,6 +655,9 @@ static void dma_pl330_isr(const struct device *dev)
 				LOG_ERR("DMA Channel %d is faulting = %x",
 					ch, sys_read32(reg_base + DMAC_PL330_FTR0 + (ch * 4)));
 
+				(void)dma_pl330_stop_dma_ch(dev, reg_base, ch);
+
+				channel_cfg = &dev_data->channels[ch];
 				if (channel_cfg->dma_callback) {
 					channel_cfg->dma_callback(
 						dev, channel_cfg->user_data, ch, -EIO);
