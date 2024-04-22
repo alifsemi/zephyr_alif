@@ -73,34 +73,46 @@ static uint32_t dma_pl330_ch_ccr(struct dma_pl330_ch_internal *ch_handle)
 	return ccr;
 }
 
-static void dma_pl330_calc_burstsz_len(struct dma_pl330_ch_internal *ch_handle,
-				       uint64_t dst, uint64_t src,
-				       uint32_t size)
+static int dma_pl330_calc_burstsz_len(struct dma_pl330_ch_config *channel_cfg,
+				       uint64_t dst, uint64_t src, uint32_t size,
+					   uint8_t max_burst_size_log2)
 {
-	uint32_t byte_width, burst_sz, burst_len;
+	struct dma_pl330_ch_internal *ch_handle = &channel_cfg->internal;
+	uint32_t burst_sz;
 
-	burst_sz = MAX_BURST_SIZE_LOG2;
-	/* src, dst and size should be aligned to burst size in bytes */
-	while ((src | dst | size) & ((BYTE_WIDTH(burst_sz)) - 1)) {
-		burst_sz--;
-	}
+	if (channel_cfg->direction == PERIPHERAL_TO_MEMORY ||
+		channel_cfg->direction == MEMORY_TO_PERIPHERAL) {
 
-	byte_width = BYTE_WIDTH(burst_sz);
-
-	burst_len = MAX_BURST_LEN;
-	while (burst_len) {
-		/* Choose burst length so that size is aligned */
-		if (!(size % ((burst_len + 1) << byte_width))) {
-			break;
+		if (channel_cfg->direction == PERIPHERAL_TO_MEMORY) {
+			ch_handle->src_burst_sz = channel_cfg->src_burst_sz;
+			ch_handle->dst_burst_sz = channel_cfg->src_burst_sz;
+			ch_handle->src_burst_len = channel_cfg->src_blen;
+			ch_handle->dst_burst_len = channel_cfg->src_blen;
+		} else {
+			ch_handle->src_burst_sz = channel_cfg->dst_burst_sz;
+			ch_handle->dst_burst_sz = channel_cfg->dst_burst_sz;
+			ch_handle->src_burst_len = channel_cfg->dst_blen;
+			ch_handle->dst_burst_len = channel_cfg->dst_blen;
 		}
 
-		burst_len--;
+		if ((src | dst | size) & ((BYTE_WIDTH(ch_handle->src_burst_sz)) - 1)) {
+			return -EINVAL;
+		}
+	} else {
+
+		burst_sz = max_burst_size_log2;
+		/* src, dst and size should be aligned to burst size in bytes */
+		while ((src | dst | size) & ((BYTE_WIDTH(burst_sz)) - 1)) {
+			burst_sz--;
+		}
+
+		ch_handle->src_burst_len = channel_cfg->dst_blen;
+		ch_handle->src_burst_sz = burst_sz;
+		ch_handle->dst_burst_len = channel_cfg->dst_blen;
+		ch_handle->dst_burst_sz = burst_sz;
 	}
 
-	ch_handle->src_burst_len = burst_len;
-	ch_handle->src_burst_sz = burst_sz;
-	ch_handle->dst_burst_len = burst_len;
-	ch_handle->dst_burst_sz = burst_sz;
+	return 0;
 }
 
 #ifdef CONFIG_DMA_64BIT
@@ -129,6 +141,14 @@ static void dma_pl330_config_channel(struct dma_pl330_ch_config *ch_cfg,
 	ch_handle->src_addr = src;
 	ch_handle->dst_addr = dst;
 	ch_handle->trans_size = size;
+
+	if (ch_cfg->direction == PERIPHERAL_TO_MEMORY) {
+		ch_handle->src_id = ch_cfg->periph_slot;
+		ch_handle->breq_only = 1;
+	} else if (ch_cfg->direction == MEMORY_TO_PERIPHERAL) {
+		ch_handle->dst_id = ch_cfg->periph_slot;
+		ch_handle->breq_only = 1;
+	}
 
 	if (ch_cfg->src_addr_adj == DMA_ADDR_ADJ_INCREMENT) {
 		ch_handle->src_inc = 1;
@@ -159,6 +179,66 @@ static inline void dma_pl330_gen_op(uint8_t opcode, uint32_t addr, uint32_t val)
 	sys_write8(val, addr + 1);
 }
 
+static uint32_t dma_pl330_gen_copy_op(struct dma_pl330_ch_internal *ch_dat,
+					mem_addr_t dma_exec_addr, uint32_t offset,
+					enum dma_channel_direction direction, uint32_t burst_len)
+{
+	uint8_t req_type;
+
+	if (ch_dat->breq_only) {
+		req_type = DMA_PERIPH_REQ_TYPE_BURST;
+	} else {
+		req_type = burst_len ?
+					DMA_PERIPH_REQ_TYPE_BURST : DMA_PERIPH_REQ_TYPE_SINGLE;
+	}
+
+	if (direction == PERIPHERAL_TO_MEMORY) {
+		dma_pl330_gen_op(OP_DMA_FLUSHP, dma_exec_addr + offset,
+				((ch_dat->src_id) << 3));
+		offset = offset + 2;
+		dma_pl330_gen_op(OP_DMA_WFP(req_type), dma_exec_addr + offset,
+				((ch_dat->src_id) << 3));
+		offset = offset + 2;
+		dma_pl330_gen_op(OP_DMA_LDP(req_type), dma_exec_addr + offset,
+				((ch_dat->src_id) << 3));
+		offset = offset + 2;
+		if (req_type) {
+			sys_write8(OP_DMA_ST(DMA_LDST_REQ_TYPE_BURST),
+				dma_exec_addr + offset);
+		} else {
+			sys_write8(OP_DMA_ST(DMA_LDST_REQ_TYPE_SINGLE),
+				dma_exec_addr + offset);
+		}
+		offset = offset + 1;
+	} else if (direction == MEMORY_TO_PERIPHERAL) {
+		dma_pl330_gen_op(OP_DMA_FLUSHP, dma_exec_addr + offset,
+				((ch_dat->dst_id) << 3));
+		offset = offset + 2;
+		dma_pl330_gen_op(OP_DMA_WFP(req_type), dma_exec_addr + offset,
+				((ch_dat->dst_id) << 3));
+		offset = offset + 2;
+		if (req_type) {
+			sys_write8(OP_DMA_LD(DMA_LDST_REQ_TYPE_BURST),
+				dma_exec_addr + offset);
+		} else {
+			sys_write8(OP_DMA_LD(DMA_LDST_REQ_TYPE_SINGLE),
+				dma_exec_addr + offset);
+		}
+		offset = offset + 1;
+		dma_pl330_gen_op(OP_DMA_STP(req_type), dma_exec_addr + offset,
+				((ch_dat->src_id) << 3));
+		offset = offset + 2;
+	} else {
+		sys_write8(OP_DMA_LD(DMA_LDST_REQ_TYPE_FORCE),
+			dma_exec_addr + offset);
+		sys_write8(OP_DMA_ST(DMA_LDST_REQ_TYPE_FORCE),
+			dma_exec_addr + offset + 1);
+		offset = offset + 2;
+	}
+
+	return offset;
+}
+
 static int dma_pl330_setup_ch(const struct device *dev,
 			      struct dma_pl330_ch_internal *ch_dat,
 			      int ch)
@@ -171,9 +251,8 @@ static int dma_pl330_setup_ch(const struct device *dev,
 	uint32_t loop_counter, residue;
 	struct dma_pl330_dev_data *const dev_data = dev->data;
 	struct dma_pl330_ch_config *channel_cfg;
-	int secure = ch_dat->nonsec_mode ? SRC_PRI_NONSEC_VALUE :
-				SRC_PRI_SEC_VALUE;
 	unsigned int irq = dev_data->event_irq[ch];
+	uint32_t residue_blen;
 
 	channel_cfg = &dev_data->channels[ch];
 	dma_exec_addr = channel_cfg->dma_exec_addr;
@@ -203,9 +282,9 @@ static int dma_pl330_setup_ch(const struct device *dev,
 		offset = offset + 2;
 		lp1_start = offset;
 		lp0_start = offset;
-		sys_write8(OP_DMA_LD, dma_exec_addr + offset);
-		sys_write8(OP_DMA_ST, dma_exec_addr + offset + 1);
-		offset = offset + 2;
+
+		offset = dma_pl330_gen_copy_op(ch_dat, dma_exec_addr,
+					offset, channel_cfg->direction, ch_dat->dst_burst_len);
 		dma_pl330_gen_op(OP_DMA_LP_BK_JMP1, dma_exec_addr + offset,
 				 ((offset - lp0_start) & 0xff));
 		offset = offset + 2;
@@ -225,35 +304,24 @@ static int dma_pl330_setup_ch(const struct device *dev,
 		offset = offset + 2;
 		loop_counter1--;
 		lp0_start = offset;
-		sys_write8(OP_DMA_LD, dma_exec_addr + offset);
-		sys_write8(OP_DMA_ST, dma_exec_addr + offset + 1);
-		offset = offset + 2;
+		offset = dma_pl330_gen_copy_op(ch_dat, dma_exec_addr,
+					offset, channel_cfg->direction, ch_dat->dst_burst_len);
 		dma_pl330_gen_op(OP_DMA_LP_BK_JMP1, dma_exec_addr + offset,
 				 ((offset - lp0_start) & 0xff));
 		offset = offset + 2;
 	}
 
 	if (residue != 0) {
-		ccr = ((ch_dat->nonsec_mode) << CC_DSTNS_SHIFT) +
-		       (0x0 << CC_DSTBRSTLEN_SHIFT) +
-		       (0x0 << CC_DSTBRSTSIZE_SHIFT) +
-		       (ch_dat->dst_inc << CC_DSTINC_SHIFT) +
-		       (secure << CC_SRCPRI_SHIFT) +
-		       (0x0 << CC_SRCBRSTLEN_SHIFT) +
-		       (0x0 << CC_SRCBRSTSIZE_SHIFT) +
-		       ch_dat->src_inc;
+		residue_blen = (residue / srcbytewidth) - 1;
+		ccr = ccr & ~((CC_BRSTLEN_MASK << CC_SRCBRSTLEN_SHIFT) |
+					  (CC_BRSTLEN_MASK << CC_DSTBRSTLEN_SHIFT));
+		ccr = ccr | ((residue_blen << CC_SRCBRSTLEN_SHIFT) |
+					 (residue_blen << CC_DSTBRSTLEN_SHIFT));
+
 		offset += dma_pl330_gen_mov(dma_exec_addr + offset,
 					    CCR, ccr);
-		dma_pl330_gen_op(OP_DMA_LOOP, dma_exec_addr + offset,
-				 ((residue - 1) & 0xff));
-		offset = offset + 2;
-		lp0_start = offset;
-		sys_write8(OP_DMA_LD, dma_exec_addr + offset);
-		sys_write8(OP_DMA_ST, dma_exec_addr + offset + 1);
-		offset = offset + 2;
-		dma_pl330_gen_op(OP_DMA_LP_BK_JMP1, dma_exec_addr + offset,
-				 ((offset - lp0_start) & 0xff));
-		offset = offset + 2;
+		offset = dma_pl330_gen_copy_op(ch_dat, dma_exec_addr,
+					offset, channel_cfg->direction, residue_blen);
 	}
 
 	sys_write8(OP_DMA_WMB, dma_exec_addr + offset);
@@ -388,7 +456,12 @@ static int dma_pl330_xfer(const struct device *dev, uint64_t dst,
 	channel_cfg = &dev_data->channels[channel];
 	ch_handle = &channel_cfg->internal;
 
-	dma_pl330_calc_burstsz_len(ch_handle, dst, src, size);
+	ret = dma_pl330_calc_burstsz_len(channel_cfg, dst, src,
+					size, dev_data->axi_data_width);
+	if (ret) {
+		LOG_ERR("Error in Burst size/len for DMA PL330");
+		goto err;
+	}
 
 	max_size = GET_MAX_DMA_SIZE((1 << ch_handle->src_burst_sz),
 				    ch_handle->src_burst_len);
@@ -536,6 +609,11 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 		return -EINVAL;
 	}
 
+	if (cfg->source_burst_length > MAX_BURST_LEN ||
+		cfg->dest_burst_length > MAX_BURST_LEN) {
+		return -EINVAL;
+	}
+
 	channel_cfg = &dev_data->channels[channel];
 	k_mutex_lock(&channel_cfg->ch_mutex, K_FOREVER);
 	if (channel_cfg->channel_active) {
@@ -545,12 +623,16 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 	channel_cfg->channel_active = 1;
 	k_mutex_unlock(&channel_cfg->ch_mutex);
 
-	if (cfg->channel_direction != MEMORY_TO_MEMORY) {
-		return -ENOTSUP;
-	}
-
 	ch_handle = &channel_cfg->internal;
 	memset(ch_handle, 0, sizeof(*ch_handle));
+
+	if ((cfg->channel_direction == PERIPHERAL_TO_MEMORY
+		|| cfg->channel_direction == MEMORY_TO_PERIPHERAL)
+		&& (cfg->dma_slot > dev_data->num_periph_req)) {
+		return -EINVAL;
+	}
+
+	channel_cfg->periph_slot = cfg->dma_slot;
 
 	channel_cfg->direction = cfg->channel_direction;
 	channel_cfg->dst_addr_adj = cfg->head_block->dest_addr_adj;
@@ -560,6 +642,11 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 	channel_cfg->dst_addr =
 		local_to_global(UINT_TO_POINTER(cfg->head_block->dest_address));
 	channel_cfg->trans_size = cfg->head_block->block_size;
+
+	channel_cfg->src_burst_sz = cfg->source_data_size;
+	channel_cfg->dst_burst_sz = cfg->dest_data_size;
+	channel_cfg->src_blen = cfg->source_burst_length;
+	channel_cfg->dst_blen = cfg->dest_burst_length;
 
 	channel_cfg->dma_callback = cfg->dma_callback;
 	channel_cfg->user_data = cfg->user_data;
@@ -700,6 +787,13 @@ static int dma_pl330_initialize(const struct device *dev)
 	}
 
 	dev_cfg->irq_configure();
+
+	dev_data->num_periph_req = ((sys_read32(dev_cfg->reg_base + DMAC_PL330_CR0)
+								 >> DMA_NUM_PERIPH_REQ_SHIFT)
+								& DMA_NUM_PERIPH_REQ_MASK);
+
+	dev_data->axi_data_width = sys_read32(dev_cfg->reg_base + DMAC_PL330_CRD)
+								& DMA_AXI_DATA_WIDTH_MASK;
 
 	LOG_INF("Device %s initialized", dev->name);
 	return 0;

@@ -62,6 +62,8 @@
 #define DMAC_PL330_DBGCMD	0xd04
 #define DMAC_PL330_DBGINST0	0xd08
 #define DMAC_PL330_DBGINST1	0xd0c
+#define DMAC_PL330_CR0		0xE00
+#define DMAC_PL330_CRD		0xE14
 
 /*
  * TIMEOUT value of 100000us is kept to cover all possible data
@@ -85,6 +87,10 @@
 #define HIGHER_32_ADDR_MASK	0x0f
 #define DST_ADDR_SHIFT		0x4
 
+#define DMA_NUM_PERIPH_REQ_SHIFT	12
+#define DMA_NUM_PERIPH_REQ_MASK		0x1F
+#define DMA_AXI_DATA_WIDTH_MASK		0x7
+
 #define DMA_MAX_EVENTS		32
 
 #define MICROCODE_SIZE_MAX	0x400
@@ -100,6 +106,7 @@
 #define CC_DSTNS_SHIFT		23
 #define CC_SRCBRSTLEN_SHIFT	4
 #define CC_DSTBRSTLEN_SHIFT	18
+#define CC_BRSTLEN_MASK		0xF
 #define CC_SRCBRSTSIZE_SHIFT	1
 #define CC_DSTBRSTSIZE_SHIFT	15
 #define CC_SRCCCTRL_SHIFT	11
@@ -113,15 +120,27 @@
 #define OP_DMA_MOV		0xbc
 #define OP_DMA_LOOP_COUNT1	0x22
 #define OP_DMA_LOOP		0x20
-#define OP_DMA_LD		0x4
-#define OP_DMA_ST		0x8
+#define OP_DMA_LD(req)	(0x4 | req)
+#define OP_DMA_LDP(req)	(0x25 | req)
+#define OP_DMA_ST(req)	(0x8 | req)
+#define OP_DMA_STP(req)	(0x29 | req)
 #define OP_DMA_SEV		0x34
+#define OP_DMA_FLUSHP	0x35
 #define OP_DMA_WMB		0x13
 #define OP_DMA_END		0x00
 #define OP_DMA_KILL		0x01
 #define OP_DMA_LP_BK_JMP1	0x38
 #define OP_DMA_LP_BK_JMP2	0x3c
+#define OP_DMA_WFP(req)		(0x30 | req)
 #define SZ_CMD_DMAMOV		0x6
+
+#define DMA_PERIPH_REQ_TYPE_SINGLE	0
+#define DMA_PERIPH_REQ_TYPE_BURST	2
+#define DMA_PERIPH_REQ_TYPE_PERIPH	1
+
+#define DMA_LDST_REQ_TYPE_FORCE		0
+#define DMA_LDST_REQ_TYPE_SINGLE	1
+#define DMA_LDST_REQ_TYPE_BURST		3
 
 enum dmamov_type {
 	/* Source Address Register */
@@ -158,6 +177,10 @@ struct dma_pl330_ch_config {
 	enum dma_addr_adj src_addr_adj;
 	uint64_t dst_addr;
 	enum dma_addr_adj dst_addr_adj;
+	uint16_t src_burst_sz;
+	uint16_t dst_burst_sz;
+	uint16_t src_blen;
+	uint16_t dst_blen;
 	enum dma_channel_direction direction;
 	uint32_t trans_size;
 	void *user_data;
@@ -165,6 +188,7 @@ struct dma_pl330_ch_config {
 	mem_addr_t dma_exec_addr;
 	struct k_mutex ch_mutex;
 	int channel_active;
+	uint8_t periph_slot;
 
 	/* Channel specific private data */
 	struct dma_pl330_ch_internal internal;
@@ -183,6 +207,8 @@ struct dma_pl330_config {
 struct dma_pl330_dev_data {
 	struct dma_pl330_ch_config channels[MAX_DMA_CHANNELS];
 	int event_irq[DMA_MAX_EVENTS];
+	uint8_t num_periph_req;
+	uint8_t axi_data_width;
 };
 
 #endif

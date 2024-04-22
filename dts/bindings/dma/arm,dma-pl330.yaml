@@ -33,6 +33,17 @@ description: |
                   dmas = <&pl330 0>, <&pl330 1>;
                   dma-names = "txdma", "rxdma";
             };
+
+  Example for enabling dma for device
+  For spi example, the peripheral request id has to be provided
+
+      &spi4 {
+          ...
+          dmas = <&dma2 0 13>, <&dma2, 1 12>;
+          dma-names = "txdma", "rxdma";
+      };
+
+
 compatible: "arm,dma-pl330"
 
 include: dma-controller.yaml
@@ -46,8 +57,14 @@ properties:
   interrupts:
     description: optional
   "#dma-cells":
-    const: 1
+    const: 2
+# The 1st cell specifies the DMAC channel to be used for the data transfer.
+#   This channel should be unique between all peripherals/mem2mem that are using the
+#   DMAC instance.
+# The 2nd cell defines the peripheral request interface<N>
+#   See the SoC's reference manual for all the supported request sources.
 
 # Parameter syntax
 dma-cells:
   - channel
+  - periph
