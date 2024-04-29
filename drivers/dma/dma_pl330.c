@@ -145,10 +145,16 @@ static void dma_pl330_config_channel(struct dma_pl330_ch_config *ch_cfg,
 	if (ch_cfg->direction == PERIPHERAL_TO_MEMORY) {
 		ch_handle->src_id = ch_cfg->periph_slot;
 		ch_handle->breq_only = 1;
+		ch_handle->dst_cache_ctrl = CC_CCTRL_MODIFIABLE_VALUE;
 	} else if (ch_cfg->direction == MEMORY_TO_PERIPHERAL) {
 		ch_handle->dst_id = ch_cfg->periph_slot;
 		ch_handle->breq_only = 1;
+		ch_handle->src_cache_ctrl = CC_CCTRL_MODIFIABLE_VALUE;
+	} else if (ch_cfg->direction == MEMORY_TO_MEMORY) {
+		ch_handle->src_cache_ctrl = CC_CCTRL_MODIFIABLE_VALUE;
+		ch_handle->dst_cache_ctrl = CC_CCTRL_MODIFIABLE_VALUE;
 	}
+
 
 	if (ch_cfg->src_addr_adj == DMA_ADDR_ADJ_INCREMENT) {
 		ch_handle->src_inc = 1;
