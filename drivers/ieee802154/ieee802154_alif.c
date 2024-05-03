@@ -22,7 +22,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <zephyr/kernel.h>
 #include <zephyr/arch/cpu.h>
 #include <zephyr/debug/stack.h>
-#include <zephyr/random/rand32.h>
+#include <zephyr/random/random.h>
 
 #include <soc.h>
 #include <string.h>
@@ -62,7 +62,7 @@ static struct alif_802154_data alif_data;
 
 static void alif_capabilities_set(void)
 {
-	alif_data.capabilities = IEEE802154_HW_FCS | IEEE802154_HW_2_4_GHZ | IEEE802154_HW_FILTER |
+	alif_data.capabilities = IEEE802154_HW_FCS | IEEE802154_HW_FILTER |
 				 IEEE802154_HW_TX_RX_ACK | IEEE802154_HW_CSMA |
 				 IEEE802154_HW_ENERGY_SCAN | IEEE802154_HW_PROMISC;
 	LOG_DBG("Alif cap 0x%x", alif_data.capabilities);
@@ -221,7 +221,7 @@ static int handle_ack(const struct device *dev, struct alif_tx_ack_resp *param_a
 
 	net_pkt_cursor_init(ack_pkt);
 
-	if (ieee802154_radio_handle_ack(DATA(dev)->iface, ack_pkt) != NET_OK) {
+	if (ieee802154_handle_ack(DATA(dev)->iface, ack_pkt) != NET_OK) {
 		LOG_WRN("ACK not handled");
 	}
 	net_pkt_unref(ack_pkt);
@@ -345,14 +345,16 @@ static int alif_tx(const struct device *dev, enum ieee802154_tx_mode mode, struc
 	return 0;
 }
 
-static uint64_t alif_get_time(const struct device *dev)
+static net_time_t alif_get_time(const struct device *dev)
 {
+	net_time_t time_val;
 	uint64_t ret;
 
 	LOG_DBG("get_time()");
 	alif_mac154_timestamp_get(&ret);
-
-	return ret;
+	/* Covert us to ns */
+	time_val = (net_time_t)ret * NSEC_PER_USEC;
+	return time_val;
 }
 
 static uint8_t alif_get_accuracy(const struct device *dev)
@@ -658,7 +660,7 @@ static int alif_configure(const struct device *dev, enum ieee802154_config_type 
 	case IEEE802154_CONFIG_MAC_KEYS:
 	case IEEE802154_CONFIG_FRAME_COUNTER:
 	case IEEE802154_CONFIG_ENH_ACK_HEADER_IE:
-	case IEEE802154_CONFIG_CSL_RX_TIME:
+	case IEEE802154_CONFIG_EXPECTED_RX_TIME:
 	case IEEE802154_CONFIG_RX_SLOT:
 	case IEEE802154_CONFIG_CSL_PERIOD:
 	default:
