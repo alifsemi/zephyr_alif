@@ -10,12 +10,12 @@
 #include <zephyr/net/ieee802154_radio.h>
 
 struct alif_frame {
-	uint64_t time;	      /* frame RX timestamp. */
+	uint64_t time;        /* frame RX timestamp. */
 	void *fifo_reserved;  /* 1st word reserved for use by fifo. */
 	uint8_t frame[127];   /* received frame. */
 	uint8_t frame_length; /* length of frame 0 means free*/
-	int8_t rssi;	      /* frame RSSI value. */
-	int8_t status;	      /* RX status. */
+	int8_t rssi;          /* frame RSSI value. */
+	int8_t status;        /* RX status. */
 	bool ack_fpb;         /* Frame pending bit value in ACK of this Frame*/
 };
 
@@ -67,6 +67,9 @@ struct alif_802154_data {
 
 	/*Current transmission power*/
 	int16_t dbm;
+
+	/* Transmission allowed any time during RX */
+	bool tx_opt_allowed;
 
 	/* Auto ACK with Frame pending enabled */
 	bool auto_ack_fpb;

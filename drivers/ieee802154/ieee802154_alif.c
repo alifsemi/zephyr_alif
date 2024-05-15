@@ -203,6 +203,10 @@ static int handle_ack(const struct device *dev, struct alif_tx_ack_resp *param_a
 {
 	struct net_pkt *ack_pkt;
 
+	LOG_DBG("ACK received: len:%d rssi:%d time:%" PRId64 "", param_ack->ack_msg_len,
+		param_ack->ack_rssi, param_ack->ack_timestamp);
+	LOG_HEXDUMP_DBG(param_ack->ack_msg, param_ack->ack_msg_len, "ACK:");
+
 	ack_pkt = net_pkt_rx_alloc_with_buffer(DATA(dev)->iface, param_ack->ack_msg_len, AF_UNSPEC,
 					       0, K_NO_WAIT);
 	if (!ack_pkt) {
@@ -244,7 +248,7 @@ static enum alif_mac154_status_code alif_transmit_csma(const struct device *dev,
 	csma_param_BE = DATA(dev)->csma_ca_conf.macMinBe;
 	do {
 		if (csma_param_BE) {
-			if (rx_stopped) {
+			if (!DATA(dev)->tx_opt_allowed && rx_stopped) {
 				struct alif_rx_enable rx_enable_req = {0};
 
 				rx_enable_req.channel = DATA(dev)->channel;
@@ -259,7 +263,7 @@ static enum alif_mac154_status_code alif_transmit_csma(const struct device *dev,
 
 			k_sleep(K_USEC(backoff_period));
 		}
-		if (DATA(dev)->receiver_on || rx_stopped) {
+		if (!DATA(dev)->tx_opt_allowed && (DATA(dev)->receiver_on || rx_stopped)) {
 			ret = alif_mac154_receive_stop();
 			DATA(dev)->receiver_on = false;
 			rx_stopped = true;
@@ -312,14 +316,14 @@ static int alif_tx(const struct device *dev, enum ieee802154_tx_mode mode, struc
 		LOG_ERR("TX mode %d not supported", mode);
 		return -ENOTSUP;
 	}
-	LOG_DBG("TX len: %d mode: %s, %s, %s", frag->len, tx_mode,
+	LOG_DBG("TX len: %d mode: %s, %s, %s time: %d", frag->len, tx_mode,
 		transmit_req.acknowledgment_asked ? "ACK" : "no ACK",
-		transmit_req.cca_requested ? "CCA" : "no CCA");
+		transmit_req.cca_requested ? "CCA" : "no CCA", transmit_req.timestamp);
 
 	if (mode == IEEE802154_TX_MODE_CSMA_CA) {
 		ret = alif_transmit_csma(dev, &transmit_req, &transmit_resp);
 	} else {
-		if (DATA(dev)->receiver_on) {
+		if (!DATA(dev)->tx_opt_allowed && DATA(dev)->receiver_on) {
 			alif_mac154_receive_stop();
 			DATA(dev)->receiver_on = false;
 		}
@@ -333,10 +337,10 @@ static int alif_tx(const struct device *dev, enum ieee802154_tx_mode mode, struc
 		}
 		return handle_ack(dev, &transmit_resp);
 	case ALIF_MAC154_STATUS_CHANNEL_ACCESS_FAILURE:
-		LOG_INF("TX CCA failed");
+		LOG_DBG("TX CCA failed");
 		return -EBUSY;
 	case ALIF_MAC154_STATUS_NO_ACK:
-		LOG_INF("TX no ACK");
+		LOG_DBG("TX no ACK");
 		return -ENOMSG;
 	default:
 		LOG_WRN("TX Failed %d", ret);
@@ -350,8 +354,8 @@ static net_time_t alif_get_time(const struct device *dev)
 	net_time_t time_val;
 	uint64_t ret;
 
-	LOG_DBG("get_time()");
 	alif_mac154_timestamp_get(&ret);
+	LOG_DBG("get_time(%" PRId64 ")", ret);
 	/* Covert us to ns */
 	time_val = (net_time_t)ret * NSEC_PER_USEC;
 	return time_val;
@@ -400,7 +404,6 @@ static void alif_rx_frame_callback(struct alif_rx_frame_received *p_frame_recv)
 	p_frame->status = ALIF_MAC154_STATUS_OK;
 	memcpy(p_frame->frame, p_frame_recv->p_data, p_frame_recv->len);
 	k_fifo_put(&alif_data.rx_fifo, p_frame);
-
 }
 
 static void alif_rx_status_callback(enum alif_mac154_status_code status)
@@ -480,8 +483,8 @@ static void alif_rx_thread(void *arg1, void *arg2, void *arg3)
 			goto process_done;
 		}
 
-		LOG_DBG("Frame received length:%d rssi: %d", rx_frame->frame_length,
-			rx_frame->rssi);
+		LOG_DBG("Frame received length:%d rssi: %d, time:%" PRId64 "",
+			rx_frame->frame_length, rx_frame->rssi, rx_frame->time);
 
 		pkt = net_pkt_rx_alloc_with_buffer(DATA(dev)->iface, rx_frame->frame_length,
 						   AF_UNSPEC, 0, K_FOREVER);
@@ -550,16 +553,16 @@ static void alif_eui64_read(uint8_t *eui64)
 		return;
 	}
 #ifdef IEEE802154_ALIF_OUI
+	eui64[0] = (uint8_t)(IEEE802154_ALIF_OUI >> 16);
+	eui64[1] = (uint8_t)(IEEE802154_ALIF_OUI >> 8);
+	eui64[2] = (uint8_t)(IEEE802154_ALIF_OUI);
+#endif
 	se_system_get_eui_extension(false, &eui64[3]);
-	if (*((uint64_t *)eui64) != 0) {
-		eui64[0] = (uint8_t)(IEEE802154_ALIF_OUI >> 16);
-		eui64[1] = (uint8_t)(IEEE802154_ALIF_OUI >> 8);
-		eui64[2] = (uint8_t)(IEEE802154_ALIF_OUI);
+	if ((*((uint64_t *)eui64) & 0xFFFFFFFFFF) != 0) {
 		return;
 	}
-#endif
 	/* Generate Random Local value (ELI) */
-	se_service_get_rnd_num(eui64, 8);
+	se_service_get_rnd_num(&eui64[3], 5);
 	eui64[0] = (eui64[0] & ~0x01) | 0x02;
 }
 
@@ -587,6 +590,15 @@ static void alif_iface_init(struct net_if *iface)
 	alif_mac154_version_get(&version_major, &version_minor, &version_patch);
 
 	LOG_INF("802154 module version: %d.%d.%d", version_major, version_minor, version_patch);
+
+	if (version_major > 1 || (version_major == 1 && version_minor >= 1)) {
+		alif_radio->tx_opt_allowed = true;
+	} else {
+		alif_radio->tx_opt_allowed = false;
+		alif_data.capabilities &= ~IEEE802154_HW_TXTIME;
+		alif_data.capabilities &= ~IEEE802154_HW_TX_SEC;
+		alif_data.capabilities &= ~IEEE802154_HW_RXTIME;
+	}
 
 	/* Configure the CCA parameters */
 	alif_mac154_cca_mode_set(CONFIG_IEEE802154_ALIF_MAC154_CCA_MODE);
@@ -656,13 +668,59 @@ static int alif_configure(const struct device *dev, enum ieee802154_config_type 
 		DATA(dev)->promiscuous = config->promiscuous;
 		alif_mac154_promiscious_mode_set(config->promiscuous);
 		break;
-	case IEEE802154_CONFIG_PAN_COORDINATOR:
 	case IEEE802154_CONFIG_MAC_KEYS:
+		int n = 0;
+
+		if (!config->mac_keys[n].key_value) {
+			LOG_INF("configure MAC Keys: Clear keys");
+		}
+		while (config->mac_keys[n].key_value) {
+			LOG_INF("configure MAC Keys[%d]: FrameCounterPerKey:%d frame counter:%d "
+				"Key id:%d Key index:%d",
+				n, config->mac_keys[n].frame_counter_per_key,
+				config->mac_keys[n].key_frame_counter,
+				config->mac_keys[n].key_id_mode, *(config->mac_keys[n].key_id));
+			if (config->mac_keys[n].key_value) {
+				LOG_HEXDUMP_INF(config->mac_keys[n].key_value, 16, "Key:");
+			}
+			n++;
+		}
+		break;
 	case IEEE802154_CONFIG_FRAME_COUNTER:
+		LOG_INF("configure Frame counter:%d", config->frame_counter);
+		break;
+	case IEEE802154_CONFIG_FRAME_COUNTER_IF_LARGER:
+		LOG_INF("configure Frame counter if larger:%d", config->frame_counter);
+		break;
 	case IEEE802154_CONFIG_ENH_ACK_HEADER_IE:
+		LOG_INF("configure ACK Header IE: short addr:%d purge:%d",
+			config->ack_ie.short_addr, config->ack_ie.purge_ie);
+		LOG_HEXDUMP_INF(config->ack_ie.ext_addr, 8, "ext_addr:");
+		if (config->ack_ie.header_ie) {
+			LOG_INF("configure ACK Header IE: type:%d, length:%d, high:%d, low:%d",
+				config->ack_ie.header_ie->type, config->ack_ie.header_ie->length,
+				config->ack_ie.header_ie->element_id_high,
+				config->ack_ie.header_ie->element_id_low);
+			LOG_HEXDUMP_INF(&config->ack_ie.header_ie->content,
+					config->ack_ie.header_ie->length, "header:");
+		}
+		break;
 	case IEEE802154_CONFIG_EXPECTED_RX_TIME:
+		LOG_INF("configure CSL_RX_TIME: %" PRId64, config->expected_rx_time);
+		break;
 	case IEEE802154_CONFIG_RX_SLOT:
+		LOG_INF("configure RX_SLOT: start:%" PRId64 " duration:%" PRId64 " channel:%d",
+			config->rx_slot.start, config->rx_slot.duration, config->rx_slot.channel);
+		break;
 	case IEEE802154_CONFIG_CSL_PERIOD:
+		LOG_INF("configure CSL_PERIOD: %d", config->csl_period);
+		break;
+	case IEEE802154_CONFIG_PAN_COORDINATOR:
+		LOG_INF("configure pan coordinator: %d", config->pan_coordinator);
+		break;
+	case IEEE802154_CONFIG_RX_ON_WHEN_IDLE:
+		LOG_INF("configure rx on when idle:%d", config->rx_on_when_idle);
+		break;
 	default:
 		LOG_WRN("configure: %d", type);
 		return -EINVAL;
@@ -688,9 +746,9 @@ static struct ieee802154_radio_api alif_radio_api = {
 };
 
 #if defined(CONFIG_NET_L2_OPENTHREAD)
-#define L2	    OPENTHREAD_L2
+#define L2          OPENTHREAD_L2
 #define L2_CTX_TYPE NET_L2_GET_CTX_TYPE(OPENTHREAD_L2)
-#define MTU	    1280
+#define MTU         1280
 #endif
 
 NET_DEVICE_DT_INST_DEFINE(0, alif_init, NULL, &alif_data, NULL, CONFIG_IEEE802154_ALIF_INIT_PRIO,
