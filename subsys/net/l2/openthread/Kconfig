@@ -154,6 +154,7 @@ config OPENTHREAD_PKT_LIST_SIZE
 config OPENTHREAD_RADIO_WORKQUEUE_STACK_SIZE
 	int "OpenThread radio transmit workqueue stack size"
 	default 608 if MPU_STACK_GUARD && FPU_SHARING && CPU_CORTEX_M
+	default 608 if BUILTIN_STACK_GUARD && CPU_CORTEX_M
 	default 512
 
 endmenu # "Zephyr optimizations"
