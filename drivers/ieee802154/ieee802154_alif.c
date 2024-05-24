@@ -50,7 +50,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define IEEE802154_ALIF_OUI (uint32_t)0x785994
 #endif
 
-#define ALIF_FCS_LENGTH	   2
+#define ALIF_FCS_LENGTH    2
 #define ALIF_USEC_PER_TICK 128
 
 static int alif_rx_start(const struct device *dev);
@@ -72,6 +72,7 @@ static void alif_capabilities_set(void)
 
 static enum ieee802154_hw_caps alif_get_capabilities(const struct device *dev)
 {
+	LOG_DBG("Alif cap get 0x%x", alif_data.capabilities);
 	return alif_data.capabilities;
 }
 
@@ -222,6 +223,7 @@ static int handle_ack(const struct device *dev, struct alif_tx_ack_resp *param_a
 
 	(void)net_pkt_set_ieee802154_lqi(ack_pkt, 80);
 	(void)net_pkt_set_ieee802154_rssi(ack_pkt, param_ack->ack_rssi);
+	net_pkt_set_timestamp_ns(ack_pkt, param_ack->ack_timestamp * NSEC_PER_USEC);
 
 	net_pkt_cursor_init(ack_pkt);
 
@@ -311,11 +313,20 @@ static int alif_tx(const struct device *dev, enum ieee802154_tx_mode mode, struc
 		transmit_req.cca_requested = true;
 		break;
 	case IEEE802154_TX_MODE_TXTIME:
+		tx_mode = "TX Time";
+		transmit_req.cca_requested = true;
+		transmit_req.timestamp = (net_pkt_timestamp_ns(pkt) / NSEC_PER_USEC);
+		break;
 	case IEEE802154_TX_MODE_TXTIME_CCA:
+		tx_mode = "TX Time with CCA";
+		transmit_req.cca_requested = true;
+		transmit_req.timestamp = (net_pkt_timestamp_ns(pkt) / NSEC_PER_USEC);
+		break;
 	default:
 		LOG_ERR("TX mode %d not supported", mode);
 		return -ENOTSUP;
 	}
+
 	LOG_DBG("TX len: %d mode: %s, %s, %s time: %d", frag->len, tx_mode,
 		transmit_req.acknowledgment_asked ? "ACK" : "no ACK",
 		transmit_req.cca_requested ? "CCA" : "no CCA", transmit_req.timestamp);
@@ -351,19 +362,17 @@ static int alif_tx(const struct device *dev, enum ieee802154_tx_mode mode, struc
 
 static net_time_t alif_get_time(const struct device *dev)
 {
-	net_time_t time_val;
 	uint64_t ret;
 
 	alif_mac154_timestamp_get(&ret);
 	LOG_DBG("get_time(%" PRId64 ")", ret);
 	/* Covert us to ns */
-	time_val = (net_time_t)ret * NSEC_PER_USEC;
-	return time_val;
+	return (net_time_t)ret * NSEC_PER_USEC;
 }
 
 static uint8_t alif_get_accuracy(const struct device *dev)
 {
-	LOG_DBG("get_accuracy()");
+	LOG_DBG("get_accuracy(%d)", CONFIG_IEEE802154_ALIF_CLOCK_ACCURACY);
 
 	return CONFIG_IEEE802154_ALIF_CLOCK_ACCURACY;
 }
@@ -498,12 +507,7 @@ static void alif_rx_thread(void *arg1, void *arg2, void *arg3)
 		net_pkt_set_ieee802154_rssi(pkt, rx_frame->rssi);
 		net_pkt_set_ieee802154_lqi(pkt, 80);
 		net_pkt_set_ieee802154_ack_fpb(pkt, rx_frame->ack_fpb);
-
-		struct net_ptp_time timestamp = {.second = rx_frame->time / USEC_PER_SEC,
-						 .nanosecond = (rx_frame->time % USEC_PER_SEC) *
-							       NSEC_PER_USEC};
-
-		net_pkt_set_timestamp(pkt, &timestamp);
+		net_pkt_set_timestamp_ns(pkt, rx_frame->time * NSEC_PER_USEC);
 
 		if (net_recv_data(DATA(dev)->iface, pkt) < 0) {
 			LOG_ERR("Packet dropped by NET stack");
@@ -569,6 +573,7 @@ static void alif_eui64_read(uint8_t *eui64)
 static void alif_iface_init(struct net_if *iface)
 {
 	uint8_t version_major, version_minor, version_patch;
+	uint32_t capabilities;
 
 	LOG_INF("802154 interface init");
 	const struct device *dev = net_if_get_device(iface);
@@ -588,16 +593,19 @@ static void alif_iface_init(struct net_if *iface)
 	alif_radio->iface = iface;
 
 	alif_mac154_version_get(&version_major, &version_minor, &version_patch);
+	capabilities = alif_mac154_capabilities_get();
 
-	LOG_INF("802154 module version: %d.%d.%d", version_major, version_minor, version_patch);
+	LOG_INF("802154 module version: %d.%d.%d. Cap:0x%x", version_major, version_minor,
+		version_patch, capabilities);
 
-	if (version_major > 1 || (version_major == 1 && version_minor >= 1)) {
+	if (capabilities & ALIF_IEEE802154_MAC_TXTIME) {
+		alif_data.capabilities |= IEEE802154_HW_TXTIME;
+	}
+	if (capabilities & ALIF_IEEE802154_MAC_TX_SEC) {
+		alif_data.capabilities |= IEEE802154_HW_TX_SEC;
+	}
+	if (capabilities & ALIF_IEEE802154_MAC_RX_OPT) {
 		alif_radio->tx_opt_allowed = true;
-	} else {
-		alif_radio->tx_opt_allowed = false;
-		alif_data.capabilities &= ~IEEE802154_HW_TXTIME;
-		alif_data.capabilities &= ~IEEE802154_HW_TX_SEC;
-		alif_data.capabilities &= ~IEEE802154_HW_RXTIME;
 	}
 
 	/* Configure the CCA parameters */
