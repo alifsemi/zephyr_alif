@@ -1,0 +1,12 @@
+# Synopsys DesignWare Counter RTC configuration option
+
+# Copyright (c) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config COUNTER_RTC_SNPS_DW
+	bool "Synopsys Designware RTC driver"
+	default y
+	depends on DT_HAS_SNPS_DW_APB_RTC_ENABLED
+	help
+	  Enable counter driver for Designware RTC counter series. Such driver
+	  will expose the basic RTC counter device present on the MCU.
