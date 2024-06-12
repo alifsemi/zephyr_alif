@@ -72,14 +72,14 @@ static void alif_capabilities_set(void)
 
 static enum ieee802154_hw_caps alif_get_capabilities(const struct device *dev)
 {
-	LOG_DBG("Alif cap get 0x%x", alif_data.capabilities);
+	LOG_DBG("cap: 0x%x", alif_data.capabilities);
 	return alif_data.capabilities;
 }
 
 static int alif_set_channel(const struct device *dev, uint16_t channel)
 {
 
-	LOG_DBG("set channel: %u", channel);
+	LOG_DBG("ch: %u", channel);
 
 	if (channel < 11 || channel > 26) {
 		return -EINVAL;
@@ -95,7 +95,7 @@ static int alif_energy_scan_start(const struct device *dev, uint16_t duration,
 	struct alif_energy_detect ed_req;
 	struct alif_energy_detect_response ed_resp;
 
-	LOG_DBG("energy scan: %u", duration);
+	LOG_DBG("duration: %u", duration);
 
 	ed_req.channel = DATA(dev)->channel;
 	ed_req.nb_tics = duration * 1000 / ALIF_USEC_PER_TICK;
@@ -104,7 +104,7 @@ static int alif_energy_scan_start(const struct device *dev, uint16_t duration,
 	if (!alif_mac154_energy_detection(&ed_req, &ed_resp)) {
 		LOG_ERR("energy scan failed");
 	}
-	LOG_INF("energy scan result : a:%d, max:%d, c:%d", ed_resp.average, ed_resp.max,
+	LOG_INF("result : a:%d, max:%d, c:%d", ed_resp.average, ed_resp.max,
 		ed_resp.nb_measure);
 	done_cb(dev, ed_resp.max);
 	return 0;
@@ -113,7 +113,7 @@ static int alif_energy_scan_start(const struct device *dev, uint16_t duration,
 static int alif_filter(const struct device *dev, bool set, enum ieee802154_filter_type type,
 		       const struct ieee802154_filter *filter)
 {
-	LOG_DBG("Applying filter %u", type);
+	LOG_DBG("type %u", type);
 
 	if (!set) {
 		return -ENOTSUP;
@@ -155,7 +155,7 @@ static int alif_set_txpower(const struct device *dev, int16_t dbm)
 {
 	int ret = -1;
 
-	LOG_DBG("set tx power %d", dbm);
+	LOG_DBG("dbm: %d", dbm);
 	if (DATA(dev)->dbm != dbm) {
 		ret = alif_mac154_tx_power_set(dbm);
 	}
@@ -174,7 +174,7 @@ static int alif_cca(const struct device *dev)
 	bool restore_rx = false;
 	int ret = 0;
 
-	LOG_DBG("CCA: energy detect");
+	LOG_DBG("");
 
 	ed_req.channel = DATA(dev)->channel;
 	ed_req.nb_tics = CONFIG_IEEE802154_ALIF_CCA_TICKS;
@@ -365,14 +365,14 @@ static net_time_t alif_get_time(const struct device *dev)
 	uint64_t ret;
 
 	alif_mac154_timestamp_get(&ret);
-	LOG_DBG("get_time(%" PRId64 ")", ret);
+	LOG_DBG("%" PRId64, ret);
 	/* Covert us to ns */
 	return (net_time_t)ret * NSEC_PER_USEC;
 }
 
 static uint8_t alif_get_accuracy(const struct device *dev)
 {
-	LOG_DBG("get_accuracy(%d)", CONFIG_IEEE802154_ALIF_CLOCK_ACCURACY);
+	LOG_DBG("%d", CONFIG_IEEE802154_ALIF_CLOCK_ACCURACY);
 
 	return CONFIG_IEEE802154_ALIF_CLOCK_ACCURACY;
 }
@@ -391,7 +391,7 @@ static void alif_restore(const struct device *dev)
 static void alif_rx_frame_callback(struct alif_rx_frame_received *p_frame_recv)
 
 {
-	struct alif_frame *p_frame = NULL;
+	struct alif_802154_frame *p_frame = NULL;
 
 	LOG_DBG("RX frame received size:%d, rssi:%d, fpb %d", p_frame_recv->len, p_frame_recv->rssi,
 		p_frame_recv->frame_pending);
@@ -417,10 +417,10 @@ static void alif_rx_frame_callback(struct alif_rx_frame_received *p_frame_recv)
 
 static void alif_rx_status_callback(enum alif_mac154_status_code status)
 {
-	LOG_WRN("RX status cb: %d", status);
+	LOG_WRN("status:: %d", status);
 
 	if (status != ALIF_MAC154_STATUS_OK) {
-		struct alif_frame *p_frame = NULL;
+		struct alif_802154_frame *p_frame = NULL;
 
 		alif_data.receiver_on = false;
 		/* send RX failure event to RX task */
@@ -444,24 +444,45 @@ static int alif_rx_start(const struct device *dev)
 {
 	struct alif_rx_enable rx_enable_req = {0};
 
-	LOG_DBG("RX start");
+	LOG_DBG("ch: %d, state: %d", DATA(dev)->channel, DATA(dev)->receiver_on);
 	if (DATA(dev)->receiver_on) {
 		return 0;
 	}
 	rx_enable_req.channel = DATA(dev)->channel;
 	alif_mac154_receive_start(&rx_enable_req);
 	DATA(dev)->receiver_on = true;
+
 	return 0;
 }
 
 static int alif_rx_stop(const struct device *dev)
 {
-	LOG_DBG("RX stop");
+	LOG_DBG("state: %d", DATA(dev)->receiver_on);
 	if (!DATA(dev)->receiver_on) {
 		return 0;
 	}
+
 	alif_mac154_receive_stop();
 	DATA(dev)->receiver_on = false;
+	return 0;
+}
+
+static int alif_interface_start(const struct device *dev)
+{
+	LOG_DBG("");
+	DATA(dev)->interface_up = true;
+
+	if (DATA(dev)->rx_on_when_idle) {
+		alif_rx_start(dev);
+	}
+	return 0;
+}
+static int alif_interface_stop(const struct device *dev)
+{
+	LOG_DBG("");
+	DATA(dev)->interface_up = false;
+
+	alif_rx_stop(dev);
 	return 0;
 }
 
@@ -469,7 +490,7 @@ static void alif_rx_thread(void *arg1, void *arg2, void *arg3)
 {
 	struct device *dev = (struct device *)arg1;
 	struct net_pkt *pkt;
-	struct alif_frame *rx_frame;
+	struct alif_802154_frame *rx_frame;
 
 	ARG_UNUSED(arg2);
 	ARG_UNUSED(arg3);
@@ -524,7 +545,6 @@ process_done:
 static int alif_init(const struct device *dev)
 {
 	struct alif_mac154_api_cb api_cb = {0};
-	enum alif_mac154_status_code reset_status;
 
 	LOG_INF("802154 rf init");
 
@@ -535,10 +555,6 @@ static int alif_init(const struct device *dev)
 	api_cb.rx_frame_recv_cb = alif_rx_frame_callback;
 	api_cb.rx_status_cb = alif_rx_status_callback;
 	alif_mac154_init(&api_cb);
-
-	/* Reset MAC state */
-	reset_status = alif_mac154_reset();
-	LOG_INF("802154 reset %d", reset_status);
 
 	k_fifo_init(&DATA(dev)->rx_fifo);
 	k_thread_create(&DATA(dev)->rx_thread, DATA(dev)->rx_stack,
@@ -573,9 +589,10 @@ static void alif_eui64_read(uint8_t *eui64)
 static void alif_iface_init(struct net_if *iface)
 {
 	uint8_t version_major, version_minor, version_patch;
+	enum alif_mac154_status_code reset_status;
 	uint32_t capabilities;
 
-	LOG_INF("802154 interface init");
+	LOG_INF("");
 	const struct device *dev = net_if_get_device(iface);
 	struct alif_802154_data *alif_radio = dev->data;
 
@@ -592,14 +609,20 @@ static void alif_iface_init(struct net_if *iface)
 
 	alif_radio->iface = iface;
 
+	/* Reset MAC state */
+	reset_status = alif_mac154_reset();
+	LOG_INF("802154 reset %d", reset_status);
+
 	alif_mac154_version_get(&version_major, &version_minor, &version_patch);
 	capabilities = alif_mac154_capabilities_get();
 
-	LOG_INF("802154 module version: %d.%d.%d. Cap:0x%x", version_major, version_minor,
-		version_patch, capabilities);
-
-	if (capabilities & ALIF_IEEE802154_MAC_TXTIME) {
+	if (IS_ENABLED(CONFIG_NET_PKT_TIMESTAMP) && IS_ENABLED(CONFIG_NET_PKT_TXTIME) &&
+	    capabilities & ALIF_IEEE802154_MAC_TXTIME) {
 		alif_data.capabilities |= IEEE802154_HW_TXTIME;
+	}
+	if (IS_ENABLED(CONFIG_NET_PKT_TIMESTAMP) && IS_ENABLED(CONFIG_NET_PKT_TXTIME) &&
+	    capabilities & ALIF_IEEE802154_MAC_RXTIME) {
+		alif_data.capabilities |= IEEE802154_HW_RXTIME;
 	}
 	if (capabilities & ALIF_IEEE802154_MAC_TX_SEC) {
 		alif_data.capabilities |= IEEE802154_HW_TX_SEC;
@@ -607,6 +630,8 @@ static void alif_iface_init(struct net_if *iface)
 	if (capabilities & ALIF_IEEE802154_MAC_RX_OPT) {
 		alif_radio->tx_opt_allowed = true;
 	}
+	LOG_INF("802154 module version: %d.%d.%d. HAL cap:0x%x RF cap:0x%x", version_major,
+		version_minor, version_patch, capabilities, alif_data.capabilities);
 
 	/* Configure the CCA parameters */
 	alif_mac154_cca_mode_set(CONFIG_IEEE802154_ALIF_MAC154_CCA_MODE);
@@ -617,6 +642,9 @@ static void alif_iface_init(struct net_if *iface)
 	alif_radio->csma_ca_conf.macMaxBe = 5;
 	alif_radio->csma_ca_conf.macMaxCsmaBackoff = 4;
 	alif_radio->csma_ca_conf.macBackOffPeriod = 320;
+
+	/*Receiver is started automatically if interface is started*/
+	alif_radio->rx_on_when_idle = true;
 
 	ieee802154_init(iface);
 }
@@ -684,7 +712,7 @@ static int alif_configure(const struct device *dev, enum ieee802154_config_type 
 		}
 		while (config->mac_keys[n].key_value) {
 			LOG_INF("configure MAC Keys[%d]: FrameCounterPerKey:%d frame counter:%d "
-				"Key id:%d Key index:%d",
+				"Key id mode:%d Key index:%d",
 				n, config->mac_keys[n].frame_counter_per_key,
 				config->mac_keys[n].key_frame_counter,
 				config->mac_keys[n].key_id_mode, *(config->mac_keys[n].key_id));
@@ -696,38 +724,91 @@ static int alif_configure(const struct device *dev, enum ieee802154_config_type 
 		break;
 	case IEEE802154_CONFIG_FRAME_COUNTER:
 		LOG_INF("configure Frame counter:%d", config->frame_counter);
+		DATA(dev)->frame_counter = config->frame_counter;
 		break;
 	case IEEE802154_CONFIG_FRAME_COUNTER_IF_LARGER:
 		LOG_INF("configure Frame counter if larger:%d", config->frame_counter);
+		if (config->frame_counter > DATA(dev)->frame_counter) {
+			DATA(dev)->frame_counter = config->frame_counter;
+		}
 		break;
 	case IEEE802154_CONFIG_ENH_ACK_HEADER_IE:
-		LOG_INF("configure ACK Header IE: short addr:%d purge:%d",
+		LOG_INF("configure ACK Header IE: short addr:0x%x purge:%d",
 			config->ack_ie.short_addr, config->ack_ie.purge_ie);
 		LOG_HEXDUMP_INF(config->ack_ie.ext_addr, 8, "ext_addr:");
+
 		if (config->ack_ie.header_ie) {
-			LOG_INF("configure ACK Header IE: type:%d, length:%d, high:%d, low:%d",
+			LOG_INF("ACK Header IE: type:%d, length:%d, high:%d, low:%d",
 				config->ack_ie.header_ie->type, config->ack_ie.header_ie->length,
 				config->ack_ie.header_ie->element_id_high,
 				config->ack_ie.header_ie->element_id_low);
 			LOG_HEXDUMP_INF(&config->ack_ie.header_ie->content,
 					config->ack_ie.header_ie->length, "header:");
 		}
+		ret = alif_mac154_ack_header_ie_set(
+			config->ack_ie.short_addr, config->ack_ie.ext_addr, config->ack_ie.purge_ie,
+			config->ack_ie.header_ie);
+
+		if (ret != ALIF_MAC154_STATUS_OK) {
+			return -EINVAL;
+		}
 		break;
 	case IEEE802154_CONFIG_EXPECTED_RX_TIME:
-		LOG_INF("configure CSL_RX_TIME: %" PRId64, config->expected_rx_time);
+		LOG_INF("configure CSL_RX_TIME: %" PRId64,
+			config->expected_rx_time / NSEC_PER_USEC);
+		DATA(dev)->expected_rx_time = config->expected_rx_time;
 		break;
 	case IEEE802154_CONFIG_RX_SLOT:
-		LOG_INF("configure RX_SLOT: start:%" PRId64 " duration:%" PRId64 " channel:%d",
-			config->rx_slot.start, config->rx_slot.duration, config->rx_slot.channel);
+		struct alif_mac154_rx_slot rx_slot_config;
+
+		rx_slot_config.start = config->rx_slot.start / NSEC_PER_USEC;
+		rx_slot_config.duration = config->rx_slot.duration / NSEC_PER_USEC;
+		rx_slot_config.channel = config->rx_slot.channel;
+		LOG_INF("configure RX_SLOT: start:%d duration:%d channel:%d", rx_slot_config.start,
+			rx_slot_config.duration, config->rx_slot.channel);
+		/* TODO Missing
+		 * RX is restarted after RX slot is finalized if rx on when idle is enabled.
+		 */
+		if (DATA(dev)->receiver_on) {
+			/*Receiver can't be on when scheduling RX slot*/
+			alif_rx_stop(dev);
+		}
+
+		ret = alif_mac154_rx_slot_set(&rx_slot_config);
+		if (ret != ALIF_MAC154_STATUS_OK) {
+			return -EINVAL;
+		}
 		break;
 	case IEEE802154_CONFIG_CSL_PERIOD:
+		struct alif_mac154_csl_config csl_config = {0};
 		LOG_INF("configure CSL_PERIOD: %d", config->csl_period);
+		DATA(dev)->csl_period = config->csl_period;
+
+		/*Temporary enable until proper solution in RX SLOT end */
+		if (DATA(dev)->csl_period == 0 && DATA(dev)->rx_on_when_idle &&
+		    !DATA(dev)->receiver_on) {
+			struct alif_rx_enable rx_enable_req = {0};
+
+			rx_enable_req.channel = DATA(dev)->channel;
+			alif_mac154_receive_start(&rx_enable_req);
+			DATA(dev)->receiver_on = true;
+		}
+		csl_config.csl_period = DATA(dev)->csl_period;
+
+		ret = alif_mac154_csl_config_set(&csl_config);
+
+		if (ret != ALIF_MAC154_STATUS_OK) {
+			return -EINVAL;
+		}
+
 		break;
 	case IEEE802154_CONFIG_PAN_COORDINATOR:
 		LOG_INF("configure pan coordinator: %d", config->pan_coordinator);
+		return -ENOTSUP;
 		break;
 	case IEEE802154_CONFIG_RX_ON_WHEN_IDLE:
 		LOG_INF("configure rx on when idle:%d", config->rx_on_when_idle);
+		DATA(dev)->rx_on_when_idle = config->rx_on_when_idle;
 		break;
 	default:
 		LOG_WRN("configure: %d", type);
@@ -744,8 +825,8 @@ static struct ieee802154_radio_api alif_radio_api = {
 	.set_channel = alif_set_channel,
 	.filter = alif_filter,
 	.set_txpower = alif_set_txpower,
-	.start = alif_rx_start,
-	.stop = alif_rx_stop,
+	.start = alif_interface_start,
+	.stop = alif_interface_stop,
 	.tx = alif_tx,
 	.ed_scan = alif_energy_scan_start,
 	.get_time = alif_get_time,

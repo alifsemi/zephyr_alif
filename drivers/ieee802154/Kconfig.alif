@@ -7,7 +7,6 @@
 menuconfig IEEE802154_ALIF
 	bool "Alif IEEE 802.15.4 Driver"
 	default y
-	depends on NETWORKING
 	depends on DT_HAS_ALIF_AHI_IEEE802154_ENABLED
 	select IEEE802154_ALIF_SUPPORT
 

@@ -9,7 +9,7 @@
 
 #include <zephyr/net/ieee802154_radio.h>
 
-struct alif_frame {
+struct alif_802154_frame {
 	uint64_t time;        /* frame RX timestamp. */
 	void *fifo_reserved;  /* 1st word reserved for use by fifo. */
 	uint8_t frame[127];   /* received frame. */
@@ -19,7 +19,7 @@ struct alif_frame {
 	bool ack_fpb;         /* Frame pending bit value in ACK of this Frame*/
 };
 
-struct alif_csma_ca_config {
+struct alif_802154_csma_ca_config {
 	uint8_t macMinBe;
 	uint8_t macMaxBe;
 	uint8_t macMaxCsmaBackoff;
@@ -45,13 +45,22 @@ struct alif_802154_data {
 	/* Buffers for passing received frame pointers and data to the
 	 * RX thread via rx_fifo object.
 	 */
-	struct alif_frame rx_frames[CONFIG_IEEE802154_ALIF_RX_BUFFERS];
+	struct alif_802154_frame rx_frames[CONFIG_IEEE802154_ALIF_RX_BUFFERS];
 
 	/* CSMA CA configuration. */
-	struct alif_csma_ca_config csma_ca_conf;
+	struct alif_802154_csma_ca_config csma_ca_conf;
 
 	/* Capabilities of the network interface. */
 	enum ieee802154_hw_caps capabilities;
+
+	/*Current Frame counter*/
+	uint32_t frame_counter;
+
+	/*Configured CSL perdiod*/
+	uint32_t csl_period;
+
+	/*Expected time when received packet should arrive*/
+	net_time_t expected_rx_time;
 
 	/*Current Extended address*/
 	uint8_t extended_addr[8];
@@ -80,8 +89,14 @@ struct alif_802154_data {
 	/* Promiscuous mode  */
 	bool promiscuous;
 
-	/* Pan coordinator */
+	/* RX is enabled when interface is started */
+	bool rx_on_when_idle;
+
+	/* Receiver is enabled */
 	bool receiver_on;
+
+	/* Interface is up/down */
+	bool interface_up;
 
 	/*Event handler*/
 	ieee802154_event_cb_t event_handler;
