@@ -210,7 +210,7 @@ static int counter_dw_init(const struct device *dev)
 			.freq = DT_INST_PROP(inst, clock_frequency) /		\
 			(DT_INST_PROP(inst, prescaler) ?			\
 			DT_INST_PROP(inst, prescaler):1),			\
-			.flags = 0,						\
+			.flags = COUNTER_CONFIG_INFO_COUNT_UP,			\
 			.channels = 1,						\
 		},								\
 										\
