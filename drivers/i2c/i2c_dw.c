@@ -201,7 +201,7 @@ static inline void i2c_dw_data_ask(const struct device *dev)
 	uint32_t data;
 	int tx_empty;
 	int rx_empty;
-	int cnt;
+	uint32_t cnt;
 	int rx_buffer_depth, tx_buffer_depth;
 	union ic_comp_param_1_register ic_comp_param_1;
 	uint32_t reg_base = get_regs(dev);
