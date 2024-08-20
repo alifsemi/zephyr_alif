@@ -60,4 +60,8 @@ config IEEE802154_ALIF_RX_TASK_STACK_SIZE
 	help
 	  Stack size of the reception task handling received packets from the RF.
 
+config OPENTHREAD_RADIO_WORKQUEUE_STACK_SIZE
+	default 1536 if IEEE802154_ALIF_TX_ENCRYPT
+	default 908
+
 endif
