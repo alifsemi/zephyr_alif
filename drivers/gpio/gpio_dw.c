@@ -202,12 +202,6 @@ static int gpio_dw_pin_interrupt_configure(const struct device *port,
 		}
 	}
 
-	/* Does not support both edges */
-	if ((mode == GPIO_INT_MODE_EDGE) &&
-	    (trig == GPIO_INT_TRIG_BOTH)) {
-		return -ENOTSUP;
-	}
-
 	/* Clear interrupt enable */
 	dw_set_bit(base_addr, INTEN, pin, false);
 
@@ -216,13 +210,19 @@ static int gpio_dw_pin_interrupt_configure(const struct device *port,
 	dw_write(base_addr, PORTA_EOI, BIT(pin));
 
 	if (mode != GPIO_INT_MODE_DISABLED) {
-		/* level (0) or edge (1) */
-		dw_set_bit(base_addr, INTTYPE_LEVEL, pin,
-			   (mode == GPIO_INT_MODE_EDGE));
+		if ((mode == GPIO_INT_MODE_EDGE) &&
+		    (trig == GPIO_INT_TRIG_BOTH)) {
+			/* enable interrupt for both edge. */
+			dw_set_bit(base_addr, INT_BOTHEDGE, pin, 1);
+		} else {
+			/* level (0) or edge (1) */
+			dw_set_bit(base_addr, INTTYPE_LEVEL, pin,
+				   (mode == GPIO_INT_MODE_EDGE));
 
-		/* Active low/high */
-		dw_set_bit(base_addr, INT_POLARITY, pin,
-			   (trig == GPIO_INT_TRIG_HIGH));
+			/* Active low/high */
+			dw_set_bit(base_addr, INT_POLARITY, pin,
+				   (trig == GPIO_INT_TRIG_HIGH));
+		}
 
 		/* Finally enabling interrupt */
 		dw_set_bit(base_addr, INTEN, pin, true);
