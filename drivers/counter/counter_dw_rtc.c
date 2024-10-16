@@ -91,6 +91,7 @@ static int counter_dw_set_alarm(const struct device *dev, uint8_t chan_id,
 	const struct counter_dw_config *config = dev->config;
 	struct counter_dw_data *data = dev->data;
 	uint32_t reg_value;
+	uint32_t ticks;
 
 	if (chan_id != 0) {
 		LOG_ERR("Invalid channel id %u", chan_id);
@@ -101,7 +102,13 @@ static int counter_dw_set_alarm(const struct device *dev, uint8_t chan_id,
 		return -EBUSY;
 	}
 
-	write_cmr(alarm_cfg->ticks, config->base_address);
+	if (alarm_cfg->flags & COUNTER_ALARM_CFG_ABSOLUTE) {
+		ticks = alarm_cfg->ticks;
+	} else {
+		ticks = read_ccvr(config->base_address) + alarm_cfg->ticks;
+	}
+
+	write_cmr(ticks, config->base_address);
 
 	data->alarm_cb = alarm_cfg->callback;
 	data->user_data = alarm_cfg->user_data;
