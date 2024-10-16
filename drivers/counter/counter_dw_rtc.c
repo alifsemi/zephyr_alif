@@ -101,10 +101,6 @@ static int counter_dw_set_alarm(const struct device *dev, uint8_t chan_id,
 		return -EBUSY;
 	}
 
-	if (!alarm_cfg->callback) {
-		return -EINVAL;
-	}
-
 	write_cmr(alarm_cfg->ticks, config->base_address);
 
 	data->alarm_cb = alarm_cfg->callback;
@@ -132,16 +128,15 @@ static int counter_dw_cancel_alarm(const struct device *dev, uint8_t chan_id)
 		return -ENOTSUP;
 	}
 
-	if (data->alarm_cb != NULL) {
-		reg_value = read_ccr(config->base_address);
-		reg_value &= ~(1 << DW_RTC_CCR_IEN);
+	reg_value = read_ccr(config->base_address);
+	reg_value &= ~(1 << DW_RTC_CCR_IEN);
 
-		write_ccr(reg_value, config->base_address);
-		data->alarm_cb = NULL;
-		data->user_data = NULL;
+	write_ccr(reg_value, config->base_address);
+	data->alarm_cb = NULL;
+	data->user_data = NULL;
 
-		LOG_DBG("%p Counter alarm canceled", dev);
-	}
+	LOG_DBG("%p Counter alarm canceled", dev);
+
 	return 0;
 }
 
