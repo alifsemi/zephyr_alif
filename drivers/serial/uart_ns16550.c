@@ -1344,7 +1344,7 @@ static int uart_ns16550_line_ctrl_set(const struct device *dev,
 {
 	struct uart_ns16550_dev_data *data = dev->data;
 	const struct uart_ns16550_dev_config *const dev_cfg = dev->config;
-	uint32_t mdc, chg, pclk = 0U;
+	uint32_t mdc, chg, pclk, lcr = 0U;
 	k_spinlock_key_t key;
 
 	if (dev_cfg->sys_clk_freq != 0U) {
@@ -1377,6 +1377,25 @@ static int uart_ns16550_line_ctrl_set(const struct device *dev,
 			mdc &= ~(chg);
 		}
 		ns16550_outbyte(dev_cfg, MDC(dev), mdc);
+		k_spin_unlock(&data->lock, key);
+		return 0;
+	case UART_LINE_CTRL_BRK:
+		key = k_spin_lock(&data->lock);
+
+		lcr = ns16550_inbyte(dev_cfg, LCR(dev));
+
+		if (val) {
+			lcr |= LCR_SBRK;
+			/* Check that the TX buffer is empty */
+			while ((ns16550_inbyte(dev_cfg, LSR(dev)) & LSR_THRE) == 0) {
+			}
+		} else {
+			lcr &= ~(LCR_SBRK);
+		}
+
+		/* Modify the break condition */
+		ns16550_outbyte(dev_cfg, LCR(dev), lcr);
+
 		k_spin_unlock(&data->lock, key);
 		return 0;
 	}

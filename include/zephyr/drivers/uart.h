@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2024 Alif Semiconductor
  * Copyright (c) 2018-2019 Nordic Semiconductor ASA
  * Copyright (c) 2015 Wind River Systems, Inc.
  *
@@ -37,6 +38,7 @@ enum uart_line_ctrl {
 	UART_LINE_CTRL_DTR = BIT(2),       /**< Data Terminal Ready (DTR) */
 	UART_LINE_CTRL_DCD = BIT(3),       /**< Data Carrier Detect (DCD) */
 	UART_LINE_CTRL_DSR = BIT(4),       /**< Data Set Ready (DSR) */
+	UART_LINE_CTRL_BRK = BIT(5),       /**< Break control (BRK) */
 };
 
 /**
