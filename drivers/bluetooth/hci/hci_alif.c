@@ -491,6 +491,10 @@ static int hci_alif_send(struct net_buf *buf)
 {
 	LOG_DBG("buf %p type %u len %u", buf, bt_buf_get_type(buf), buf->len);
 
+	/* Deassert&assert rts_n, falling edge triggers wake up the RF core */
+
+	wake_es0(hci_alif_dev);
+
 	net_buf_put(&tx.fifo, buf);
 	uart_irq_tx_enable(hci_alif_dev);
 
