@@ -55,6 +55,16 @@ static int balletto_b1_dk_rtss_he_init(void)
 	/* Enable AHI Tracing */
 	sys_write32(0x00000004, 0x1a605008);
 
+	/* Set AHI and HCI break condition.
+	 * Makes link layer deep sleep possible if one, or the other, is not used and its driver
+	 * isn't loaded
+	 */
+	uint8_t lcr_reg1 = sys_read8(0x4300A00c);
+	uint8_t lcr_reg2 = sys_read8(0x4300B00c);
+
+	sys_write8(lcr_reg1 | 0x40, 0x4300A00c);
+	sys_write8(lcr_reg2 | 0x40, 0x4300B00c);
+
 	/* lptimer settings */
 #if DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers)
 	/* LPTIMER 0 settings */
