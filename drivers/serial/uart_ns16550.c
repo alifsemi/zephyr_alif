@@ -29,6 +29,7 @@
 #include <zephyr/linker/sections.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/drivers/clock_control.h>
+#include <zephyr/pm/device.h>
 #include <zephyr/pm/policy.h>
 #include <zephyr/sys/sys_io.h>
 #include <zephyr/spinlock.h>
@@ -68,6 +69,7 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_PCIE), "NS16550(s) in DT need CONFIG_PCIE");
 #endif
 
 #endif
+
 
 /* If any node has property io-mapped set, we need to support IO port
  * access in the code and device config struct.
@@ -362,6 +364,7 @@ struct uart_ns16550_dev_data {
 	struct uart_config uart_config;
 	struct k_spinlock lock;
 	uint8_t fifo_size;
+	uint16_t irq;
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 	uint8_t iir_cache;	/**< cache of IIR since it clears when read */
@@ -710,10 +713,23 @@ static int uart_ns16550_configure(const struct device *dev,
 	/*
 	 * Program FIFO: enabled, mode 0 (set for compatibility with quark),
 	 * generate the interrupt at 8th byte
-	 * Clear TX and RX FIFO
+	 * Clear TX and RX FIFO if system is not resuming
 	 */
+	int fifo_clr_mask = FCR_RCVRCLR | FCR_XMITCLR;
+#if defined(CONFIG_PM_DEVICE)
+	static uint32_t resuming __attribute__((noinit));
+	static const int resume_magic = 0x45454545;
+
+	/* Keep FIFOs' content */
+	if (resuming == resume_magic) {
+		fifo_clr_mask = 0;
+	}
+
+	/* Preserved when memory is kept in retention */
+	resuming = resume_magic;
+#endif
 	ns16550_outbyte(dev_cfg, FCR(dev),
-			FCR_FIFO | FCR_MODE0 | FCR_FIFO_8 | FCR_RCVRCLR | FCR_XMITCLR
+			FCR_FIFO | FCR_MODE0 | FCR_FIFO_8 | fifo_clr_mask
 #ifdef CONFIG_UART_NS16550_VARIANT_NS16750
 			| FCR_FIFO_64
 #endif
@@ -727,8 +743,10 @@ static int uart_ns16550_configure(const struct device *dev,
 		}
 	}
 
-	/* clear the port */
-	(void)ns16550_read_char(dev, &c);
+	if (fifo_clr_mask) {
+		/* clear the port, dont empty if fifo has valid data after wakeup*/
+		(void)ns16550_read_char(dev, &c);
+	}
 
 	/* disable interrupts  */
 	ns16550_outbyte(dev_cfg, IER(dev), 0x00);
@@ -1267,12 +1285,15 @@ static void uart_ns16550_irq_callback_set(const struct device *dev,
 					  void *cb_data)
 {
 	struct uart_ns16550_dev_data * const dev_data = dev->data;
+
 	k_spinlock_key_t key = k_spin_lock(&dev_data->lock);
 
 	dev_data->cb = cb;
 	dev_data->cb_data = cb_data;
 
 	k_spin_unlock(&dev_data->lock, key);
+	irq_enable(dev_data->irq);
+
 }
 
 /**
@@ -1847,7 +1868,6 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 		IRQ_CONNECT(DT_INST_IRQN(n), DT_INST_IRQ(n, priority),	      \
 			    uart_ns16550_isr, DEVICE_DT_INST_GET(n),	      \
 			    UART_NS16550_IRQ_FLAGS(n));			      \
-		irq_enable(DT_INST_IRQN(n));                                  \
 	}
 
 /* PCI(e) with auto IRQ detection */
@@ -1956,6 +1976,36 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 #define DEV_DATA_ASYNC(n)
 #endif /* CONFIG_UART_ASYNC_API */
 
+#ifdef CONFIG_PM_DEVICE
+
+static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	LOG_DBG("PM Device action %d", action);
+
+	switch (action) {
+	case PM_DEVICE_ACTION_TURN_ON:
+	case PM_DEVICE_ACTION_RESUME:
+#ifdef CONFIG_UART_NS16550_LINE_CTRL
+		/* Clear break condition */
+		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 0);
+#endif
+		break;
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_SUSPEND:
+#ifdef CONFIG_UART_NS16550_LINE_CTRL
+		/* Set break condition */
+		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 1);
+#endif
+		break;
+	default:
+		LOG_WRN("Unsupported power state change");
+		return -ENOTSUP;
+	}
+
+	return 0;
+}
+
+#endif
 
 #define UART_NS16550_COMMON_DEV_CFG_INITIALIZER(n)                                   \
 		COND_CODE_1(DT_INST_NODE_HAS_PROP(n, clock_frequency), (             \
@@ -1987,6 +2037,7 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 				    (UART_CFG_FLOW_CTRL_RTS_CTS),                    \
 				    (UART_CFG_FLOW_CTRL_NONE)),                      \
 		.fifo_size = DT_INST_PROP_OR(n, fifo_size, 0),                       \
+		.irq = DT_INST_IRQN(n),\
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, dlf),                            \
 			(.dlf = DT_INST_PROP_OR(n, dlf, 0),))			     \
 		DEV_DATA_ASYNC(n)						     \
@@ -2006,7 +2057,9 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 	static struct uart_ns16550_dev_data uart_ns16550_dev_data_##n = {            \
 		UART_NS16550_COMMON_DEV_DATA_INITIALIZER(n)                          \
 	};                                                                           \
-	DEVICE_DT_INST_DEFINE(n, uart_ns16550_init, NULL,                            \
+	IF_ENABLED(CONFIG_PM_DEVICE,                                                 \
+		   (PM_DEVICE_DT_INST_DEFINE(n, uart_ns16550_pm_action);))           \
+	DEVICE_DT_INST_DEFINE(n, uart_ns16550_init, PM_DEVICE_DT_INST_GET(n),       \
 			      &uart_ns16550_dev_data_##n, &uart_ns16550_dev_cfg_##n, \
 			      PRE_KERNEL_1, CONFIG_SERIAL_INIT_PRIORITY,             \
 			      &uart_ns16550_driver_api);                             \
@@ -2024,7 +2077,9 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 	static struct uart_ns16550_dev_data uart_ns16550_dev_data_##n = {            \
 		UART_NS16550_COMMON_DEV_DATA_INITIALIZER(n)                          \
 	};                                                                           \
-	DEVICE_DT_INST_DEFINE(n, uart_ns16550_init, NULL,                            \
+	IF_ENABLED(CONFIG_PM_DEVICE,                                                 \
+		   (PM_DEVICE_DT_INST_DEFINE(n, uart_ns16550_pm_action);))           \
+	DEVICE_DT_INST_DEFINE(n, uart_ns16550_init, PM_DEVICE_DT_INST_GET(n),       \
 			      &uart_ns16550_dev_data_##n, &uart_ns16550_dev_cfg_##n, \
 			      PRE_KERNEL_1,            \
 			      CONFIG_SERIAL_INIT_PRIORITY,                           \
