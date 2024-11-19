@@ -158,29 +158,25 @@ static void counter_dw_isr(const struct device *dev)
 {
 	const struct counter_dw_config *config = dev->config;
 	struct counter_dw_data *data = dev->data;
-	counter_alarm_callback_t alarm_cb;
-	void *user_data;
+	counter_alarm_callback_t alarm_cb = data->alarm_cb;
 	uint32_t ticks;
 	uint32_t reg_value;
 
 	LOG_DBG("%p Counter ISR", dev);
 
-	if (data->alarm_cb) {
-		/* Single alarm is supported, disable interrupt and callback */
-		clear_interrupts(config->base_address);
-		reg_value = read_ccr(config->base_address);
-		reg_value &= ~(1 << DW_RTC_CCR_IEN);
+	/* Single alarm is supported, disable interrupt and callback */
+	clear_interrupts(config->base_address);
+	reg_value = read_ccr(config->base_address);
+	reg_value &= ~(1 << DW_RTC_CCR_IEN);
 
-		write_ccr(reg_value, config->base_address);
+	write_ccr(reg_value, config->base_address);
 
-		counter_dw_get_value(dev, &ticks);
-		alarm_cb = data->alarm_cb;
+	counter_dw_get_value(dev, &ticks);
+
+	if (alarm_cb) {
 		data->alarm_cb = NULL;
-		user_data = data->user_data;
-
-		alarm_cb(dev, 0, ticks, user_data);
+		alarm_cb(dev, 0, ticks, data->user_data);
 	}
-
 }
 
 static const struct counter_driver_api counter_dw_api = {
