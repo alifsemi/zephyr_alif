@@ -47,6 +47,7 @@ LOG_MODULE_REGISTER(uart_ns16550, CONFIG_UART_LOG_LEVEL);
 #define UART_NS16550_PCP_ENABLED DT_ANY_INST_HAS_PROP_STATUS_OKAY(pcp)
 #define UART_NS16550_DLF_ENABLED DT_ANY_INST_HAS_PROP_STATUS_OKAY(dlf)
 #define UART_NS16550_DMAS_ENABLED DT_ANY_INST_HAS_PROP_STATUS_OKAY(dmas)
+#define UART_NS16550_FIFO_PRESERVE_ENABLED DT_ANY_INST_HAS_PROP_STATUS_OKAY(fifo_preserve)
 
 #if DT_ANY_INST_ON_BUS_STATUS_OKAY(pcie)
 BUILD_ASSERT(IS_ENABLED(CONFIG_PCIE), "NS16550(s) in DT need CONFIG_PCIE");
@@ -360,6 +361,9 @@ struct uart_ns16550_dev_data {
 	DEVICE_MMIO_RAM;
 	struct uart_config uart_config;
 	struct k_spinlock lock;
+#if UART_NS16550_FIFO_PRESERVE_ENABLED
+	bool fifo_preserve;
+#endif
 	uint8_t fifo_size;
 	uint16_t irq;
 
@@ -698,9 +702,15 @@ static int uart_ns16550_configure(const struct device *dev,
 	static uint32_t resuming __attribute__((noinit));
 	static const int resume_magic = 0x45454545;
 
-	/* Keep FIFOs' content */
 	if (resuming == resume_magic) {
-		fifo_clr_mask = 0;
+#if UART_NS16550_FIFO_PRESERVE_ENABLED
+		if (dev_data->fifo_preserve) {
+			LOG_INF("%s FIFO content preserved", dev->name);
+			fifo_clr_mask = 0;
+		} else {
+			LOG_INF("%s FIFO content cleared", dev->name);
+		}
+#endif
 	}
 
 	/* Preserved when memory is kept in retention */
@@ -1956,7 +1966,6 @@ static const struct uart_driver_api uart_ns16550_driver_api = {
 
 static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_action action)
 {
-	LOG_DBG("PM Device action %d", action);
 
 	switch (action) {
 	case PM_DEVICE_ACTION_TURN_ON:
@@ -1964,17 +1973,20 @@ static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_actio
 #ifdef CONFIG_UART_NS16550_LINE_CTRL
 		/* Clear break condition */
 		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 0);
+		LOG_DBG("Break condition is cleared for %s", dev->name);
 #endif
 		break;
 	case PM_DEVICE_ACTION_TURN_OFF:
 	case PM_DEVICE_ACTION_SUSPEND:
 #ifdef CONFIG_UART_NS16550_LINE_CTRL
+		LOG_DBG("Break condition is set for %s", dev->name);
 		/* Set break condition */
 		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 1);
 #endif
 		break;
 	default:
-		LOG_WRN("Unsupported power state change");
+		LOG_WRN("Unsupported power state change for %s", dev->name);
+		__ASSERT(0, "Unsupported power state change");
 		return -ENOTSUP;
 	}
 
@@ -2012,6 +2024,8 @@ static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_actio
 			COND_CODE_1(DT_INST_PROP_OR(n, hw_flow_control, 0),          \
 				    (UART_CFG_FLOW_CTRL_RTS_CTS),                    \
 				    (UART_CFG_FLOW_CTRL_NONE)),                      \
+		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, fifo_preserve),                  \
+		   (.fifo_preserve = DT_INST_PROP_OR(n, fifo_preserve, false),))     \
 		.fifo_size = DT_INST_PROP_OR(n, fifo_size, 0),                       \
 		.irq = DT_INST_IRQN(n),\
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, dlf),                            \
