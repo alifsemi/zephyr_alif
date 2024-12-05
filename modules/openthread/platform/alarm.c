@@ -50,6 +50,8 @@ K_TIMER_DEFINE(ot_us_timer, ot_timer_us_fired, NULL);
 
 void platformAlarmInit(void)
 {
+	time_offset_us = 0;
+	time_offset_ms = 0;
 #if defined(CONFIG_NET_PKT_TXTIME)
 	time_offset_us =
 		(int32_t)((int64_t)otPlatAlarmMicroGetNow() - (uint32_t)otPlatRadioGetNow(NULL));
