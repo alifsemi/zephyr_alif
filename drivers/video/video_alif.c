@@ -63,28 +63,6 @@ static inline unsigned int pix_fmt_bpp(uint32_t fmt)
 	}
 }
 
-static int32_t fourcc_to_csi_data_type(uint32_t fourcc)
-{
-	/* TODO: Add support for RGB formats. */
-	switch (fourcc) {
-	case VIDEO_PIX_FMT_Y6P:
-		return CSI2_DT_RAW6;
-	case VIDEO_PIX_FMT_Y7P:
-		return CSI2_DT_RAW7;
-	case VIDEO_PIX_FMT_GREY:
-		return CSI2_DT_RAW8;
-	case VIDEO_PIX_FMT_Y10P:
-		return CSI2_DT_RAW10;
-	case VIDEO_PIX_FMT_Y12P:
-		return CSI2_DT_RAW12;
-	case VIDEO_PIX_FMT_Y14P:
-		return CSI2_DT_RAW14;
-	case VIDEO_PIX_FMT_Y16:
-		return CSI2_DT_RAW16;
-	}
-	return -ENOTSUP;
-}
-
 static inline void hw_enable_interrupts(uintptr_t regs, uint32_t intr_mask)
 {
 	sys_set_bits(regs + CAM_INTR_ENA, intr_mask);
@@ -114,6 +92,28 @@ static inline void hw_cam_start_video_capture(const struct device *dev)
 }
 
 #ifdef CONFIG_VIDEO_MIPI_CSI2_DW
+static int32_t fourcc_to_csi_data_type(uint32_t fourcc)
+{
+	/* TODO: Add support for RGB formats. */
+	switch (fourcc) {
+	case VIDEO_PIX_FMT_Y6P:
+		return CSI2_DT_RAW6;
+	case VIDEO_PIX_FMT_Y7P:
+		return CSI2_DT_RAW7;
+	case VIDEO_PIX_FMT_GREY:
+		return CSI2_DT_RAW8;
+	case VIDEO_PIX_FMT_Y10P:
+		return CSI2_DT_RAW10;
+	case VIDEO_PIX_FMT_Y12P:
+		return CSI2_DT_RAW12;
+	case VIDEO_PIX_FMT_Y14P:
+		return CSI2_DT_RAW14;
+	case VIDEO_PIX_FMT_Y16:
+		return CSI2_DT_RAW16;
+	}
+	return -ENOTSUP;
+}
+
 static int cam_set_csi(const struct device *dev, uint32_t fourcc)
 {
 	const struct video_cam_config *config = dev->config;
