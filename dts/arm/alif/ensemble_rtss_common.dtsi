@@ -1013,36 +1013,7 @@
 		pinctrl-names = "default";
 		interrupt-parent = <&nvic>;
 		interrupts = <133 3>;
-		status = "okay";
-
-		mt9m114: mt9m114@48{
-			compatible = "aptina,mt9m114";
-			reg = <0x48>;
-			status = "disabled";
-
-			port {
-				mt9m114_ep_out: endpoint {
-					//remote-endpoint = < &cam_ep_in >;
-					//remote-endpoint = < &lpcam_ep_in >;
-				};
-			};
-		};
-		arx3a0: arx3a0@36 {
-			compatible = "onnn,arx3a0";
-			reg = <0x36>;
-			pinctrl-0 = < &pinctrl_cam_xvclk >;
-			pinctrl-names = "default";
-			reset-gpios = <&gpio9 1 GPIO_ACTIVE_HIGH>;
-			power-gpios = <&gpio7 5 GPIO_ACTIVE_HIGH>;
-
-			status = "okay";
-
-			port {
-				arx3a0_csi2_ep_out: endpoint {
-					remote-endpoint = <&csi2_ep_in>;
-				};
-			};
-		};
+		status = "disabled";
 	};
 
 	lpi2c: lpi2c@43009000 {
@@ -1135,7 +1106,6 @@
 		ecc-recv-en;
 		crc-recv-en;
 		frame-ack-en;
-		//dpi-video-pattern-gen = "horizontal-color-bar";
 		status = "disabled";
 
 		mw405: mw405@0 {
@@ -1163,27 +1133,9 @@
 
 		fifo-wr-wmark = <0x18>;
 		fifo-rd-wmark = <0x08>;
-		sensor = <&arx3a0>;
 		csi-bus-if = <&csi>;
 		wait-vsync;
-		//csi-halt-en;
-		status = "okay";
-
-		port {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			/* Parallel Bus endpoint. */
-			cam_ep_in: endpoint@1 {
-				reg = <1>;
-				//remote-endpoint = <&mt9m114_ep_out>;
-			};
-			/* MIPI CSI-2 bus endpoint. */
-			cam_csi2_ep_in: endpoint@0 {
-				reg = <0>;
-				remote-endpoint = <&csi2_ep_out>;
-			};
-		};
+		status = "disabled";
 	};
 
 	lpcam: lpcam@43003000 {
@@ -1194,18 +1146,7 @@
 		pinctrl-0 = < &pinctrl_lpcam >;
 		pinctrl-names = "default";
 
-		sensor = <&mt9m114>;
-		lp-cam;
 		status = "disabled";
-		port {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			lpcam_ep_in: endpoint@0 {
-				reg = <0>;
-				//remote-endpoint = <&mt9m114_ep_out>;
-			};
-		};
 	};
 
 	csi: csi@49033000 {
@@ -1225,22 +1166,8 @@
 		csi-vbp = <4>;
 		csi-vfp = <4>;
 		csi-vact = <560>;
-
-		#address-cells = <1>;
-		#size-cells = <0>;
-		port@1 {
-			reg = <1>;
-			csi2_ep_in: endpoint {
-				remote-endpoint = <&arx3a0_csi2_ep_out>;
-			};
-		};
-		port@2 {
-			reg = <2>;
-			csi2_ep_out: endpoint {
-				remote-endpoint = <&cam_csi2_ep_in>;
-			};
-		};
 	};
+
 	dma0: dma0@49080000 {
 		compatible = "arm,dma-pl330";
 		reg = <0x49080000 0x1000>;
