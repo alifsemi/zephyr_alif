@@ -58,22 +58,13 @@ config LPTIMER1_EXT_CLK_FREQ
 	  Provide lptimer 1 clock frequency for external clock source.
 endif # COUNTER_SNPS_DW
 
-config  ROM_ITCM
-	bool "Link code into internal instruction tightly coupled memory (ITCM)"
-	default n if BOOTLOADER_MCUBOOT || MCUBOOT
-	default y
-	help
-	  Enable this to build applications to run from the ITCM.
-
-if ROM_ITCM || !XIP
 config FLASH_SIZE
-	default $(dt_node_reg_size_int,/soc/itcm@0,0,K)
+	default $(dt_node_reg_size_int,$(dt_nodelabel_path,itcm),0,K)  if !XIP
 
 config FLASH_BASE_ADDRESS
-	default $(dt_node_reg_addr_hex,/soc/itcm@0)
-endif # ROM_ITCM
+	default $(dt_node_reg_addr_hex,$(dt_nodelabel_path,itcm))      if !XIP
 
-if !ROM_ITCM && RTSS_HP && !USE_DT_CODE_PARTITION
+if RTSS_HP && !USE_DT_CODE_PARTITION
 config FLASH_LOAD_OFFSET
 	default 0x200000
 endif
