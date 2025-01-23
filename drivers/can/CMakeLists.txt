@@ -28,6 +28,7 @@ zephyr_library_sources_ifdef(CONFIG_CAN_KVASER_PCI   can_kvaser_pci.c)
 zephyr_library_sources_ifdef(CONFIG_USERSPACE        can_handlers.c)
 zephyr_library_sources_ifdef(CONFIG_CAN_SHELL        can_shell.c)
 zephyr_library_sources_ifdef(CONFIG_CAN_NXP_S32_CANXL    can_nxp_s32_canxl.c)
+zephyr_library_sources_ifdef(CONFIG_CAN_CAST         can_cast.c)
 
 if(CONFIG_CAN_NATIVE_LINUX)
   if(${CMAKE_HOST_SYSTEM_NAME} STREQUAL Linux)

@@ -26,6 +26,8 @@
  */
 static int balletto_b1_dk_rtss_he_init(void)
 {
+	uint32_t reg_val;
+
 	/* Enable ICACHE */
 	sys_cache_instr_enable();
 
@@ -168,6 +170,19 @@ static int balletto_b1_dk_rtss_he_init(void)
 		/* Enable HFOSC (38.4 MHz) and CFG (100 MHz) clock.*/
 		sys_set_bits(CGU_CLK_ENA, BIT(21) | BIT(23));
 	}
+
+	/* CAN settings */
+#if (DT_NODE_HAS_STATUS(DT_NODELABEL(can0), okay) || \
+		DT_NODE_HAS_STATUS(DT_NODELABEL(can1), okay))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(can1), okay)
+	/*I3C Flex GPIO */
+	sys_write32(0x1, VBAT_BASE);
+#endif
+	/* Enable HFOSC and 160MHz clock */
+	reg_val  = sys_read32(CGU_CLK_ENA);
+	reg_val |= ((1 << 20) | (1 << 23));
+	sys_write32(reg_val, CGU_CLK_ENA);
+#endif
 
 #ifdef CONFIG_ARM_SECURE_FIRMWARE
 	alif_tz_sau_setup();

@@ -156,6 +156,19 @@ static int ensemble_e1c_dk_rtss_he_init(void)
 	sys_set_bits(M55HE_CFG_HE_DMA_CTRL, BIT(16));
 #endif
 
+	/* CAN settings */
+#if (DT_NODE_HAS_STATUS(DT_NODELABEL(can0), okay) || \
+		DT_NODE_HAS_STATUS(DT_NODELABEL(can1), okay))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(can1), okay)
+	/*I3C Flex GPIO */
+	sys_write32(0x1, VBAT_BASE);
+#endif
+	/* Enable HFOSC and 160MHz clock */
+	reg_val  = sys_read32(CGU_CLK_ENA);
+	reg_val |= ((1 << 20) | (1 << 23));
+	sys_write32(reg_val, CGU_CLK_ENA);
+#endif
+
 	return 0;
 }
 
