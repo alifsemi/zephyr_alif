@@ -4276,7 +4276,7 @@ macro(zephyr_linker_memory_ifdef feature_toggle)
 endmacro()
 
 # Usage:
-#   zephyr_linker_dts_section(PATH <path>)
+#   zephyr_linker_dts_section(PATH <path> [LMA <region|group>])
 #
 # Zephyr linker devicetree memory section from path.
 #
@@ -4285,10 +4285,11 @@ endmacro()
 #
 # The section will only be defined if the devicetree exists and has status okay.
 #
-# PATH <path>      : Devicetree node path.
+# PATH <path>         : Devicetree node path.
+# LMA <region|group>  : Memory region or group to be used for this group.
 #
 function(zephyr_linker_dts_section)
-  set(single_args "PATH")
+  set(single_args "PATH;LMA")
   cmake_parse_arguments(DTS_SECTION "" "${single_args}" "" ${ARGN})
 
   if(DTS_SECTION_UNPARSED_ARGUMENTS)
@@ -4318,7 +4319,11 @@ function(zephyr_linker_dts_section)
 
   dt_reg_addr(addr PATH ${DTS_SECTION_PATH})
 
-  zephyr_linker_section(NAME ${name} ADDRESS ${addr} VMA ${name} TYPE NOLOAD)
+  if(DEFINED DTS_SECTION_LMA)
+    zephyr_linker_section(NAME ${name} ADDRESS ${addr} VMA ${name} LMA ${DTS_SECTION_LMA})
+  else()
+    zephyr_linker_section(NAME ${name} ADDRESS ${addr} VMA ${name} TYPE NOLOAD)
+  endif()
 
 endfunction()
 
