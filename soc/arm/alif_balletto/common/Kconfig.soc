@@ -7,17 +7,40 @@ config RTSS_HE
 	help
 	  Enable RTSS_HE core.
 
-config HAVE_BLE_802154_LINK_LAYER
+config HAS_ALIF_BLE_802154_LINK_LAYER
 	bool
 	default y
 	help
-	  SOC includes BLE and 802.15.4 Link layer system
+	  Device has BLE and 802154 Link Layers
 
-config HAVE_BLE_HOST_ROM_IMAGE
+if HAS_ALIF_BLE_802154_LINK_LAYER
+choice ALIF_BLE_802154_LINK_LAYER_VERSION
+	prompt "Chooce ROM code version"
+	default ALIF_BLE_802154_LINK_LAYER_V1_0
+
+	config ALIF_BLE_802154_LINK_LAYER_V1_0
+		bool "ROM code version 1.0"
+	config ALIF_BLE_802154_LINK_LAYER_V1_2
+		bool "ROM code version 1.2"
+endchoice
+endif
+
+config HAS_ALIF_BLE_ROM_IMAGE
 	bool
-	default y
 	help
-	  ROM image includes BLE host libraries
+	  Device has BLE HOST and LC3 ROM code
+
+if HAS_ALIF_BLE_ROM_IMAGE
+choice ALIF_BLE_ROM_IMAGE_VERSION
+	prompt "Chooce ROM code version"
+	default ALIF_BLE_ROM_IMAGE_V1_0
+
+	config ALIF_BLE_ROM_IMAGE_V1_0
+		bool "ROM code version 1.0"
+	config ALIF_BLE_ROM_IMAGE_V1_2
+		bool "ROM code version 1.2"
+endchoice
+endif
 
 config HAS_ALIF_SE_SERVICES
 	bool
