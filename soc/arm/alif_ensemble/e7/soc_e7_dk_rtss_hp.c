@@ -73,6 +73,12 @@ static int ensemble_e7_dk_rtss_hp_init(void)
 	/* enable pdm in expansion master */
 	sys_set_bits(EXPSLV_EXPMST0_CTRL, BIT(8));
 
+	/* I3C settings */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(i3c0), okay)
+	/*I3C Flex GPIO */
+	sys_write32(0x1, VBAT_BASE);
+#endif
+
     /* CAN settings */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(can0), okay)
     /* Enable HFOSC and 160MHz clock */
