@@ -32,6 +32,7 @@
 #define EXPSLV_BASE		0x4902F000
 #define EXPSLV_EXPMST0_CTRL	(EXPSLV_BASE)
 #define EXPSLV_UART_CTRL	(EXPSLV_BASE + 0x8)
+#define EXPSLV_CANFD_CTRL	(EXPSLV_BASE + 0xC)
 #define EXPSLV_SSI_CTRL		(EXPSLV_BASE + 0x28)
 
 #define EVTRTR0_BASE				0x49035000
@@ -74,6 +75,10 @@
 
 /* LPGPIO Base address for LPTIMER pin config */
 #define LPGPIO_BASE     0x42002008UL
+
+/* Macros for CAN FD mode Control */
+#define CAN0_FD_CTRL_REG		EXPSLV_CANFD_CTRL
+#define CAN0_CTRL_FD_ENA_POS		20U
 
 #define __NVIC_PRIO_BITS          NUM_IRQ_PRIO_BITS
 

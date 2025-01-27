@@ -200,6 +200,14 @@ static int ensemble_e3_dk_rtss_hp_init(void)
 	sys_write32(0U, EXPMST_DMA_PERIPH);
 	sys_set_bits(EXPMST_DMA_CTRL, BIT(16));
 #endif
+
+	/* CAN settings */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(can0), okay)
+	/* Enable HFOSC and 160MHz clock */
+	data = sys_read32(CGU_CLK_ENA);
+	data |= ((1 << 20) | (1 << 23));
+	sys_write32(data, CGU_CLK_ENA);
+#endif
 	return 0;
 }
 

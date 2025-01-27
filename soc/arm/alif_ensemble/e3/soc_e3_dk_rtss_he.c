@@ -230,6 +230,13 @@ static int ensemble_e3_dk_rtss_he_init(void)
 #endif /* DT_NODE_HAS_STATUS(DT_NODELABEL(timer3), okay) */
 #endif /* DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers) */
 
+    /* CAN settings */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(can0), okay)
+    /* Enable HFOSC and 160MHz clock */
+	data = sys_read32(CGU_CLK_ENA);
+	data |= ((1 << 20) | (1 << 23));
+	sys_write32(data, CGU_CLK_ENA);
+#endif
 	return 0;
 }
 

@@ -1418,7 +1418,7 @@
 		status = "disabled";
 	};
 
-    can0: can@49036000 {
+	can0: can@49036000 {
 		#address-cells  = <1>;
 		#size-cells     = <1>;
 		compatible      = "cast,can";
