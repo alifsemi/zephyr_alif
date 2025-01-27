@@ -42,6 +42,7 @@
 
 /* Expansion Slave registers. */
 #define EXPSLV_BASE			0x4902F000
+#define EXPSLV_CANFD_CTRL		(EXPSLV_BASE + 0xC)
 #define EXPSLV_UART_CTRL		(EXPSLV_BASE + 0x8)
 #define EXPSLV_ADC_CTRL			(EXPSLV_BASE + 0x30)
 #define EXPSLV_CMP_CTRL			(EXPSLV_BASE + 0x38)
@@ -82,6 +83,12 @@
 #define M55HE_CFG_HE_DMA_SEL		(M55HE_CFG_HE_CFG_BASE + 0xC)
 #define M55HE_CFG_HE_CLK_ENA		(M55HE_CFG_HE_CFG_BASE + 0x10)
 #define M55HE_CFG_HE_CAMERA_PIXCLK	(M55HE_CFG_HE_CFG_BASE + 0x20)
+
+/* Macros for CAN FD mode Control */
+#define CAN0_FD_CTRL_REG          EXPSLV_CANFD_CTRL
+#define CAN0_CTRL_FD_ENA_POS      10U
+#define CAN1_FD_CTRL_REG          EXPSLV_CANFD_CTRL
+#define CAN1_CTRL_FD_ENA_POS      26U
 
 /*
  * CMSIS IRQn_Type enum is broken relative to ARM GNU compiler.
@@ -182,7 +189,8 @@ typedef enum IRQn {
 	USB0_IRQ                      =   101,
 	SDMMC_IRQ                     =   102,
 	SDMMC_WAKEUP_IRQ              =   103,
-	CANFD_IRQ                     =   104,
+	CANFD0_IRQ                    =   104,
+	CANFD1_IRQ                    =   105,
 	PPU0_IRQ                      =   121,
 	PPU1_IRQ                      =   122,
 	PPU2_IRQ                      =   123,

@@ -104,6 +104,9 @@ static uint32_t alif_get_input_clock(uint32_t clock_name)
 	case ALIF_LPTIMER1_LPTMR1_IO_PIN:
 		return CONFIG_LPTIMER1_EXT_CLK_FREQ;
 #endif
+	case ALIF_I3C_CLK:
+		return ALIF_CLOCK_SYST_ACLK_FREQ;
+
 	default:
 		return 0;
 	}

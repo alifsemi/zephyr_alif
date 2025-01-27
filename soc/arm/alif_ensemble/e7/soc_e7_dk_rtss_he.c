@@ -79,6 +79,20 @@ static int ensemble_e7_dk_rtss_he_init(void)
 	/*LP-SPI Flex GPIO */
 	sys_write32(0x1, VBAT_BASE);
 
+	/* I3C settings */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(i3c0), okay)
+	/*I3C Flex GPIO */
+	sys_write32(0x1, VBAT_BASE);
+#endif
+
+    /* CAN settings */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(can0), okay)
+    /* Enable HFOSC and 160MHz clock */
+	data = sys_read32(CGU_CLK_ENA);
+	data |= ((1 << 20) | (1 << 23));
+	sys_write32(data, CGU_CLK_ENA);
+#endif
+
 	/* lptimer settings */
 #if DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers)
 	/* LPTIMER 0 settings */

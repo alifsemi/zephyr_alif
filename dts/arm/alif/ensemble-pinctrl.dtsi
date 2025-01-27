@@ -843,4 +843,21 @@
 			read_enable = < 0x0 >;
 		};
 	};
+
+	pinctrl_i3c0:pinctrl_i3c0 {
+		group0 {
+			pinmux = < PIN_P7_6__I3C_SDA_D >,
+					< PIN_P7_7__I3C_SCL_D >;
+			read_enable = < 0x1 >;
+		};
+	};
+
+	pinctrl_can0:pinctrl_can0 {
+		group0 {
+			pinmux = < PIN_P7_0__CAN_RXD_A >,
+					< PIN_P7_1__CAN_TXD_A >,
+					< PIN_P7_3__CAN_STBY_A >;
+					read_enable = < 0x1 >;
+		};
+	};
 };

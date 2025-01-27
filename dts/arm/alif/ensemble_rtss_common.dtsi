@@ -1417,6 +1417,38 @@
 		load-value = <0>;
 		status = "disabled";
 	};
+
+	i3c0: i3c@49034000 {
+		compatible      = "snps,designware-i3c";
+		#address-cells  = <3>;
+		#size-cells     = <0>;
+		reg             = <0x49034000 0x1000>;
+		interrupt-parent= <&nvic>;
+		interrupts      = <136 3>;
+		clocks          = <&clock ALIF_I3C_CLK>;
+		pinctrl-0       = <&pinctrl_i3c0>;
+		pinctrl-names   = "default";
+		i3c-scl-hz      = <10000000>;
+		i2c-scl-hz      = <400000>;
+		status          = "disabled";
+	};
+
+	can0: can@49036000 {
+		#address-cells  = <1>;
+		#size-cells     = <1>;
+		compatible      = "cast,can";
+		reg             = <0x49036000 0x1000 0x49037000 0x1000>;
+		reg-names       = "can_reg", "can_cnt_reg";
+		interrupt-parent= <&nvic>;
+		interrupts      = <104 3>;
+		interrupt-names = "can_interrupt";
+		clocks          = <&clock ALIF_CANFD0_160M_CLK>;
+		clk-speed       = <20000000>;
+		pinctrl-0       = <&pinctrl_can0>;
+		pinctrl-names   = "default";
+		status          = "disabled";
+	};
+
 	se_service: se_service {
 		compatible = "alif,secure-enclave-services";
 		mhuv2-send-node = <&seservice0s>;

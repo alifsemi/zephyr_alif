@@ -14,9 +14,9 @@
 #define HOST_BSYS_PWR_ST	(HOST_BASE_SYS_CTRL + 0x404)
 
 /* CGU registers. */
-#define CGU_BASE		0x1A602000
+#define CGU_BASE		    0x1A602000
 #define CGU_PLL_CLK_SEL		(CGU_BASE + 0x8)
-#define CGU_CLK_ENA		(CGU_BASE + 0x14)
+#define CGU_CLK_ENA			(CGU_BASE + 0x14)
 
 /* AON registers. */
 #define AON_BASE                     0x1A604000
@@ -35,6 +35,7 @@
 #define EXPSLV_BASE		0x4902F000
 #define EXPSLV_EXPMST0_CTRL	(EXPSLV_BASE)
 #define EXPSLV_UART_CTRL	(EXPSLV_BASE + 0x8)
+#define EXPSLV_CANFD_CTRL	(EXPSLV_BASE + 0xC)
 #define EXPSLV_SSI_CTRL		(EXPSLV_BASE + 0x28)
 
 #define EVTRTR0_BASE			0x49035000
@@ -87,14 +88,10 @@
 
 #define __NVIC_PRIO_BITS          NUM_IRQ_PRIO_BITS
 
-#define CGU_BASE        0x1A602000
-#define CGU_CLK_ENA     (CGU_BASE + 0x14)
-
 /* ANA Register */
 #define ANA_BASE            0x1A60A000
 #define ANA_VBAT_REG1       (ANA_BASE + 0x38)
 #define ANA_VBAT_REG2       (ANA_BASE + 0x3C)
-
 
 /* Expansion Slave registers. */
 #define EXPSLV_BASE     0x4902F000
@@ -103,6 +100,11 @@
 
 /* LPGPIO Base address for LPTIMER pin config */
 #define LPGPIO_BASE     0x42002008
+
+/* Macros for CAN FD mode Control */
+#define CAN0_FD_CTRL_REG          EXPSLV_CANFD_CTRL
+#define CAN0_CTRL_FD_ENA_POS      20U
+
 
 /*
  * CMSIS IRQn_Type enum is broken relative to ARM GNU compiler.
