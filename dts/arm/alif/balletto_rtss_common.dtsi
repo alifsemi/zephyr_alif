@@ -962,13 +962,13 @@
 		mram_flash: mram_flash@80000000 {
 			compatible = "alif,mram-flash-controller";
 			/* Usable MRAM size for applications is 1824 KB */
-			reg = <0x80000000 DT_SIZE_K(1824)>;
+			reg = <0x80000000 DT_SIZE_K(2048)>;
 
 			#address-cells = <1>;
 			#size-cells = <1>;
 			mram_storage: mram_storage@80000000 {
 				compatible = "soc-nv-flash";
-				reg = <0x80000000 DT_SIZE_K(1824)>;
+				reg = <0x80000000 DT_SIZE_K(2048)>;
 				erase-block-size = <1024>;
 				write-block-size = <16>;
 			};
@@ -1103,6 +1103,11 @@
 		storage_partition: partition@1C5800 {
 			label = "storage";
 			reg = <0x001C5800 DT_SIZE_K(10)>;
+		};
+
+		reserved_for_se: partition@1C8000 {
+			label = "SE-reserved";
+			reg = <0x001C5828 DT_SIZE_K(224)>;
 		};
 	};
 };
