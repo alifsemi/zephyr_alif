@@ -202,7 +202,8 @@ struct dma_pl330_config {
 	mem_addr_t control_reg_base;
 #endif
 	uint8_t num_irqs;
-	void (*irq_configure)(void);
+	void (*irq_configure)(const struct device *dev);
+	uint8_t max_dma_channels;
 };
 
 struct dma_pl330_dev_data {
