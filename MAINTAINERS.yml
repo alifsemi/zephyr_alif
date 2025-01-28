@@ -204,6 +204,19 @@ ARM Platforms:
   labels:
     - "platform: ARM"
 
+Alif Boards Platforms:
+  status: maintained
+  maintainers:
+    - HemanthKumar
+  collaborators:
+    - Tanay
+    - Prabhakar
+    - Manoj
+  files:
+    - boards/arm/alif_*/
+  labels:
+    - "platform: Alif Semi Boards"
+
 ASPEED Platforms:
   status: odd fixes
   files:
