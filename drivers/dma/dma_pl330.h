@@ -48,8 +48,6 @@
 #define PL330_LOOP_COUNTER0_MAX	0x100
 #define PL330_LOOP_COUNTER1_MAX	0x100
 
-#define MAX_DMA_CHANNELS	DT_INST_PROP(0, dma_channels)
-
 #define DMAC_PL330_INTEN	0x20
 #define DMAC_PL330_INTMIS	0x28
 #define DMAC_PL330_INTCLR	0x2C
@@ -94,7 +92,6 @@
 #define DMA_MAX_EVENTS		32
 
 #define MICROCODE_SIZE_MAX	0x400
-#define TOTAL_MICROCODE_SIZE	(MAX_DMA_CHANNELS * MICROCODE_SIZE_MAX)
 #define GET_MAX_DMA_SIZE(byte_width, burst_len) \
 		(PL330_LOOP_COUNTER0_MAX * PL330_LOOP_COUNTER1_MAX * \
 		(byte_width) * ((burst_len) + 1))
@@ -201,12 +198,14 @@ struct dma_pl330_config {
 #ifdef CONFIG_DMA_64BIT
 	mem_addr_t control_reg_base;
 #endif
+	uint8_t max_dma_channels;
+
 	uint8_t num_irqs;
-	void (*irq_configure)(void);
+	void (*irq_configure)(const struct device *dev);
 };
 
 struct dma_pl330_dev_data {
-	struct dma_pl330_ch_config channels[MAX_DMA_CHANNELS];
+	struct dma_pl330_ch_config *channels;
 	int event_irq[DMA_MAX_EVENTS];
 	uint8_t num_periph_req;
 	uint8_t axi_data_width;

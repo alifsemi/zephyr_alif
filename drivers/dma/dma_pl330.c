@@ -20,10 +20,6 @@ LOG_MODULE_REGISTER(dma_pl330);
 
 #define BYTE_WIDTH(burst_size) (1 << (burst_size))
 
-#if !DT_INST_NODE_HAS_PROP(0, microcode)
-static uint8_t __aligned(4) dma_pl330_mcode_buf[TOTAL_MICROCODE_SIZE];
-#endif
-
 static int dma_pl330_submit(const struct device *dev, uint64_t dst,
 			    uint64_t src, uint32_t channel, uint32_t size);
 
@@ -607,11 +603,12 @@ static int dma_pl330_submit(const struct device *dev, uint64_t dst,
 static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 			       struct dma_config *cfg)
 {
+	const struct dma_pl330_config *const dev_cfg = dev->config;
 	struct dma_pl330_dev_data *const dev_data = dev->data;
 	struct dma_pl330_ch_config *channel_cfg;
 	struct dma_pl330_ch_internal *ch_handle;
 
-	if (channel >= MAX_DMA_CHANNELS) {
+	if (channel >= dev_cfg->max_dma_channels) {
 		return -EINVAL;
 	}
 
@@ -677,11 +674,12 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 static int dma_pl330_transfer_start(const struct device *dev,
 				    uint32_t channel)
 {
+	const struct dma_pl330_config *const dev_cfg = dev->config;
 	struct dma_pl330_dev_data *const dev_data = dev->data;
 	struct dma_pl330_ch_config *channel_cfg;
 	int ret;
 
-	if (channel >= MAX_DMA_CHANNELS) {
+	if (channel >= dev_cfg->max_dma_channels) {
 		return -EINVAL;
 	}
 
@@ -705,7 +703,7 @@ static int dma_pl330_transfer_stop(const struct device *dev, uint32_t channel)
 	unsigned int irq_key;
 	int ret = 0;
 
-	if (channel >= MAX_DMA_CHANNELS) {
+	if (channel >= dev_cfg->max_dma_channels) {
 		return -EINVAL;
 	}
 
@@ -741,7 +739,7 @@ static void dma_pl330_isr(const struct device *dev)
 	 */
 	fsrc = sys_read32(reg_base + DMAC_PL330_FSRC);
 	if (fsrc) {
-		for (ch = 0; ch < MAX_DMA_CHANNELS; ch++) {
+		for (ch = 0; ch < dev_cfg->max_dma_channels; ch++) {
 			if (fsrc & (1 << ch)) {
 				channel_cfg = &dev_data->channels[ch];
 
@@ -765,7 +763,7 @@ static void dma_pl330_isr(const struct device *dev)
 		 */
 		intmis = sys_read32(reg_base + DMAC_PL330_INTMIS);
 
-		for (ch = 0; ch < MAX_DMA_CHANNELS; ch++) {
+		for (ch = 0; ch < dev_cfg->max_dma_channels; ch++) {
 			if (intmis & (1 << ch)) {
 				sys_write32((1 << ch), reg_base + DMAC_PL330_INTCLR);
 
@@ -784,15 +782,20 @@ static int dma_pl330_initialize(const struct device *dev)
 	const struct dma_pl330_config *const dev_cfg = dev->config;
 	struct dma_pl330_dev_data *const dev_data = dev->data;
 	struct dma_pl330_ch_config *channel_cfg;
+	uint8_t event_index;
 
-	for (int channel = 0; channel < MAX_DMA_CHANNELS; channel++) {
+	for (int channel = 0; channel < dev_cfg->max_dma_channels; channel++) {
 		channel_cfg = &dev_data->channels[channel];
 		channel_cfg->dma_exec_addr = dev_cfg->mcode_base +
 					(channel * MICROCODE_SIZE_MAX);
 		k_mutex_init(&channel_cfg->ch_mutex);
 	}
 
-	dev_cfg->irq_configure();
+	for (event_index = 0; event_index < DMA_MAX_EVENTS; event_index++) {
+		dev_data->event_irq[event_index] = -1;
+	}
+
+	dev_cfg->irq_configure(dev);
 
 	dev_data->num_periph_req = ((sys_read32(dev_cfg->reg_base + DMAC_PL330_CR0)
 								 >> DMA_NUM_PERIPH_REQ_SHIFT)
@@ -811,52 +814,65 @@ static DEVICE_API(dma, pl330_driver_api) = {
 	.stop = dma_pl330_transfer_stop,
 };
 
-#define IRQ_CONFIGURE(n, inst)                                                 \
-	IRQ_CONNECT(DT_INST_IRQ_BY_IDX(inst, n, irq),                              \
-		    DT_INST_IRQ_BY_IDX(inst, n, priority), dma_pl330_isr,              \
-		    DEVICE_DT_INST_GET(inst), 0);                                      \
+#define IRQ_CONFIGURE(n, inst)                                                                 \
+	IRQ_CONNECT(DT_INST_IRQ_BY_IDX(inst, n, irq),                                          \
+		    DT_INST_IRQ_BY_IDX(inst, n, priority), dma_pl330_isr,                      \
+		    DEVICE_DT_INST_GET(inst), 0);                                              \
 	irq_enable(DT_INST_IRQ_BY_IDX(inst, n, irq));
 
-#define CHANNEL_TO_EVENTIRQ(n, inst)                                             \
-			IF_ENABLED(DT_IRQ_HAS_NAME(DT_DRV_INST(inst), channel##n),          \
-				(dev_data->event_irq[n] = n;))
+#define CHANNEL_TO_EVENTIRQ(n, inst)                                                           \
+	IF_ENABLED(DT_IRQ_HAS_NAME(DT_DRV_INST(inst), channel##n),                             \
+			(pl330_data##inst.event_irq[n] = n;))
 
 #define CONFIGURE_ALL_IRQS(inst, n) LISTIFY(n, IRQ_CONFIGURE, (), inst)
 
-#define ASSIGN_CHANNELS_TO_EVENTIRQ(inst, n)                                     \
-			LISTIFY(n, CHANNEL_TO_EVENTIRQ, (), inst)
+#define ASSIGN_CHANNELS_TO_EVENTIRQ(inst, n)                                                   \
+	LISTIFY(n, CHANNEL_TO_EVENTIRQ, (), inst)
 
-static void dma_pl330_irq_configure(void)
-{
-	const struct device *const dev = DEVICE_DT_GET(DT_DRV_INST(0));
-	struct dma_pl330_dev_data *dev_data = dev->data;
-	uint8_t event_index;
+#define MCODE_BASE_ALLOC(inst)                                                                 \
+	IF_DISABLED(DT_INST_NODE_HAS_PROP(inst, microcode),                                    \
+			(static uint8_t __aligned(4) dma##inst##_pl330_mcode_buf               \
+			 [DT_INST_PROP(inst, dma_channels) * MICROCODE_SIZE_MAX];))
 
-	CONFIGURE_ALL_IRQS(0, DT_NUM_IRQS(DT_DRV_INST(0)));
+#define CONTROL_REG_BASE(inst)                                                                 \
+	IF_ENABLED(CONFIG_DMA_64BIT, (.control_reg_base =                                      \
+			 COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, control_regs),                \
+				 DT_INST_REG_ADDR_BY_NAME(inst, control_regs), (0)),))         \
 
-	for (event_index = 0; event_index < DMA_MAX_EVENTS; event_index++) {
-		dev_data->event_irq[event_index] = -1;
+#define CHANNELS(inst)                                                                         \
+	static struct dma_pl330_ch_config dma##inst##_pl330_channels                           \
+	[DT_INST_PROP(inst, dma_channels)];
+
+/********************** Device Definition per instance Macros. ***********************/
+#define DMAC_PL330_INIT(inst)                                                                  \
+	static void dma_pl330_irq_configure_##inst(const struct device *dev);                  \
+	MCODE_BASE_ALLOC(inst);                                                                \
+	CHANNELS(inst);                                                                        \
+                                                                                               \
+	static const struct dma_pl330_config pl330_config##inst = {                            \
+		.reg_base = DT_INST_REG_ADDR(inst),                                            \
+		CONTROL_REG_BASE(inst)                                                         \
+		.mcode_base = COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, microcode),              \
+				DT_INST_PROP_BY_IDX(inst, microcode, 0),                       \
+				POINTER_TO_UINT(dma##inst##_pl330_mcode_buf)),                 \
+		.max_dma_channels = DT_INST_PROP(inst, dma_channels),                          \
+		.irq_configure = dma_pl330_irq_configure_##inst,                               \
+		.num_irqs = DT_NUM_IRQS(DT_DRV_INST(inst)),                                    \
+	};                                                                                     \
+                                                                                               \
+	static struct dma_pl330_dev_data pl330_data##inst = {                                  \
+		.channels = dma##inst##_pl330_channels,                                        \
+	};                                                                                     \
+                                                                                               \
+	DEVICE_DT_INST_DEFINE(inst, &dma_pl330_initialize, NULL,                               \
+				&pl330_data##inst, &pl330_config##inst,                        \
+				POST_KERNEL, CONFIG_DMA_INIT_PRIORITY,                         \
+				&pl330_driver_api);                                            \
+                                                                                               \
+	static void dma_pl330_irq_configure_##inst(const struct device *dev)                   \
+	{                                                                                      \
+		CONFIGURE_ALL_IRQS(inst, DT_NUM_IRQS(DT_DRV_INST(inst)));                      \
+		ASSIGN_CHANNELS_TO_EVENTIRQ(inst, DT_INST_PROP(inst, dma_channels))            \
 	}
-	ASSIGN_CHANNELS_TO_EVENTIRQ(0, DT_INST_PROP(0, dma_channels))
-}
 
-static const struct dma_pl330_config pl330_config = {
-	.reg_base = DT_INST_REG_ADDR(0),
-#ifdef CONFIG_DMA_64BIT
-	.control_reg_base = DT_INST_REG_ADDR_BY_NAME(0, control_regs),
-#endif
-#if DT_INST_NODE_HAS_PROP(0, microcode)
-	.mcode_base = DT_INST_PROP_BY_IDX(0, microcode, 0),
-#else
-	.mcode_base = POINTER_TO_UINT(&dma_pl330_mcode_buf),
-#endif
-	.irq_configure = dma_pl330_irq_configure,
-	.num_irqs = DT_NUM_IRQS(DT_DRV_INST(0)),
-};
-
-static struct dma_pl330_dev_data pl330_data;
-
-DEVICE_DT_INST_DEFINE(0, &dma_pl330_initialize, NULL,
-			&pl330_data, &pl330_config,
-			POST_KERNEL, CONFIG_DMA_INIT_PRIORITY,
-			&pl330_driver_api);
+DT_INST_FOREACH_STATUS_OKAY(DMAC_PL330_INIT)
