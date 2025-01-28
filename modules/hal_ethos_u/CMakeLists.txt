@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 if(CONFIG_ARM_ETHOS_U AND CONFIG_MULTITHREADING)
-    set(ETHOSU_TARGET_NPU_CONFIG ${CONFIG_ARM_ETHOS_U_NPU_NAME})
+    set(ETHOSU_TARGET_NPU_CONFIG ${CONFIG_ARM_ETHOS_U_NPU_NAME} CACHE STRING "")
 
     # Mapping log level from Zephyr (none=0, err=1, wrn=2, inf=3, dbg=4) to
     # Ethos-U driver (err=0, warn=1, info=2, debug=3)
@@ -12,8 +12,9 @@ if(CONFIG_ARM_ETHOS_U AND CONFIG_MULTITHREADING)
 
     if ("${CONFIG_ARM_ETHOS_U_LOG_LEVEL}" LESS_EQUAL "${ETHOSU_LOG_SEVERITY_MAP_LENGTH}")
         list(GET ETHOSU_LOG_SEVERITY_MAP ${CONFIG_ARM_ETHOS_U_LOG_LEVEL} ETHOSU_LOG_SEVERITY)
+        set(ETHOSU_LOG_SEVERITY ${ETHOSU_LOG_SEVERITY} CACHE STRING "")
     else()
-        set(ETHOSU_LOG_SEVERITY debug)
+        set(ETHOSU_LOG_SEVERITY debug CACHE STRING "")
     endif()
 
     add_subdirectory(${ZEPHYR_CURRENT_MODULE_DIR} ethos-u-core-driver)
