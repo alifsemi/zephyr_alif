@@ -489,11 +489,17 @@ static uint32_t get_uart_baudrate_divisor(const struct device *dev,
 					  uint32_t pclk)
 {
 	ARG_UNUSED(dev);
+
+#if UART_NS16550_DLF_ENABLED
+	/* Don't round up if DLF is in use. */
+	return (pclk / (baud_rate * 16));
+#else
 	/*
 	 * calculate baud rate divisor. a variant of
 	 * (uint32_t)(pclk / (16.0 * baud_rate) + 0.5)
 	 */
 	return ((pclk + (baud_rate << 3)) / baud_rate) >> 4;
+#endif
 }
 
 #ifdef CONFIG_UART_NS16550_ITE_HIGH_SPEED_BAUDRATE
