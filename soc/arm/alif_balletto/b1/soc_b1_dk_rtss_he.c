@@ -199,9 +199,11 @@ void sys_arch_reboot(int type)
 	case SYS_REBOOT_WARM:
 		/* Use Cold boot until NVIC reset is fully working */
 		/* se_service_boot_reset_cpu(EXTSYS_1); */
+		se_service_shutdown_es0();
 		se_service_boot_reset_soc();
 		break;
 	case SYS_REBOOT_COLD:
+		se_service_shutdown_es0();
 		se_service_boot_reset_soc();
 		break;
 

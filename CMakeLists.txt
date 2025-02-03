@@ -1911,21 +1911,6 @@ add_custom_command(
   COMMAND_EXPAND_LISTS
   )
 
-# TODO: Need to remove additional overhead to generate ITCM & DTCM
-if(CONFIG_ARM_ETHOS_U STREQUAL  "y" )
-  message(STATUS "ITCM and DTCM bin will be separated after final binary generation(if size is more)...")
-  if(CONFIG_XIP STREQUAL  "y" )
-    message(STATUS "Triggered script to generate ITCM and DTCM bin...")
-    add_custom_command(
-      TARGET ${logical_target_for_zephyr_elf}
-      POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E echo "Running post-build Python script to generate bins..."
-      COMMAND ${CMAKE_COMMAND} -E env ${PYTHON_EXECUTABLE}
-        ${ZEPHYR_BASE}/scripts/utils/separate_itcm_dtcm.py ${PROJECT_BINARY_DIR}
-    )
-  endif()
-endif()
-
 # To populate with hex files to merge, do the following:
 #  set_property(GLOBAL APPEND PROPERTY HEX_FILES_TO_MERGE ${my_local_list})
 # Note that the zephyr.hex file will not be included automatically.

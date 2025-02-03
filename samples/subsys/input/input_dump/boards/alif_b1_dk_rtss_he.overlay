@@ -1,0 +1,20 @@
+/*
+ * Copyright (c) 2025 Alif Semiconductor.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <dt-bindings/pinctrl/balletto-pinctrl.h>
+#include <dt-bindings/i2c/i2c.h>
+#include <dt-bindings/gpio/gpio.h>
+
+
+&i2c1 {
+	status = "okay";
+	gt911: gt911@5d{
+		compatible = "goodix,gt911";
+		reg = <0x5d>;
+		reset-gpios = <&lpgpio 0 GPIO_ACTIVE_LOW>;
+		irq-gpios = <&gpio2 3 GPIO_ACTIVE_HIGH>;
+	};
+};
