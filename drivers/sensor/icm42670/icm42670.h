@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2022 Esco Medical ApS
  * Copyright (c) 2020 TDK Invensense
+ * Copyright (c) 2025 Alif Semiconductor
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -11,7 +12,57 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/spi.h>
+#include <zephyr/drivers/i2c.h>
+#include <zephyr/drivers/i3c.h>
 #include <zephyr/kernel.h>
+
+#define ICM42670_BUS_SPI DT_HAS_COMPAT_ON_BUS_STATUS_OKAY(invensense_icm42670, spi)
+#define ICM42670_BUS_I2C DT_HAS_COMPAT_ON_BUS_STATUS_OKAY(invensense_icm42670, i2c)
+#define ICM42670_BUS_I3C DT_HAS_COMPAT_ON_BUS_STATUS_OKAY(invensense_icm42670, i3c)
+
+#if (ICM42670_BUS_I3C && CONFIG_I3C_USE_IBI)
+#define  ICM42670_TRIGGER_IBI
+#endif
+
+union icm42670_bus {
+#if ICM42670_BUS_SPI
+	struct spi_dt_spec spi;
+#endif
+#if ICM42670_BUS_I2C
+	struct i2c_dt_spec i2c;
+#endif
+#if ICM42670_BUS_I3C
+	struct i3c_dt_spec i3c;
+#endif
+};
+
+typedef int (*icm42670_bus_check_fn)(const union icm42670_bus *bus);
+typedef int (*icm42670_reg_read_fn)(const union icm42670_bus *bus,
+				  uint16_t reg, uint8_t *data, size_t size);
+typedef int (*icm42670_reg_write_fn)(const union icm42670_bus *bus,
+				   uint16_t reg, uint8_t data);
+
+typedef int (*icm42670_reg_update_fn)(const union icm42670_bus *bus,
+				   uint16_t reg, uint8_t mask, uint8_t data);
+
+struct icm42670_bus_io {
+	icm42670_bus_check_fn check;
+	icm42670_reg_read_fn read;
+	icm42670_reg_write_fn write;
+	icm42670_reg_update_fn update;
+};
+
+#if ICM42670_BUS_SPI
+extern const struct icm42670_bus_io icm42670_bus_io_spi;
+#endif
+
+#if ICM42670_BUS_I2C
+extern const struct icm42670_bus_io icm42670_bus_io_i2c;
+#endif
+
+#if ICM42670_BUS_I3C
+extern const struct icm42670_bus_io icm42670_bus_io_i3c;
+#endif
 
 struct icm42670_data {
 	int16_t accel_x;
@@ -37,7 +88,7 @@ struct icm42670_data {
 #ifdef CONFIG_ICM42670_TRIGGER_OWN_THREAD
 	K_KERNEL_STACK_MEMBER(thread_stack, CONFIG_ICM42670_THREAD_STACK_SIZE);
 	struct k_thread thread;
-	struct k_sem gpio_sem;
+	struct k_sem trig_sem;
 #endif
 #ifdef CONFIG_ICM42670_TRIGGER_GLOBAL_THREAD
 	struct k_work work;
@@ -45,7 +96,8 @@ struct icm42670_data {
 };
 
 struct icm42670_config {
-	struct spi_dt_spec spi;
+	union icm42670_bus bus;
+	const struct icm42670_bus_io *bus_io;
 	struct gpio_dt_spec gpio_int;
 };
 

@@ -22,7 +22,7 @@ int icm42670_trigger_set(const struct device *dev, const struct sensor_trigger *
 int icm42670_trigger_init(const struct device *dev);
 
 /**
- * @brief enable the trigger gpio interrupt
+ * @brief enable the trigger interrupt
  *
  * @param dev icm42670 device pointer
  * @return int 0 on success, negative error code otherwise

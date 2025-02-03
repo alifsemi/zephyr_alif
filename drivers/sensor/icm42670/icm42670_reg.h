@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2022 Esco Medical ApS
  * Copyright (c) 2020 TDK Invensense
- *
+ * Copyright (c) 2025 Alif Semiconductor
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -254,6 +254,15 @@
 #define BIT_GYRO_ODR_50			0x0A
 #define BIT_GYRO_ODR_25			0x0B
 #define BIT_GYRO_ODR_12			0x0C
+
+
+/* Bank1 REG_INT_CONFIG6 */
+#define BIT_IBI_EN				BIT(2)
+#define BIT_IBI_BYTE_EN			BIT(3)
+#define BIT_TIMEOUT_EN			BIT(4)
+
+/* Bank1 REG_INT_SOURCE8 */
+#define BIT_INT_DRDY_IBI_EN		BIT(3)
 
 /* misc. defines */
 #define WHO_AM_I_ICM42670		0x67

@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2022 Esco Medical ApS
  * Copyright (c) 2020 TDK Invensense
+ * Copyright (c) 2025 Alif Semiconductor
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,7 +13,6 @@
 #include <zephyr/sys/byteorder.h>
 #include "icm42670.h"
 #include "icm42670_reg.h"
-#include "icm42670_spi.h"
 #include "icm42670_trigger.h"
 
 #include <zephyr/logging/log.h>
@@ -52,7 +52,7 @@ static int icm42670_set_accel_fs(const struct device *dev, uint16_t fs)
 
 	data->accel_sensitivity_shift = MIN_ACCEL_SENS_SHIFT + temp;
 
-	return icm42670_spi_update_register(&cfg->spi, REG_ACCEL_CONFIG0,
+	return cfg->bus_io->update(&cfg->bus, REG_ACCEL_CONFIG0,
 					    (uint8_t)MASK_ACCEL_UI_FS_SEL, temp);
 }
 
@@ -79,7 +79,7 @@ static int icm42670_set_gyro_fs(const struct device *dev, uint16_t fs)
 
 	data->gyro_sensitivity_x10 = icm42670_gyro_sensitivity_x10[temp];
 
-	return icm42670_spi_update_register(&cfg->spi, REG_GYRO_CONFIG0,
+	return cfg->bus_io->update(&cfg->bus, REG_GYRO_CONFIG0,
 					    (uint8_t)MASK_GYRO_UI_FS_SEL, temp);
 }
 
@@ -117,7 +117,7 @@ static int icm42670_set_accel_odr(const struct device *dev, uint16_t rate)
 		temp = BIT_ACCEL_ODR_1;
 	}
 
-	return icm42670_spi_update_register(&cfg->spi, REG_ACCEL_CONFIG0, (uint8_t)MASK_ACCEL_ODR,
+	return cfg->bus_io->update(&cfg->bus, REG_ACCEL_CONFIG0, (uint8_t)MASK_ACCEL_ODR,
 					    temp);
 }
 
@@ -149,7 +149,7 @@ static int icm42670_set_gyro_odr(const struct device *dev, uint16_t rate)
 		temp = BIT_GYRO_ODR_12;
 	}
 
-	return icm42670_spi_update_register(&cfg->spi, REG_GYRO_CONFIG0, (uint8_t)MASK_GYRO_ODR,
+	return cfg->bus_io->update(&cfg->bus, REG_GYRO_CONFIG0, (uint8_t)MASK_GYRO_ODR,
 					    temp);
 }
 
@@ -158,7 +158,7 @@ static int icm42670_enable_mclk(const struct device *dev)
 	const struct icm42670_config *cfg = dev->config;
 
 	/* switch on MCLK by setting the IDLE bit */
-	int res = icm42670_spi_single_write(&cfg->spi, REG_PWR_MGMT0, BIT_IDLE);
+	int res = cfg->bus_io->write(&cfg->bus, REG_PWR_MGMT0, BIT_IDLE);
 
 	if (res) {
 		return res;
@@ -169,7 +169,7 @@ static int icm42670_enable_mclk(const struct device *dev)
 		uint8_t value = 0;
 
 		k_usleep(MCLK_POLL_INTERVAL_US);
-		res = icm42670_spi_read(&cfg->spi, REG_MCLK_RDY, &value, 1);
+		res = cfg->bus_io->read(&cfg->bus, REG_MCLK_RDY, &value, 1);
 
 		if (res) {
 			return res;
@@ -192,8 +192,12 @@ static int icm42670_sensor_init(const struct device *dev)
 	/* start up time for register read/write after POR is 1ms and supply ramp time is 3ms */
 	k_msleep(3);
 
+	/* Todo: Reset the sensor initially.
+	 * Commented as of now as the sensor doesn't respond to I3C comm after the reset
+	 */
+#if !ICM42670_BUS_I3C
 	/* perform a soft reset to ensure a clean slate, reset bit will auto-clear */
-	res = icm42670_spi_single_write(&cfg->spi, REG_SIGNAL_PATH_RESET, BIT_SOFT_RESET);
+	res = cfg->bus_io->write(&cfg->bus, REG_SIGNAL_PATH_RESET, BIT_SOFT_RESET);
 
 	if (res) {
 		LOG_ERR("write REG_SIGNAL_PATH_RESET failed");
@@ -202,24 +206,36 @@ static int icm42670_sensor_init(const struct device *dev)
 
 	/* wait for soft reset to take effect */
 	k_msleep(SOFT_RESET_TIME_MS);
+#endif
 
+#if ICM42670_BUS_SPI
 	/* force SPI-4w hardware configuration (so that next read is correct) */
-	res = icm42670_spi_single_write(&cfg->spi, REG_DEVICE_CONFIG, BIT_SPI_AP_4WIRE);
+	res = cfg->bus_io->write(&cfg->bus, REG_DEVICE_CONFIG, BIT_SPI_AP_4WIRE);
 
 	if (res) {
 		return res;
 	}
+#endif
 
+#if ICM42670_BUS_I3C
+	/* enable internal RC oscillator, I3C SDR and DDR modes */
+	res = cfg->bus_io->write(&cfg->bus, REG_INTF_CONFIG1,
+	(BIT_I3C_SDR_EN | BIT_I3C_DDR_EN | ((uint8_t)FIELD_PREP(MASK_CLKSEL, BIT_CLKSEL_INT_RC))));
+#else
 	/* always use internal RC oscillator */
-	res = icm42670_spi_single_write(&cfg->spi, REG_INTF_CONFIG1,
+	res = cfg->bus_io->write(&cfg->bus, REG_INTF_CONFIG1,
 					(uint8_t)FIELD_PREP(MASK_CLKSEL, BIT_CLKSEL_INT_RC));
-
+#endif
 	if (res) {
 		return res;
 	}
 
+	/* Todo:Check reset status before enabling clock:
+	 * Commented as of now as the sensor doesn't respond to I3C comm after reset
+	 */
+#if !ICM42670_BUS_I3C
 	/* clear reset done int flag */
-	res = icm42670_spi_read(&cfg->spi, REG_INT_STATUS, &value, 1);
+	res = cfg->bus_io->read(&cfg->bus, REG_INT_STATUS, &value, 1);
 
 	if (res) {
 		return res;
@@ -229,7 +245,7 @@ static int icm42670_sensor_init(const struct device *dev)
 		LOG_ERR("unexpected RESET_DONE_INT value, %i", value);
 		return -EINVAL;
 	}
-
+#endif
 	/* enable the master clock to ensure proper operation */
 	res = icm42670_enable_mclk(dev);
 
@@ -237,7 +253,7 @@ static int icm42670_sensor_init(const struct device *dev)
 		return res;
 	}
 
-	res = icm42670_spi_read(&cfg->spi, REG_WHO_AM_I, &value, 1);
+	res = cfg->bus_io->read(&cfg->bus, REG_WHO_AM_I, &value, 1);
 
 	if (res) {
 		return res;
@@ -263,7 +279,7 @@ static int icm42670_turn_on_sensor(const struct device *dev)
 	value = FIELD_PREP(MASK_ACCEL_MODE, BIT_ACCEL_MODE_LNM) |
 		FIELD_PREP(MASK_GYRO_MODE, BIT_GYRO_MODE_LNM);
 
-	res = icm42670_spi_update_register(&cfg->spi, REG_PWR_MGMT0,
+	res = cfg->bus_io->update(&cfg->bus, REG_PWR_MGMT0,
 					   (uint8_t)(MASK_ACCEL_MODE | MASK_GYRO_MODE), value);
 
 	if (res) {
@@ -394,7 +410,7 @@ static int icm42670_sample_fetch_accel(const struct device *dev)
 	struct icm42670_data *data = dev->data;
 	uint8_t buffer[ACCEL_DATA_SIZE];
 
-	int res = icm42670_spi_read(&cfg->spi, REG_ACCEL_DATA_X1, buffer, ACCEL_DATA_SIZE);
+	int res = cfg->bus_io->read(&cfg->bus, REG_ACCEL_DATA_X1, buffer, ACCEL_DATA_SIZE);
 
 	if (res) {
 		return res;
@@ -413,7 +429,7 @@ static int icm42670_sample_fetch_gyro(const struct device *dev)
 	struct icm42670_data *data = dev->data;
 	uint8_t buffer[GYRO_DATA_SIZE];
 
-	int res = icm42670_spi_read(&cfg->spi, REG_GYRO_DATA_X1, buffer, GYRO_DATA_SIZE);
+	int res = cfg->bus_io->read(&cfg->bus, REG_GYRO_DATA_X1, buffer, GYRO_DATA_SIZE);
 
 	if (res) {
 		return res;
@@ -432,7 +448,7 @@ static int icm42670_sample_fetch_temp(const struct device *dev)
 	struct icm42670_data *data = dev->data;
 	uint8_t buffer[TEMP_DATA_SIZE];
 
-	int res = icm42670_spi_read(&cfg->spi, REG_TEMP_DATA1, buffer, TEMP_DATA_SIZE);
+	int res = cfg->bus_io->read(&cfg->bus, REG_TEMP_DATA1, buffer, TEMP_DATA_SIZE);
 
 	if (res) {
 		return res;
@@ -450,7 +466,7 @@ static int icm42670_sample_fetch(const struct device *dev, enum sensor_channel c
 
 	icm42670_lock(dev);
 
-	int res = icm42670_spi_read(&cfg->spi, REG_INT_STATUS_DRDY, &status, 1);
+	int res = cfg->bus_io->read(&cfg->bus, REG_INT_STATUS_DRDY, &status, 1);
 
 	if (res) {
 		goto cleanup;
@@ -616,13 +632,19 @@ static int icm42670_attr_get(const struct device *dev, enum sensor_channel chan,
 	return res;
 }
 
+static inline int icm42670_bus_check(const struct device *dev)
+{
+	const struct icm42670_config *cfg = dev->config;
+
+	return cfg->bus_io->check(&cfg->bus);
+}
+
 static int icm42670_init(const struct device *dev)
 {
 	struct icm42670_data *data = dev->data;
-	const struct icm42670_config *cfg = dev->config;
 
-	if (!spi_is_ready_dt(&cfg->spi)) {
-		LOG_ERR("SPI bus is not ready");
+	if (icm42670_bus_check(dev) < 0) {
+		LOG_ERR("Interface bus is not ready");
 		return -ENODEV;
 	}
 
@@ -683,23 +705,41 @@ static const struct sensor_driver_api icm42670_driver_api = {
 };
 
 /* device defaults to spi mode 0/3 support */
-#define ICM42670_SPI_CFG                                                                           \
+#define ICM42670_SPI_CFG                                                                    \
 	SPI_OP_MODE_MASTER | SPI_MODE_CPOL | SPI_MODE_CPHA | SPI_WORD_SET(8) | SPI_TRANSFER_MSB
 
-#define ICM42670_INIT(inst)                                                                        \
-	static struct icm42670_data icm42670_driver_##inst = {                                     \
+/* Initializes the bus members for an instance on a SPI bus. */
+#define ICM42670_CONFIG_SPI(inst)                                                           \
+	.bus.spi = SPI_DT_SPEC_INST_GET(inst, ICM42670_SPI_CFG, 0),                             \
+	.bus_io = &icm42670_bus_io_spi,
+
+/* Initializes the bus members for an instance on an I2C bus. */
+#define ICM42670_CONFIG_I2C(inst)                                                           \
+	.bus.i2c = I2C_DT_SPEC_INST_GET(inst),                                                  \
+	.bus_io = &icm42670_bus_io_i2c,
+
+/* Initializes the bus members for an instance on an I3C bus. */
+#define ICM42670_CONFIG_I3C(inst)                                                           \
+	.bus.i3c = I3C_DT_SPEC_INST_GET(inst),                                                  \
+	.bus_io = &icm42670_bus_io_i3c,
+
+#define ICM42670_INIT(inst)                                                                 \
+	static struct icm42670_data icm42670_driver_##inst = {                                  \
 		.accel_hz = DT_INST_PROP(inst, accel_hz),                                          \
 		.accel_fs = DT_INST_PROP(inst, accel_fs),                                          \
 		.gyro_hz = DT_INST_PROP(inst, gyro_hz),                                            \
 		.gyro_fs = DT_INST_PROP(inst, gyro_fs),                                            \
-	};                                                                                         \
-												   \
-	static const struct icm42670_config icm42670_cfg_##inst = {                                \
-		.spi = SPI_DT_SPEC_INST_GET(inst, ICM42670_SPI_CFG, 0U),                           \
-		.gpio_int = GPIO_DT_SPEC_INST_GET_OR(inst, int_gpios, { 0 }),                      \
-	};                                                                                         \
-												   \
-	SENSOR_DEVICE_DT_INST_DEFINE(inst, icm42670_init, NULL, &icm42670_driver_##inst,           \
+	};                                                                                      \
+                                                                                            \
+	static const struct icm42670_config icm42670_cfg_##inst = {                             \
+		COND_CODE_1(DT_INST_ON_BUS(inst, spi),                                             \
+			(ICM42670_CONFIG_SPI(inst)),                                               \
+			(COND_CODE_1(DT_INST_ON_BUS(inst, i3c), (ICM42670_CONFIG_I3C(inst)),	\
+			(ICM42670_CONFIG_I2C(inst)))))	\
+		.gpio_int = GPIO_DT_SPEC_INST_GET_OR(inst, int_gpios, {0}),	\
+	};                                                              \
+                                                                                            \
+	SENSOR_DEVICE_DT_INST_DEFINE(inst, icm42670_init, NULL, &icm42670_driver_##inst,        \
 			      &icm42670_cfg_##inst, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,      \
 			      &icm42670_driver_api);
 

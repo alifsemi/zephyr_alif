@@ -492,6 +492,14 @@
 		};
 	};
 
+	pinctrl_i3c0:pinctrl_i3c0 {
+		group0 {
+			pinmux = < PIN_P0_6__I3C_SDA_A >,
+				< PIN_P0_5__I3C_SCL_A >;
+			read_enable = < 0x1 >;
+		};
+	};
+
 	pinctrl_can0:pinctrl_can0 {
 		group0 {
 			pinmux = < PIN_P8_2__CAN0_RXD_C >,

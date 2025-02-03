@@ -851,4 +851,11 @@
 			read_enable = < 0x1 >;
 		};
 	};
+	pinctrl_i3c0:pinctrl_i3c0 {
+		group0 {
+			pinmux = < PIN_P7_6__I3C_SDA_D >,
+				< PIN_P7_7__I3C_SCL_D >;
+			read_enable = < 0x1 >;
+		};
+	};
 };
