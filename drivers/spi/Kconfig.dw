@@ -22,7 +22,7 @@ config SPI_DW_ACCESS_WORD_ONLY
 	  exception.
 
 config SPI_DW_USE_DMA
-	bool "Enable DMA path for transfers"
+	bool "DMA path for transfers"
 	default n
 	help
 	  Eventhough the code path will be enabled by this, dma will be enabled

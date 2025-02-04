@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config CRC_ALIF
-	bool "Enable ALif CRC driver"
+	bool "Alif CRC driver"
 	default y
 	depends on DT_HAS_ALIF_ALIF_CRC_ENABLED
 	help

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config CAN_CAST
-	bool "Enable CAST CAN driver for Alif Boards"
+	bool "CAST CAN driver for Alif Boards"
 	default y
 	help
 	  Enable CAN module for Alif Board

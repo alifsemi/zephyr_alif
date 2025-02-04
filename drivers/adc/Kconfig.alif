@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config ADC_ALIF
-	bool "Enable ADC for Alif Boards"
+	bool "ADC for Alif Boards"
 	default y
 	help
 	  Enable ADC module of Alif Boards

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config CMP_ALIF
-	bool "Enable ALif CMP driver"
+	bool "Alif CMP driver"
 	default y
 	help
 	  Enable driver for Alif CMP
