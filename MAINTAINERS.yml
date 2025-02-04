@@ -4005,6 +4005,16 @@ West:
   labels:
     - "area: Storage"
 
+"West project: hal_alif":
+  status: maintained
+  collaborators:
+    - AnttiKauppila-AlifSemi
+  files:
+    - modules/Kconfig.alif
+  labels:
+    - "platform: Alif Ensemble"
+    - "platform: Alif Balletto"
+
 "West project: hal_altera":
   status: odd fixes
   collaborators:
