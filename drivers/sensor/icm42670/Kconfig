@@ -2,6 +2,7 @@
 #
 # Copyright (c) 2022 Esco Medical ApS
 # Copyright (c) 2020 TDK Invensense
+# Copyright (c) 2025 Alif Semiconductor
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -9,9 +10,11 @@ menuconfig ICM42670
 	bool "ICM42670 Six-Axis Motion Tracking Device"
 	default y
 	depends on DT_HAS_INVENSENSE_ICM42670_ENABLED
-	select SPI
+	select SPI if $(dt_compat_on_bus,$(DT_COMPAT_INVENSENSE_ICM42670),spi)
+	select I2C if $(dt_compat_on_bus,$(DT_COMPAT_INVENSENSE_ICM42670),i2c)
+	select I3C if $(dt_compat_on_bus,$(DT_COMPAT_INVENSENSE_ICM42670),i3c)
 	help
-	  Enable driver for ICM42670 SPI-based six-axis motion tracking device.
+	  Enable driver for ICM42670 six-axis motion tracking device.
 
 if ICM42670
 
@@ -26,12 +29,12 @@ config ICM42670_TRIGGER_NONE
 
 config ICM42670_TRIGGER_GLOBAL_THREAD
 	bool "Use global thread"
-	depends on GPIO
+	depends on (GPIO || I3C_USE_IBI)
 	select ICM42670_TRIGGER
 
 config ICM42670_TRIGGER_OWN_THREAD
 	bool "Use own thread"
-	depends on GPIO
+	depends on (GPIO || I3C_USE_IBI)
 	select ICM42670_TRIGGER
 
 endchoice
