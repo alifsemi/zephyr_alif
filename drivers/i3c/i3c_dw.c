@@ -1039,21 +1039,6 @@ static int dw_i3c_i2c_api_transfer(const struct device *dev, struct i2c_msg *msg
 }
 
 #ifdef CONFIG_I3C_USE_IBI
-static int dw_i3c_controller_ibi_hj_response(const struct device *dev, bool ack)
-{
-	const struct dw_i3c_config *config = dev->config;
-	uint32_t ctrl = sys_read32(config->regs + DEVICE_CTRL);
-
-	if (ack) {
-		ctrl &= ~DEV_CTRL_HOT_JOIN_NACK;
-	} else {
-		ctrl |= DEV_CTRL_HOT_JOIN_NACK;
-	}
-
-	sys_write32(ctrl, config->regs + DEVICE_CTRL);
-
-	return 0;
-}
 
 static int i3c_dw_endis_ibi(const struct device *dev, struct i3c_device_desc *target, bool en)
 {
@@ -2309,7 +2294,7 @@ static int dw_i3c_init(const struct device *dev)
 	return 0;
 }
 
-static DEVICE_API(i3c, dw_i3c_api) = {
+static const struct i3c_driver_api dw_i3c_api = {
 	.i2c_api.transfer = dw_i3c_i2c_api_transfer,
 
 	.configure = dw_i3c_configure,
@@ -2333,7 +2318,6 @@ static DEVICE_API(i3c, dw_i3c_api) = {
 	.target_unregister = dw_i3c_target_unregister,
 
 #ifdef CONFIG_I3C_USE_IBI
-	.ibi_hj_response = dw_i3c_controller_ibi_hj_response,
 	.ibi_enable = dw_i3c_controller_enable_ibi,
 	.ibi_disable = dw_i3c_controller_disable_ibi,
 	.ibi_raise = dw_i3c_target_ibi_raise,
