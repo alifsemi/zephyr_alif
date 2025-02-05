@@ -1,0 +1,12 @@
+#
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+sample:
+  name: ICM42670 Sensor Sample
+tests:
+  sample.sensor.icm42670:
+    tags: i3c sensors
+    depends_on: i3c
