@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2020 Samsung Electronics Co., Ltd.
  * Copyright (C) 2023 Meta Platforms
- *
+ * Copyright (C) 2025 Alif Semiconductor
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@
 #include <zephyr/drivers/i3c.h>
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/sys/util.h>
-#include <assert.h>
+#include <zephyr/drivers/pinctrl.h>
 
 #define NANO_SEC        1000000000ULL
 #define BYTES_PER_DWORD 4
@@ -90,17 +90,14 @@ LOG_MODULE_REGISTER(i3c_dw, CONFIG_I3C_DW_LOG_LEVEL);
 #define IBI_QUEUE_STATUS_DATA_LEN(x) ((x) & GENMASK(7, 0))
 #define IBI_QUEUE_IBI_ADDR(x)        (IBI_QUEUE_STATUS_IBI_ID(x) >> 1)
 #define IBI_QUEUE_IBI_RNW(x)         (IBI_QUEUE_STATUS_IBI_ID(x) & BIT(0))
-#define IBI_TYPE_MR(x) \
-	((IBI_QUEUE_IBI_ADDR(x) != I3C_HOT_JOIN_ADDR) && !IBI_QUEUE_IBI_RNW(x))
-#define IBI_TYPE_HJ(x) \
-	((IBI_QUEUE_IBI_ADDR(x) == I3C_HOT_JOIN_ADDR) && !IBI_QUEUE_IBI_RNW(x))
-#define IBI_TYPE_SIRQ(x) \
-	((IBI_QUEUE_IBI_ADDR(x) != I3C_HOT_JOIN_ADDR) && IBI_QUEUE_IBI_RNW(x))
+#define IBI_TYPE_MR(x)  ((IBI_QUEUE_IBI_ADDR(x) != I3C_HOT_JOIN_ADDR) && !IBI_QUEUE_IBI_RNW(x))
+#define IBI_TYPE_HJ(x)  ((IBI_QUEUE_IBI_ADDR(x) == I3C_HOT_JOIN_ADDR) && !IBI_QUEUE_IBI_RNW(x))
+#define IBI_TYPE_SIRQ(x)    ((IBI_QUEUE_IBI_ADDR(x) != I3C_HOT_JOIN_ADDR) && IBI_QUEUE_IBI_RNW(x))
 
 #define QUEUE_THLD_CTRL               0x1c
 #define QUEUE_THLD_CTRL_IBI_STS_MASK  GENMASK(31, 24)
 #define QUEUE_THLD_CTRL_RESP_BUF_MASK GENMASK(15, 8)
-#define QUEUE_THLD_CTRL_RESP_BUF(x)   (((x) - 1) << 8)
+#define QUEUE_THLD_CTRL_RESP_BUF(x)   (((x)-1) << 8)
 
 #define DATA_BUFFER_THLD_CTRL        0x20
 #define DATA_BUFFER_THLD_CTRL_RX_BUF GENMASK(11, 8)
@@ -209,16 +206,16 @@ LOG_MODULE_REGISTER(i3c_dw, CONFIG_I3C_DW_LOG_LEVEL);
 #define MAX_DATA_SPEED   0x84
 #define SLV_DEBUG_STATUS 0x88
 
-#define SLV_INTR_REQ                        0x8c
-#define SLV_INTR_REQ_SIR_DATA_LENGTH(x)     (((x) << 16) & GENMASK(23, 16))
-#define SLV_INTR_REQ_MDB(x)                 (((x) << 8) & GENMASK(15, 8))
-#define SLV_INTR_REQ_IBI_STS(x)             (((x) & GENMASK(9, 8)) >> 8)
+#define SLV_INTR_REQ                    0x8c
+#define SLV_INTR_REQ_SIR_DATA_LENGTH(x) (((x) << 16) & GENMASK(23, 16))
+#define SLV_INTR_REQ_MDB(x)             (((x) << 8) & GENMASK(15, 8))
+#define SLV_INTR_REQ_IBI_STS(x)         (((x) & GENMASK(9, 8)) >> 8)
 #define SLV_INTR_REQ_IBI_STS_IBI_ACCEPT     0x01
 #define SLV_INTR_REQ_IBI_STS_IBI_NO_ATTEMPT 0x03
-#define SLV_INTR_REQ_TS                     BIT(4)
-#define SLV_INTR_REQ_MR                     BIT(3)
-#define SLV_INTR_REQ_SIR_CTRL(x)            (((x) & GENMASK(2, 1)) >> 1)
-#define SLV_INTR_REQ_SIR                    BIT(0)
+#define SLV_INTR_REQ_TS                 BIT(4)
+#define SLV_INTR_REQ_MR                 BIT(3)
+#define SLV_INTR_REQ_SIR_CTRL(x)        (((x) & GENMASK(2, 1)) >> 1)
+#define SLV_INTR_REQ_SIR                BIT(0)
 
 #define SLV_SIR_DATA          0x94
 #define SLV_SIR_DATA_BYTE3(x) (((x) << 24) & GENMASK(31, 24))
@@ -265,17 +262,17 @@ LOG_MODULE_REGISTER(i3c_dw, CONFIG_I3C_DW_LOG_LEVEL);
 #define SCL_EXT_LCNT_1(x)   ((x) & GENMASK(7, 0))
 
 #define SCL_EXT_TERMN_LCNT_TIMING 0xcc
-
 #define SDA_HOLD_SWITCH_DLY_TIMING                         0xd0
 #define SDA_HOLD_SWITCH_DLY_TIMING_SDA_TX_HOLD(x)          (((x)&GENMASK(18, 16)) >> 16)
 #define SDA_HOLD_SWITCH_DLY_TIMING_SDA_PP_OD_SWITCH_DLY(x) (((x)&GENMASK(10, 8)) >> 8)
 #define SDA_HOLD_SWITCH_DLY_TIMING_SDA_OD_PP_SWITCH_DLY(x) ((x)&GENMASK(2, 0))
-
 #define BUS_FREE_TIMING           0xd4
+
 /* Bus available time of 1us in ns */
 #define I3C_BUS_AVAILABLE_TIME_NS 1000U
-#define BUS_I3C_MST_FREE(x)       ((x) & GENMASK(15, 0))
-#define BUS_I3C_AVAIL_TIME(x)     ((x << 16) & GENMASK(31, 16))
+
+#define BUS_I3C_MST_FREE(x)   ((x) & GENMASK(15, 0))
+#define BUS_I3C_AVAIL_TIME(x) ((x << 16) & GENMASK(31, 16))
 
 #define BUS_IDLE_TIMING      0xd8
 /* Bus Idle time of 1ms in ns */
@@ -356,8 +353,10 @@ struct dw_i3c_xfer {
 struct dw_i3c_config {
 	struct i3c_driver_config common;
 	const struct device *clock;
+	/* Clock ID for I3C */
+	clock_control_subsys_t clk_id;
 	uint32_t regs;
-
+	const struct pinctrl_dev_config *pcfg;
 	/* Initial clk configuration */
 	/* Maximum OD high clk pulse length */
 	uint32_t od_thigh_max_ns;
@@ -523,7 +522,7 @@ static void dw_i3c_end_xfer(const struct device *dev)
 		resp = sys_read32(config->regs + RESPONSE_QUEUE_PORT);
 		tid = RESPONSE_PORT_TID(resp);
 		if (tid == 0xf) {
-			/* TODO: handle vendor extension ccc or hdr header in target mode */
+			/* DEFTGTS (Defining targets) information is received */
 			continue;
 		}
 
@@ -536,12 +535,15 @@ static void dw_i3c_end_xfer(const struct device *dev)
 			const struct i3c_target_callbacks *target_cb =
 				data->target_config->callbacks;
 
+
 			for (j = 0; j < cmd->rx_len; j += 4) {
 				rx_data = sys_read32(config->regs + RX_TX_DATA_PORT);
-				/* Call write received cb for each remaining byte  */
-				for (k = 0; k < MIN(4, cmd->rx_len - j); k++) {
-					target_cb->write_received_cb(data->target_config,
-								    (rx_data >> (8 * k)) & 0xff);
+				if (target_cb != NULL && target_cb->write_received_cb != NULL) {
+					/* Call write received cb for each remaining byte  */
+					for (k = 0; k < MIN(4, cmd->rx_len - j); k++) {
+						target_cb->write_received_cb(data->target_config,
+						(rx_data >> (8 * k)) & 0xff);
+					}
 				}
 			}
 
@@ -582,8 +584,8 @@ static void dw_i3c_end_xfer(const struct device *dev)
 
 	if (ret < 0) {
 		sys_write32(RESET_CTRL_RX_FIFO | RESET_CTRL_TX_FIFO | RESET_CTRL_RESP_QUEUE |
-			    RESET_CTRL_CMD_QUEUE,
-			    config->regs + RESET_CTRL);
+				RESET_CTRL_CMD_QUEUE, config->regs + RESET_CTRL);
+
 		sys_write32(sys_read32(config->regs + DEVICE_CTRL) | DEV_CTRL_RESUME,
 			    config->regs + DEVICE_CTRL);
 	}
@@ -604,10 +606,8 @@ static void start_xfer(const struct device *dev)
 	struct dw_i3c_data *data = dev->data;
 	struct dw_i3c_xfer *xfer = &data->xfer;
 	struct dw_i3c_cmd *cmd;
-	uint32_t thld_ctrl, present_state;
+	uint32_t thld_ctrl;
 	int32_t i;
-
-	present_state = sys_read32(config->regs + PRESENT_STATE);
 
 	/* Push data to TXFIFO */
 	for (i = 0; i < xfer->ncmds; i++) {
@@ -626,11 +626,14 @@ static void start_xfer(const struct device *dev)
 	/* Enqueue CMD */
 	for (i = 0; i < xfer->ncmds; i++) {
 		cmd = &xfer->cmds[i];
-		/* Only cmd_lo is used when it is a target */
-		if (present_state & PRESENT_STATE_CURRENT_MASTER) {
+
+		if (cmd->cmd_hi) {
 			sys_write32(cmd->cmd_hi, config->regs + COMMAND_QUEUE_PORT);
 		}
-		sys_write32(cmd->cmd_lo, config->regs + COMMAND_QUEUE_PORT);
+
+		if (cmd->cmd_lo) {
+			sys_write32(cmd->cmd_lo, config->regs + COMMAND_QUEUE_PORT);
+		}
 	}
 }
 
@@ -966,7 +969,6 @@ static int dw_i3c_i2c_transfer(const struct device *dev, struct i3c_i2c_device_d
 			cmd->cmd_lo |= COMMAND_PORT_TOC;
 		}
 	}
-
 	/* Do not send broadcast address (0x7E) with I2C transfers */
 	sys_write32(sys_read32(config->regs + DEVICE_CTRL) & ~DEV_CTRL_IBA_INCLUDE,
 		    config->regs + DEVICE_CTRL);
@@ -1039,7 +1041,6 @@ static int dw_i3c_i2c_api_transfer(const struct device *dev, struct i2c_msg *msg
 }
 
 #ifdef CONFIG_I3C_USE_IBI
-
 static int i3c_dw_endis_ibi(const struct device *dev, struct i3c_device_desc *target, bool en)
 {
 	struct dw_i3c_data *data = dev->data;
@@ -1174,6 +1175,7 @@ static int dw_i3c_target_ibi_raise_hj(const struct device *dev)
 		LOG_ERR("%s: HJ not supported", dev->name);
 		return -ENOTSUP;
 	}
+
 	if (sys_read32(config->regs + DEVICE_ADDR) & DEVICE_ADDR_DYNAMIC_ADDR_VALID) {
 		LOG_ERR("%s: HJ not available, DA already assigned", dev->name);
 		return -EACCES;
@@ -1228,6 +1230,7 @@ static int dw_i3c_target_ibi_raise_tir(const struct device *dev, struct i3c_ibi 
 	}
 
 	slv_intr_req = sys_read32(config->regs + SLV_INTR_REQ);
+
 	if (sys_read32(config->regs + SLV_CHAR_CTRL) & SLV_CHAR_CTRL_IBI_PAYLOAD) {
 		uint32_t tir_data = 0;
 
@@ -1253,9 +1256,9 @@ static int dw_i3c_target_ibi_raise_tir(const struct device *dev, struct i3c_ibi 
 			SLV_SIR_DATA_BYTE3((request->payload_len > 4) ? request->payload[4] : 0);
 		sys_write32(tir_data, config->regs + SLV_SIR_DATA);
 	}
-
 	/* kick off the ibi tir request */
 	slv_intr_req |= SLV_INTR_REQ_SIR;
+
 	sys_write32(slv_intr_req, config->regs + SLV_INTR_REQ);
 
 	/* wait for SLV_IBI_RESP update */
@@ -1265,17 +1268,14 @@ static int dw_i3c_target_ibi_raise_tir(const struct device *dev, struct i3c_ibi 
 	}
 
 	slv_ibi_resp = sys_read32(config->regs + SLV_INTR_REQ);
-	switch (SLV_IBI_RESP_IBI_STS(slv_ibi_resp)) {
-	case SLV_IBI_RESP_IBI_STS_ACK:
-		LOG_DBG("%s: Controller ACKed IBI TIR", dev->name);
+
+	switch (SLV_INTR_REQ_IBI_STS(slv_ibi_resp)) {
+	case SLV_INTR_REQ_IBI_STS_IBI_ACCEPT:
+		LOG_DBG("%s: Controller Accepted IBI TIR", dev->name);
 		return 0;
-	case SLV_IBI_RESP_IBI_STS_NACK:
-		LOG_ERR("%s: Controller NACKed IBI TIR", dev->name);
+	case SLV_INTR_REQ_IBI_STS_IBI_NO_ATTEMPT:
+		LOG_ERR("%s: Controller Not ATMPTD IBI TIR", dev->name);
 		return -EAGAIN;
-	case SLV_IBI_RESP_IBI_STS_EARLY_TERMINATE:
-		LOG_ERR("%s: Controller aborted IBI TIR with %lu remaining", dev->name,
-			SLV_IBI_RESP_DATA_LENGTH(slv_ibi_resp));
-		return -EIO;
 	default:
 		return -EIO;
 	}
@@ -1359,73 +1359,81 @@ static int init_scl_timing(const struct device *dev)
 {
 	const struct dw_i3c_config *config = dev->config;
 	struct dw_i3c_data *data = dev->data;
+	struct i3c_config_controller *ctrl_config = &data->common.ctrl_config;
 	uint32_t scl_timing, hcnt, lcnt, core_rate;
 
-	if (clock_control_get_rate(config->clock, NULL, &core_rate) != 0) {
+	if (clock_control_get_rate(config->clock, config->clk_id, &core_rate) != 0) {
 		LOG_ERR("%s: get clock rate failed", dev->name);
 		return -EINVAL;
 	}
 
-	/* I3C_OD */
-	hcnt = DIV_ROUND_UP(config->od_thigh_max_ns * (uint64_t)core_rate, I3C_PERIOD_NS) - 1;
-	hcnt = CLAMP(hcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
+	if (!ctrl_config->is_secondary) {
+		/* I3C_OD */
+		hcnt = DIV_ROUND_UP(config->od_thigh_max_ns * (uint64_t)core_rate, I3C_PERIOD_NS) -
+		       1;
+		hcnt = CLAMP(hcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
 
-	lcnt = DIV_ROUND_UP(config->od_tlow_min_ns * (uint64_t)core_rate, I3C_PERIOD_NS);
-	lcnt = CLAMP(lcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
+		lcnt = DIV_ROUND_UP(config->od_tlow_min_ns * (uint64_t)core_rate, I3C_PERIOD_NS);
+		lcnt = CLAMP(lcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
 
-	scl_timing = SCL_I3C_TIMING_HCNT(hcnt) | SCL_I3C_TIMING_LCNT(lcnt);
-	sys_write32(scl_timing, config->regs + SCL_I3C_OD_TIMING);
+		scl_timing = SCL_I3C_TIMING_HCNT(hcnt) | SCL_I3C_TIMING_LCNT(lcnt);
+		sys_write32(scl_timing, config->regs + SCL_I3C_OD_TIMING);
 
-	/* Set bus free timing to match tlow setting for OD clk config. */
-	sys_write32(BUS_I3C_MST_FREE(lcnt), config->regs + BUS_FREE_TIMING);
-
-	/* I3C_PP */
-	hcnt = DIV_ROUND_UP(I3C_BUS_THIGH_MAX_NS * (uint64_t)core_rate, I3C_PERIOD_NS) - 1;
-	hcnt = CLAMP(hcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
-
-	lcnt = DIV_ROUND_UP(core_rate, data->common.ctrl_config.scl.i3c) - hcnt;
-	lcnt = CLAMP(lcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
-
-	scl_timing = SCL_I3C_TIMING_HCNT(hcnt) | SCL_I3C_TIMING_LCNT(lcnt);
-	sys_write32(scl_timing, config->regs + SCL_I3C_PP_TIMING);
-
-	/* I3C */
-	lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR1_SCL_RATE) - hcnt;
-	scl_timing = SCL_EXT_LCNT_1(lcnt);
-	lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR2_SCL_RATE) - hcnt;
-	scl_timing |= SCL_EXT_LCNT_2(lcnt);
-	lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR3_SCL_RATE) - hcnt;
-	scl_timing |= SCL_EXT_LCNT_3(lcnt);
-	lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR4_SCL_RATE) - hcnt;
-	scl_timing |= SCL_EXT_LCNT_4(lcnt);
-	sys_write32(scl_timing, config->regs + SCL_EXT_LCNT_TIMING);
-
-	/* I2C FM+ */
-	lcnt = DIV_ROUND_UP(I3C_BUS_I2C_FMP_TLOW_MIN_NS * (uint64_t)core_rate, I3C_PERIOD_NS);
-	hcnt = DIV_ROUND_UP(core_rate, I3C_BUS_I2C_FM_PLUS_SCL_RATE) - lcnt;
-	scl_timing = SCL_I2C_FMP_TIMING_HCNT(hcnt) | SCL_I2C_FMP_TIMING_LCNT(lcnt);
-	sys_write32(scl_timing, config->regs + SCL_I2C_FMP_TIMING);
-
-	/* I2C FM */
-	lcnt = DIV_ROUND_UP(I3C_BUS_I2C_FM_TLOW_MIN_NS * (uint64_t)core_rate, I3C_PERIOD_NS);
-	hcnt = DIV_ROUND_UP(core_rate, I3C_BUS_I2C_FM_SCL_RATE) - lcnt;
-	scl_timing = SCL_I2C_FM_TIMING_HCNT(hcnt) | SCL_I2C_FM_TIMING_LCNT(lcnt);
-	sys_write32(scl_timing, config->regs + SCL_I2C_FM_TIMING);
-
-	if (data->mode != I3C_BUS_MODE_PURE) {
+		/* Set bus free timing to match tlow setting for OD clk config. */
 		sys_write32(BUS_I3C_MST_FREE(lcnt), config->regs + BUS_FREE_TIMING);
-		sys_write32(sys_read32(config->regs + DEVICE_CTRL) | DEV_CTRL_I2C_SLAVE_PRESENT,
-			    config->regs + DEVICE_CTRL);
-	}
-	/* I3C Bus Available Time */
-	scl_timing = DIV_ROUND_UP(I3C_BUS_AVAILABLE_TIME_NS * (uint64_t)core_rate,
-					I3C_PERIOD_NS);
-	sys_write32(BUS_I3C_AVAIL_TIME(scl_timing), config->regs + BUS_FREE_TIMING);
 
-	/* I3C Bus Idle Time */
-	scl_timing =
-		DIV_ROUND_UP(I3C_BUS_IDLE_TIME_NS * (uint64_t)core_rate, I3C_PERIOD_NS);
-	sys_write32(BUS_I3C_IDLE_TIME(scl_timing), config->regs + BUS_IDLE_TIMING);
+		/* I3C_PP */
+		hcnt = DIV_ROUND_UP(I3C_BUS_THIGH_MAX_NS * (uint64_t)core_rate, I3C_PERIOD_NS) - 1;
+		hcnt = CLAMP(hcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
+
+		lcnt = DIV_ROUND_UP(core_rate, data->common.ctrl_config.scl.i3c) - hcnt;
+		lcnt = CLAMP(lcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
+
+		scl_timing = SCL_I3C_TIMING_HCNT(hcnt) | SCL_I3C_TIMING_LCNT(lcnt);
+		sys_write32(scl_timing, config->regs + SCL_I3C_PP_TIMING);
+
+		/* I3C */
+		lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR1_SCL_RATE) - hcnt;
+		scl_timing = SCL_EXT_LCNT_1(lcnt);
+		lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR2_SCL_RATE) - hcnt;
+		scl_timing |= SCL_EXT_LCNT_2(lcnt);
+		lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR3_SCL_RATE) - hcnt;
+		scl_timing |= SCL_EXT_LCNT_3(lcnt);
+		lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR4_SCL_RATE) - hcnt;
+		scl_timing |= SCL_EXT_LCNT_4(lcnt);
+		sys_write32(scl_timing, config->regs + SCL_EXT_LCNT_TIMING);
+
+		/* I2C FM+ */
+		lcnt = DIV_ROUND_UP(I3C_BUS_I2C_FMP_TLOW_MIN_NS * (uint64_t)core_rate,
+				    I3C_PERIOD_NS);
+		hcnt = DIV_ROUND_UP(core_rate, I3C_BUS_I2C_FM_PLUS_SCL_RATE) - lcnt;
+		scl_timing = SCL_I2C_FMP_TIMING_HCNT(hcnt) | SCL_I2C_FMP_TIMING_LCNT(lcnt);
+		sys_write32(scl_timing, config->regs + SCL_I2C_FMP_TIMING);
+
+		/* I2C FM */
+		lcnt = DIV_ROUND_UP(I3C_BUS_I2C_FM_TLOW_MIN_NS * (uint64_t)core_rate,
+				    I3C_PERIOD_NS);
+		hcnt = DIV_ROUND_UP(core_rate, I3C_BUS_I2C_FM_SCL_RATE) - lcnt;
+		scl_timing = SCL_I2C_FM_TIMING_HCNT(hcnt) | SCL_I2C_FM_TIMING_LCNT(lcnt);
+		sys_write32(scl_timing, config->regs + SCL_I2C_FM_TIMING);
+
+		if (data->mode != I3C_BUS_MODE_PURE) {
+			sys_write32(BUS_I3C_MST_FREE(lcnt), config->regs + BUS_FREE_TIMING);
+			sys_write32(sys_read32(config->regs + DEVICE_CTRL) |
+					    DEV_CTRL_I2C_SLAVE_PRESENT,
+				    config->regs + DEVICE_CTRL);
+		}
+	} else {
+		/* I3C Bus Available Time */
+		scl_timing = DIV_ROUND_UP(I3C_BUS_AVAILABLE_TIME_NS * (uint64_t)core_rate,
+					  I3C_PERIOD_NS);
+		sys_write32(BUS_I3C_AVAIL_TIME(scl_timing), config->regs + BUS_FREE_TIMING);
+
+		/* I3C Bus Idle Time */
+		scl_timing =
+			DIV_ROUND_UP(I3C_BUS_IDLE_TIME_NS * (uint64_t)core_rate, I3C_PERIOD_NS);
+		sys_write32(BUS_I3C_IDLE_TIME(scl_timing), config->regs + BUS_IDLE_TIMING);
+	}
 
 	return 0;
 }
@@ -1585,27 +1593,44 @@ static int dw_i3c_i2c_detach_device(const struct device *dev, struct i3c_i2c_dev
 	return 0;
 }
 
-static int set_controller_info(const struct device *dev)
+static int set_controller_info(const struct device *dev, const uint8_t addr)
 {
 	const struct dw_i3c_config *config = dev->config;
 	struct dw_i3c_data *data = dev->data;
+	struct i3c_config_controller *ctrl_config = &data->common.ctrl_config;
 
-	uint8_t controller_da =
-		i3c_addr_slots_next_free_find(&data->common.attached_dev.addr_slots, 0);
-	LOG_DBG("%s: 0x%02x DA selected for controller", dev->name, controller_da);
+	if (ctrl_config->is_secondary) {
+		/* set static address */
+		uint32_t val = sys_read32(config->regs + DEVICE_ADDR);
+		/* if static address is set to 0x00, then disable static_addr_en */
+		if (addr != 0x00) {
+			val |= DEVICE_ADDR_STATIC_ADDR_VALID;
+		} else {
+			val &= ~DEVICE_ADDR_STATIC_ADDR_VALID;
+		}
+		val &= ~DEVICE_ADDR_STATIC_MASK;
+		val |= DEVICE_ADDR_STATIC(addr);
+		sys_write32(val, config->regs + DEVICE_ADDR);
+	} else {
+		uint8_t controller_da =
+			i3c_addr_slots_next_free_find(&data->common.attached_dev.addr_slots, 0);
+		LOG_DBG("%s: 0x%02x DA selected for controller", dev->name, controller_da);
 
-	sys_write32(DEVICE_ADDR_DYNAMIC_ADDR_VALID | DEVICE_ADDR_DYNAMIC(controller_da),
-		    config->regs + DEVICE_ADDR);
-	/* Mark the address as I3C device */
-	i3c_addr_slots_mark_i3c(&data->common.attached_dev.addr_slots, controller_da);
-
+		sys_write32(DEVICE_ADDR_DYNAMIC_ADDR_VALID | DEVICE_ADDR_DYNAMIC(controller_da),
+			    config->regs + DEVICE_ADDR);
+		/* Mark the address as I3C device */
+		i3c_addr_slots_mark_i3c(&data->common.attached_dev.addr_slots, controller_da);
+	}
 	return 0;
 }
 
 static void enable_interrupts(const struct device *dev)
 {
 	const struct dw_i3c_config *config = dev->config;
+	struct dw_i3c_data *data = dev->data;
+	struct i3c_config_controller *ctrl_config = &data->common.ctrl_config;
 	uint32_t thld_ctrl;
+	uint32_t intr_mask;
 
 	config->irq_config_func();
 
@@ -1619,8 +1644,14 @@ static void enable_interrupts(const struct device *dev)
 
 	sys_write32(INTR_ALL, config->regs + INTR_STATUS);
 
-	sys_write32(INTR_SLAVE_MASK | INTR_MASTER_MASK, config->regs + INTR_STATUS_EN);
-	sys_write32(INTR_SLAVE_MASK | INTR_MASTER_MASK, config->regs + INTR_SIGNAL_EN);
+	if (ctrl_config->is_secondary) {
+		intr_mask = INTR_SLAVE_MASK;
+	} else {
+		intr_mask = INTR_MASTER_MASK;
+	}
+
+	sys_write32(intr_mask, config->regs + INTR_STATUS_EN);
+	sys_write32(intr_mask, config->regs + INTR_SIGNAL_EN);
 }
 
 /**
@@ -1792,7 +1823,7 @@ static int add_slave_from_daa(const struct device *dev, int32_t pos)
 
 	/* retrieve dynamic address assigned */
 	tmp = sys_read32(config->regs + DEV_ADDR_TABLE_LOC(data->datstartaddr, pos));
-	dyn_addr = (((tmp) & GENMASK(22, 16)) >> 16);
+	dyn_addr = (((tmp)&GENMASK(22, 16)) >> 16);
 
 	/* retrieve pid */
 	tmp = sys_read32(config->regs + DEV_CHAR_TABLE_LOC1(data->dctstartaddr, pos));
@@ -2013,14 +2044,23 @@ static int dw_i3c_config_get(const struct device *dev, enum i3c_config_type type
 static int dw_i3c_configure(const struct device *dev, enum i3c_config_type type, void *config)
 {
 	const struct dw_i3c_config *dev_config = dev->config;
+	struct dw_i3c_data *data = dev->data;
+	struct i3c_config_controller *ctrl_config = &data->common.ctrl_config;
+	int ret;
 
 	if (type == I3C_CONFIG_CONTROLLER) {
-		/* struct i3c_config_controller *ctrl_cfg = config; */
-		/* TODO: somehow determine i3c rate? snps is complicated */
-		return -ENOTSUP;
+
+		if (ctrl_config->is_secondary) {
+			return -EINVAL;
+		}
+
 	} else if (type == I3C_CONFIG_TARGET) {
 		struct i3c_config_target *target_cfg = config;
 		uint32_t val;
+
+		if (!ctrl_config->is_secondary) {
+			return -EINVAL;
+		}
 
 		/* TODO: some how randomly generate pid */
 		if (target_cfg->pid_random) {
@@ -2030,18 +2070,6 @@ static int dw_i3c_configure(const struct device *dev, enum i3c_config_type type,
 		val = SLV_MAX_LEN_MWL(target_cfg->max_write_len) |
 		      (SLV_MAX_LEN_MRL(target_cfg->max_read_len) << 16);
 		sys_write32(val, dev_config->regs + SLV_MAX_LEN);
-
-		/* set static address */
-		val = sys_read32(dev_config->regs + DEVICE_ADDR);
-		/* if static address is set to 0x00, then disable static_addr_en */
-		if (target_cfg->static_addr != 0x00) {
-			val |= DEVICE_ADDR_STATIC_ADDR_VALID;
-		} else {
-			val &= ~DEVICE_ADDR_STATIC_ADDR_VALID;
-		}
-		val &= ~DEVICE_ADDR_STATIC_MASK;
-		val |= DEVICE_ADDR_STATIC(target_cfg->static_addr);
-		sys_write32(val, dev_config->regs + DEVICE_ADDR);
 
 		val = sys_read32(dev_config->regs + SLV_CHAR_CTRL);
 		val &= ~(SLV_CHAR_CTRL_BCR_MASK | SLV_CHAR_CTRL_DCR_MASK);
@@ -2061,6 +2089,15 @@ static int dw_i3c_configure(const struct device *dev, enum i3c_config_type type,
 
 		val = (uint32_t)(target_cfg->pid & 0xFFFFFFFF);
 		sys_write32(val, dev_config->regs + SLV_PID_VALUE);
+
+		ret = set_controller_info(dev, target_cfg->static_addr);
+		if (ret) {
+			return ret;
+		}
+
+		dw_i3c_enable_controller(dev_config, true);
+
+		enable_interrupts(dev);
 	}
 
 	return 0;
@@ -2189,6 +2226,51 @@ static int dw_i3c_target_unregister(const struct device *dev, struct i3c_target_
 	return 0;
 }
 
+/**
+ * @brief Initialise the master interface of specified device.
+ *
+ * This function initialises master interface.
+ *
+ * @param dev Pointer to the I3C device structure.
+ */
+static int dw_i3c_master_init(const struct device *dev)
+{
+	const struct dw_i3c_config *config = dev->config;
+	int ret;
+
+	/* disable ibi */
+	sys_write32(IBI_REQ_REJECT_ALL, config->regs + IBI_SIR_REQ_REJECT);
+	sys_write32(IBI_REQ_REJECT_ALL, config->regs + IBI_MR_REQ_REJECT);
+
+	/* disable hot-join */
+	sys_write32(sys_read32(config->regs + DEVICE_CTRL) | (DEV_CTRL_HOT_JOIN_NACK),
+		    config->regs + DEVICE_CTRL);
+
+	ret = i3c_addr_slots_init(dev);
+	if (ret != 0) {
+		return ret;
+	}
+
+	ret = set_controller_info(dev, 0);
+	if (ret) {
+		return ret;
+	}
+
+	dw_i3c_enable_controller(config, true);
+
+	enable_interrupts(dev);
+
+	ret = i3c_bus_init(dev, &config->common.dev_list);
+	if (ret) {
+		return ret;
+	}
+	/* Bus Initialization Complete, allow HJ ACKs */
+	sys_write32(sys_read32(config->regs + DEVICE_CTRL) & ~(DEV_CTRL_HOT_JOIN_NACK),
+		    config->regs + DEVICE_CTRL);
+
+	return 0;
+}
+
 static int dw_i3c_init(const struct device *dev)
 {
 	const struct dw_i3c_config *config = dev->config;
@@ -2197,14 +2279,20 @@ static int dw_i3c_init(const struct device *dev)
 	int ret;
 	uint32_t hw_capabilities;
 	uint32_t queue_capability;
-	uint32_t device_ctrl_ext;
 
 	if (!device_is_ready(config->clock)) {
 		return -ENODEV;
 	}
 
-	ret = clock_control_on(config->clock, NULL);
+	ret = clock_control_on(config->clock, config->clk_id);
 	if (ret < 0) {
+		LOG_ERR("Failed to turn on Clock");
+		return ret;
+	}
+
+	ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+	if (ret != 0) {
+		LOG_ERR("Unable to configure pins err:%d", ret);
 		return ret;
 	}
 
@@ -2248,47 +2336,16 @@ static int dw_i3c_init(const struct device *dev)
 		ctrl_config->supported_hdr |= I3C_MSG_HDR_DDR;
 	}
 
-	/* if the boot condition starts as a target, then it's a secondary controller */
-	device_ctrl_ext = sys_read32(config->regs + DEVICE_CTRL_EXTENDED);
-	if (DEVICE_CTRL_EXTENDED_DEV_OPERATION_MODE(device_ctrl_ext) &
-	    DEVICE_CTRL_EXTENDED_DEV_OPERATION_MODE_SLAVE) {
-		ctrl_config->is_secondary = true;
-	} else {
-		ctrl_config->is_secondary = false;
-	}
-
 	ret = init_scl_timing(dev);
 	if (ret != 0) {
 		return ret;
 	}
 
-	enable_interrupts(dev);
-
-	/* disable ibi */
-	sys_write32(IBI_REQ_REJECT_ALL, config->regs + IBI_SIR_REQ_REJECT);
-	sys_write32(IBI_REQ_REJECT_ALL, config->regs + IBI_MR_REQ_REJECT);
-
-	/* disable hot-join */
-	sys_write32(sys_read32(config->regs + DEVICE_CTRL) | (DEV_CTRL_HOT_JOIN_NACK),
-		    config->regs + DEVICE_CTRL);
-
-	ret = i3c_addr_slots_init(dev);
-	if (ret != 0) {
-		return ret;
-	}
-
-	dw_i3c_enable_controller(config, true);
-
-	if (!(ctrl_config->is_secondary)) {
-		ret = set_controller_info(dev);
-		if (ret) {
+	if (!ctrl_config->is_secondary) {
+		ret = dw_i3c_master_init(dev);
+		if (ret != 0) {
 			return ret;
 		}
-		/* Perform bus initialization */
-		ret = i3c_bus_init(dev, &config->common.dev_list);
-		/* Bus Initialization Complete, allow HJ ACKs */
-		sys_write32(sys_read32(config->regs + DEVICE_CTRL) & ~(DEV_CTRL_HOT_JOIN_NACK),
-			    config->regs + DEVICE_CTRL);
 	}
 
 	return 0;
@@ -2299,7 +2356,7 @@ static const struct i3c_driver_api dw_i3c_api = {
 
 	.configure = dw_i3c_configure,
 	.config_get = dw_i3c_config_get,
-
+	.recover_bus = NULL,
 	.attach_i3c_device = dw_i3c_attach_device,
 	.reattach_i3c_device = dw_i3c_reattach_device,
 	.detach_i3c_device = dw_i3c_detach_device,
@@ -2337,7 +2394,9 @@ static const struct i3c_driver_api dw_i3c_api = {
 	static struct i3c_device_desc dw_i3c_device_array_##n[] = I3C_DEVICE_ARRAY_DT_INST(n);     \
 	static struct i3c_i2c_device_desc dw_i3c_i2c_device_array_##n[] =                          \
 		I3C_I2C_DEVICE_ARRAY_DT_INST(n);                                                   \
+	PINCTRL_DT_INST_DEFINE(n);\
 	static struct dw_i3c_data dw_i3c_data_##n = {                                              \
+		.common.ctrl_config.is_secondary = DT_INST_PROP(n, target_mode),                   \
 		.common.ctrl_config.scl.i3c =                                                      \
 			DT_INST_PROP_OR(n, i3c_scl_hz, I3C_BUS_TYP_I3C_SCL_RATE),                  \
 		.common.ctrl_config.scl.i2c = DT_INST_PROP_OR(n, i2c_scl_hz, 0),                   \
@@ -2345,6 +2404,10 @@ static const struct i3c_driver_api dw_i3c_api = {
 	static const struct dw_i3c_config dw_i3c_cfg_##n = {                                       \
 		.regs = DT_INST_REG_ADDR(n),                                                       \
 		.clock = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),                                    \
+		.clk_id = COND_CODE_1(DT_INST_PHA_HAS_CELL(n, clocks, clkid),\
+				((clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, clkid)),\
+				((clock_control_subsys_t)0)),\
+		.pcfg = PINCTRL_DT_DEV_CONFIG_GET(DT_DRV_INST(n)),\
 		.od_thigh_max_ns = DT_INST_PROP(n, od_thigh_max_ns),                               \
 		.od_tlow_min_ns = DT_INST_PROP(n, od_tlow_min_ns),                                 \
 		.irq_config_func = &i3c_dw_irq_config_##n,                                         \

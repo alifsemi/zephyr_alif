@@ -108,6 +108,8 @@ static uint32_t alif_get_input_clock(uint32_t clock_name)
 	case ALIF_LPTIMER2_128K_CLK:
 	case ALIF_LPTIMER3_128K_CLK:
 		return ALIF_CLOCK_128K_CLK_FREQ;
+	case ALIF_I3C_CLK:
+		return ALIF_CLOCK_SYST_PCLK_FREQ;
 #if CONFIG_COUNTER_SNPS_DW
 	case ALIF_LPTIMER0_LPTMR0_IO_PIN:
 		return CONFIG_LPTIMER0_EXT_CLK_FREQ;

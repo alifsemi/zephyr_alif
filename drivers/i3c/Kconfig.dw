@@ -11,6 +11,7 @@ config I3C_DW
 	select I3C_IBI_WORKQUEUE if I3C_USE_IBI
 	depends on DT_HAS_SNPS_DESIGNWARE_I3C_ENABLED
 	depends on CLOCK_CONTROL
+	depends on PINCTRL
 	default y
 	help
 	  Enable the Synopsys Designware I3C driver
