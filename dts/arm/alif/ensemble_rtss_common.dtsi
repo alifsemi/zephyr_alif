@@ -1133,7 +1133,6 @@
 
 		fifo-wr-wmark = <0x18>;
 		fifo-rd-wmark = <0x08>;
-		csi-bus-if = <&csi>;
 		wait-vsync;
 		status = "disabled";
 	};
