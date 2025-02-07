@@ -312,9 +312,12 @@ static int icm42670_turn_on_sensor(const struct device *dev)
 
 	/*
 	 * Accelerometer sensor need at least 10ms startup time
-	 * Gyroscope sensor need at least 30ms startup time
+	 * Gyroscope sensor need at least 30ms startup time.
+	 * However, to address intermittent delays encountered
+	 * in edge cases, 200ms startup timeout is set as a
+	 * safeguard to ensure robustness and reliability.
 	 */
-	k_msleep(100);
+	k_msleep(200);
 
 	return 0;
 }
