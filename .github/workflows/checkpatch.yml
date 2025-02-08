@@ -1,0 +1,29 @@
+name: Checkpatch review
+
+on: pull_request
+
+jobs:
+  compliance_job:
+    runs-on: ubuntu-22.04
+    name: Run checkpatch.pl for find violations on patch series (PR)
+    steps:
+    - name: Checkout the code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: 0
+
+    - name: Install Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install patchutils python3-ply python3-git
+
+    - name: Run checkpatch
+      continue-on-error: true
+      id: checkpatch
+      env:
+        BASE_REF: ${{ github.base_ref }}
+      run: |
+        export ZEPHYR_BASE=$PWD
+        git rebase origin/${BASE_REF}
+        ./scripts/checkpatch.pl --git origin/${BASE_REF}..
