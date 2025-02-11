@@ -205,19 +205,22 @@ static int cmp_alif_setup(const struct device *dev, struct cmp_params *setup)
 	uintptr_t regs = 0;
 
 	regs = DEVICE_MMIO_NAMED_GET(dev, cmp_reg);
+	const struct cmp_config *config = dev->config;
 	struct cmp_data *data = dev->data;
 
 	data->callback = setup->callback;
 	data->polarity = setup->polarity;
 
-	/* polarity setup */
-	cmp_set_polarity_ctrl(regs, setup->polarity);
+	if (config->drv_inst != CMP_INSTANCE_LP) {
+		/* polarity setup */
+		cmp_set_polarity_ctrl(regs, setup->polarity);
 
-	/* filter tap setup */
-	cmp_set_filter_ctrl(regs, setup->filter_taps);
+		/* filter tap setup */
+		cmp_set_filter_ctrl(regs, setup->filter_taps);
 
-	/* prescaler setup */
-	cmp_prescaler_ctrl(regs, setup->prescalar);
+		/* prescaler setup */
+		cmp_prescaler_ctrl(regs, setup->prescalar);
+	}
 
 	return 0;
 }
@@ -338,9 +341,11 @@ void cmp_irq_handler(const struct device *dev)
 	regs = DEVICE_MMIO_NAMED_GET(dev, cmp_reg);
 	const struct cmp_config *config = dev->config;
 	const struct cmp_data *data = dev->data;
-	uint8_t int_status = (sys_read32(regs + CMP_INTERRUPT_STATUS) & CMP_INT_STATUS_MASK);
 
 	if (config->drv_inst != CMP_INSTANCE_LP) {
+		uint8_t int_status =
+			(sys_read32(regs + CMP_INTERRUPT_STATUS) & CMP_INT_STATUS_MASK);
+
 		/* clear the interrupt before re-starting */
 		if (int_status == CMP_FILTER_EVENT0_CLEAR) {
 			sys_write32(CMP_FILTER_EVENT0_CLEAR, regs + CMP_INTERRUPT_STATUS);
@@ -349,10 +354,10 @@ void cmp_irq_handler(const struct device *dev)
 		if (int_status == CMP_FILTER_EVENT1_CLEAR) {
 			sys_write32(CMP_FILTER_EVENT1_CLEAR, regs + CMP_INTERRUPT_STATUS);
 		}
-	}
 
-	/* read pin status */
-	status = gpio_pin_get_dt(&config->cmp_gpio);
+		/* read pin status */
+		status = gpio_pin_get_dt(&config->cmp_gpio);
+	}
 
 	if (data->callback) {
 		data->callback(dev, status);
