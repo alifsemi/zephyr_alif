@@ -29,8 +29,6 @@ LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
  */
 static int balletto_b1_dk_rtss_he_init(void)
 {
-	uint32_t reg_val;
-
 	/* Enable ICACHE */
 	sys_cache_instr_enable();
 
@@ -192,7 +190,7 @@ static int balletto_b1_dk_rtss_he_init(void)
 	sys_write32(0x1, VBAT_BASE);
 #endif
 	/* Enable HFOSC and 160MHz clock */
-	reg_val  = sys_read32(CGU_CLK_ENA);
+	uint32_t reg_val = sys_read32(CGU_CLK_ENA);
 	reg_val |= ((1 << 20) | (1 << 23));
 	sys_write32(reg_val, CGU_CLK_ENA);
 #endif
