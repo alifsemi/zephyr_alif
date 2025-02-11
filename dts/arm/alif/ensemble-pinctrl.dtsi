@@ -682,10 +682,10 @@
 
 	pinctrl_lpcmp: pinctrl_lpcmp {
 		group0 {
-			pinmux = < PIN_P2_4__LPCAM_D0_B >,
-				< PIN_P2_5__LPCAM_D1_B >,
-				< PIN_P2_6__LPCAM_D2_B >,
-				< PIN_P2_7__LPCAM_D3_B >,
+			pinmux = < PIN_P2_4__ANA_S20 >,
+				< PIN_P2_5__ANA_S21 >,
+				< PIN_P2_6__ANA_S22 >,
+				< PIN_P2_7__ANA_S23 >,
 				< PIN_P2_0__ANA_S16 >,
 				< PIN_P2_1__ANA_S17 >,
 				< PIN_P2_2__ANA_S18 >;
