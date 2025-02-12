@@ -27,12 +27,12 @@ config SOC_SUPPORT_ARM_MHUV2
 	  SoC support communication through Arm MHUv2
 
 config SPI_DW_ENABLE
-	bool
+	bool "SPI DW"
 	default y
 	depends on SPI
 	help
 	  Enable Designware SPI driver.
-	select HAS_SPI_DW
+	select SPI_DW
 
 if COUNTER_SNPS_DW
 config LPTIMER0_OUTPUT_TOGGLE
