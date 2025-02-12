@@ -37,3 +37,6 @@ CONFIG_UART_NS16550_LINE_CTRL=y
 
 # Enabled temporarily to work with FPGA. When booting from OSPI1 set to 'n'.
 CONFIG_INIT_ARCH_HW_AT_BOOT=y
+
+# FPGA uses latest ROM code. Currently version 1.2
+CONFIG_ALIF_BLE_ROM_IMAGE_V1_2=y
