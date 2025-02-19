@@ -797,6 +797,68 @@ static void alif_iface_init(struct net_if *iface)
 	}
 }
 
+static bool alif_ie_header_info_set(struct mac_ahi_header_ie *ie_info,
+				    const struct ieee802154_header_ie *p_header_ie)
+{
+
+	/* Copy IE Elements */
+	ie_info->content_type =
+		ieee802154_header_ie_get_element_id((struct ieee802154_header_ie *)p_header_ie);
+	ie_info->length = p_header_ie->length;
+	ie_info->element_id_low = p_header_ie->element_id_low;
+	ie_info->element_id_high = p_header_ie->element_id_high;
+	ie_info->type = p_header_ie->type;
+
+	switch (ie_info->content_type) {
+	case IEEE802154_HEADER_IE_ELEMENT_ID_VENDOR_SPECIFIC_IE:
+		memcpy(ie_info->content.vendor_specific.vendor_oui,
+		       p_header_ie->content.vendor_specific.vendor_oui,
+		       IEEE802154_VENDOR_SPECIFIC_IE_OUI_LEN);
+		/* Set a Vendor data pointer after OUI */
+		ie_info->content.vendor_specific.vendor_specific_info =
+			(uint8_t *)p_header_ie->content.vendor_specific.vendor_oui +
+			IEEE802154_VENDOR_SPECIFIC_IE_OUI_LEN;
+		break;
+
+	case IEEE802154_HEADER_IE_ELEMENT_ID_CSL_IE:
+		if (p_header_ie->length == sizeof(struct ieee802154_header_ie_csl_reduced)) {
+			ie_info->content.csl.csl_period =
+				p_header_ie->content.csl.reduced.csl_period;
+			ie_info->content.csl.csl_phase = p_header_ie->content.csl.reduced.csl_phase;
+			ie_info->content.csl.full_info = false;
+		} else if (p_header_ie->length == sizeof(struct ieee802154_header_ie_csl_full)) {
+			ie_info->content.csl.csl_period = p_header_ie->content.csl.full.csl_period;
+			ie_info->content.csl.csl_phase = p_header_ie->content.csl.full.csl_phase;
+			ie_info->content.csl.csl_rendezvous_time =
+				p_header_ie->content.csl.full.csl_rendezvous_time;
+			ie_info->content.csl.full_info = true;
+		} else {
+			return false;
+		}
+		break;
+	case IEEE802154_HEADER_IE_ELEMENT_ID_RENDEZVOUS_TIME_IE:
+		if (p_header_ie->length == 4) {
+			ie_info->content.rendezvous_time.rendezvous_time =
+				p_header_ie->content.rendezvous_time.full.rendezvous_time;
+			ie_info->content.rendezvous_time.wakeup_interval =
+				p_header_ie->content.rendezvous_time.full.wakeup_interval;
+			ie_info->content.rendezvous_time.full_info = true;
+		} else if (p_header_ie->length == 2) {
+			ie_info->content.rendezvous_time.rendezvous_time =
+				p_header_ie->content.rendezvous_time.reduced.rendezvous_time;
+			ie_info->content.rendezvous_time.full_info = false;
+		} else {
+			return false;
+		}
+
+		break;
+	default:
+		return false;
+	}
+
+	return true;
+}
+
 static int alif_configure(const struct device *dev, enum ieee802154_config_type type,
 			  const struct ieee802154_config *config)
 {
@@ -911,16 +973,27 @@ static int alif_configure(const struct device *dev, enum ieee802154_config_type 
 		LOG_HEXDUMP_INF(config->ack_ie.ext_addr, 8, "ext_addr:");
 
 		if (config->ack_ie.header_ie) {
+			struct mac_ahi_header_ie ie_info;
+
+			if (!alif_ie_header_info_set(&ie_info, config->ack_ie.header_ie)) {
+				return -EINVAL;
+			}
+
 			LOG_INF("ACK Header IE: type:%d, length:%d, high:%d, low:%d",
 				config->ack_ie.header_ie->type, config->ack_ie.header_ie->length,
 				config->ack_ie.header_ie->element_id_high,
 				config->ack_ie.header_ie->element_id_low);
 			LOG_HEXDUMP_INF(&config->ack_ie.header_ie->content,
 					config->ack_ie.header_ie->length, "header:");
+
+			ret = alif_mac154_ack_header_ie_set(config->ack_ie.short_addr, ext_ptr,
+							    config->ack_ie.purge_ie, &ie_info);
+
+		} else {
+			/* Clear */
+			ret = alif_mac154_ack_header_ie_set(config->ack_ie.short_addr, ext_ptr,
+							    config->ack_ie.purge_ie, NULL);
 		}
-		ret = alif_mac154_ack_header_ie_set(
-			config->ack_ie.short_addr, ext_ptr, config->ack_ie.purge_ie,
-			config->ack_ie.header_ie);
 
 		if (ret != ALIF_MAC154_STATUS_OK) {
 			return -EINVAL;
