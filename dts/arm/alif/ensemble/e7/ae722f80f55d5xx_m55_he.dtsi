@@ -1,0 +1,43 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <alif/ensemble/e7/ae722f80f55d5xx.dtsi>
+
+&{/soc} {
+	itcm: itcm@0 {
+		compatible = "alif,itcm";
+		reg = <0x0 DT_SIZE_K(256)>;
+		itcm_global_base = <0x58000000>;
+		zephyr,memory-region = "ITCM";
+	};
+	dtcm: dtcm@20000000 {
+		compatible = "alif,dtcm";
+		reg = <0x20000000 DT_SIZE_K(256)>;
+		dtcm_global_base = <0x58800000>;
+		zephyr,memory-region = "DTCM";
+	};
+};
+
+&{/} {
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-m55";
+			d-cache-line-size = <32>;
+			i-cache-line-size = <32>;
+			reg = <0>;
+		};
+	};
+
+	clocks {
+		rtss_he_clk: rtss_he_clk {
+			compatible = "fixed-clock";
+			clock-frequency = <160000000>;
+			#clock-cells = <0>;
+		};
+	};
+};
