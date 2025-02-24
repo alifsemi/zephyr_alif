@@ -1,0 +1,26 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_FAMILY_ENSEMBLE
+	bool "Alif Ensemble family of SoC"
+	select ARM
+	select ARMV8_M_DSP
+	select ARMV8_1_M_MVEI
+	select ARMV8_1_M_MVEF
+	select CPU_CORTEX_M55
+	select CPU_CORTEX_M_HAS_SYSTICK
+	select CPU_HAS_ARM_MPU
+	select CPU_HAS_ARM_SAU
+	select CPU_HAS_FPU
+	select CPU_HAS_CUSTOM_FIXED_SOC_MPU_REGIONS
+	select SOC_EARLY_INIT_HOOK
+	select SOC_RESET_HOOK
+	select INIT_ARCH_HW_AT_BOOT
+	select BUILTIN_STACK_GUARD
+
+if SOC_FAMILY_ENSEMBLE
+
+rsource "*/Kconfig"
+
+endif # SOC_FAMILY_ENSEMBLE
