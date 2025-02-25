@@ -105,3 +105,9 @@ zephyr_library_sources_ifdef(CONFIG_CLOCK_CONTROL_AST10X0 clock_control_ast10x0.
 zephyr_library_sources_ifdef(CONFIG_CLOCK_CONTROL_MAX32 clock_control_max32.c)
 zephyr_library_sources_ifdef(CONFIG_CLOCK_CONTROL_NRF_AUXPLL clock_control_nrf_auxpll.c)
 zephyr_library_sources_ifdef(CONFIG_CLOCK_CONTROL_WCH_RCC clock_control_wch_rcc.c)
+
+if(CONFIG_CLOCK_CONTROL_ALIF)
+if(CONFIG_SOC_SERIES_E7)
+zephyr_library_sources_ifdef(CONFIG_SOC_FAMILY_ENSEMBLE clock_control_alif_ensemble.c)
+endif()
+endif()
