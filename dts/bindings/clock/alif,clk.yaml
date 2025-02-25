@@ -1,0 +1,38 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  ALIF Semiconductor clock control unit.
+
+  To specify the clocks in a peripheral, the standard clocks property needs
+  to be used, e.g.:
+
+    uart0: uart@xxx {
+        ...
+        /* cell encodes clock module, register offset and bit to configure */
+        clocks = < &clock ALIF_UART0_SYST_PCLK >;
+        ...
+    }
+
+  Predefined clock control cells are available in
+  include/zephyr/dts-bindings/clock/alif_clock_control.h header files.
+
+compatible: "alif,clk"
+
+include: [base.yaml, clock-controller.yaml]
+
+properties:
+  reg:
+    description: register address
+    required: true
+
+  reg-names:
+    required: true
+    description: Name of each register space
+
+  "#clock-cells":
+    const: 1
+
+clock-cells:
+  - clkid

@@ -1,0 +1,26 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+    ALIF Semiconductor PLL clock configuration.
+    Input clock source of PLL is HFXO and can produce
+    2 clock frequencies as output (PLL_CLK1 & PLL_CLK3).
+
+compatible: "alif,pll-clk"
+
+include: [base.yaml]
+
+properties:
+  pll_clk1-frequency:
+    required: true
+    type: int
+    description: PLL_CLK1 frequency
+
+  pll_clk2-frequency:
+    type: int
+    description: PLL_CLK2 frequency
+
+  pll_clk3-frequency:
+    type: int
+    description: PLL_CLK3 frequency
