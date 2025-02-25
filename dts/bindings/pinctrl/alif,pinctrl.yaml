@@ -1,0 +1,202 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+description: |
+    Alif Devkit pin controller is a node responsible for controlling
+    function of the selected pin, pin properties, such as routing
+    UART4 RX_B and UART4 TX_B on pins 12_1 and 12_2 respectively and
+    settings output drive strength to any one of 2mA, 4mA, 8mA, and 12mA.
+
+    The Devkit pin controller has the 'pinctrl' node label in SoC's
+    devicetree, that can be referenced and modified as below:
+
+    &pinctrl {
+          /* all modifications go here */
+    };
+
+    All device pin configurations should be placed in child nodes of the
+    'pinctrl' node, as shown in this example:
+
+    /* To avoid lengthly board.dts file due to addition of
+     * pinctrl contents all contents specific to pinctrl
+     * can be placed in board-pinctrl.dtsi file (e.g., ensemble-pinctrl.dtsi)
+     * in your board directory and include in board.dts, or a devicetree
+     * overlay in your application. */
+
+    /* include pre-defined combinations for the SoC variant used by the board
+     * */
+    #include <dt-bindings/pinctrl/ensemble-pinctrl.h>
+
+    &pinctrl {
+      /* configuration for the uart4 "default" state */
+      pinctrl_uart4: pinctrl_uart4 {
+        /* group 0 */
+        group0 {
+          /* configure pins P12_1 and P12_2 as UART4 RX and UART4 TX */
+          pinmux = < PIN_P12_1__UART4_RX_B >,
+                   < PIN_P12_2__UART4_TX_B >;
+          /* enable read on pins P12_1 and P12_2 */
+          read_enable = < 0x1 >;
+        };
+      };
+      pinctrl_i3c: pinctrl_i3c {
+        /* group 0 */
+        group0 {
+          /* configure pin P7_6 I3C_SDA */
+          pinmux = < PIN_P7_6__I3C_SDA_D >;
+          /* enable schimtt trigger and drive strength to 4mA on pin P7_6 */
+          schmitt_enable = < 0x1 >;
+          drive_strength = < 0x4 >;
+        };
+        /* group 1 */
+        group1 {
+          /* configure pin P7_7 as I3C_SCL */
+          pinmux = < PIN_P7_7__I3C_SCL_D >;
+          /* set drive strength to 2mA on pin P7_7 */
+          drive_strength = < 0x2 >;
+        };
+      };
+    };
+
+    The 'pinctrl_uart4' child node encodes the pin configurations for a
+    particular state of a device; in this case, the default (that is, active)
+    state. Similarly, for 'pinctrl_i3c' child node.
+
+    As shown, pin configurations are organized in groups within each
+    child node. Each group can specify a list of pin function selections
+    in the 'pinmux' property.
+
+    A group can specify shared pin properties common to all the specified
+    pins in a group, such as 'read_enable' property in group 0 of
+    'pinctrl_uart4' node or separate pin properties for each pin in a group
+    such as 'schmitt_enable' in group 0, and 'drive_strength' in both
+    group 0 and 1 of 'pinctrl_i3c' node.
+    List of supported standard pin properties are below:
+    - read_enable: read selection. 0 for disable and 1 for enable.
+    - schmitt_enable:  schmitt trigger selection.
+                       0 for disable and 1 for enable.
+    - slew_rate: slew rate speed. 0 for slow and 1 for fast.
+    - driver_state_control: driver disabled state control.
+                            Two bits feild can be:
+                            0 0 for High Z
+                            0 1 for Pull up
+                            1 0 for Pull down
+                            1 1 for Bus repeater
+    - driver_strength: output drive strength.
+                            Two bits feild can be:
+                            0 0 for 2mA
+                            0 1 for 4mA
+                            1 0 for 8mA
+                            1 1 for 12mA
+    - driver: driver selection. 0 for Push pull and 1 for open drain.
+
+    To link pin configurations with a device, use a pinctrl-N property for some
+    number N, like this example you could place in your board's DTS file:
+
+       #include "board-pinctrl.dtsi"
+
+       &uart4 {
+             pinctrl-0 = <&pinctrl_uart4>;
+             pinctrl-names = "default";
+       };
+
+       &i3c {
+             pinctrl-0 = <&pinctrl_i3c>;
+             pinctrl-names = "default";
+       };
+
+compatible: "alif,pinctrl"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+
+child-binding:
+  description: Definitions for a pinctrl state.
+  child-binding:
+    include:
+      - name: pincfg-node.yaml
+        property-allowlist:
+          - bias-disable
+          - bias-pull-down
+          - bias-pull-up
+          - read-enable
+          - input-schmitt-enable
+          - drive-strength
+          - slew-rate
+
+    properties:
+      pinmux:
+        required: true
+        type: array
+        description: |
+          An array of pins sharing the same group properties. Each
+          element of the array is an integer constructed from the
+          pin number and the alternative function of the pin.
+      read_enable:
+        type: int
+        enum:
+           - 0
+           - 1
+        default: 1
+        description: |
+          Option to enable read.
+          0 - disable
+          1 - enable
+      schmitt_enable:
+        type: int
+        enum:
+           - 0
+           - 1
+        default: 1
+        description: |
+          Option to enable schmitt trigger.
+          0 - disable
+          1 - enable
+      slew_rate:
+        type: int
+        enum:
+          - 0
+          - 1
+        default: 0
+        description: |
+          Pin output slew rate.
+          0 - slow slew rate when pin is configured as output
+          1 - fast slew rate when pin is configured as output
+      driver_state_control:
+        type: int
+        enum:
+          - 0
+          - 1
+          - 2
+          - 3
+        default: 0
+        description: |
+          Driver disabled state control.
+          0 - High Z
+          1 - Pull up
+          0 - Pull down
+          1 - Bus repeater
+      drive_strength:
+        type: int
+        enum:
+          - 2
+          - 4
+          - 8
+          - 12
+        default: 4
+        description: |
+          The output drive strength of a pin, in mA.
+          The default value is 4mA.
+      driver:
+        type: int
+        enum:
+          - 0
+          - 1
+        default: 0
+        description: |
+          Pin output slew rate.
+          0 - push-pull
+          1 - open drain
