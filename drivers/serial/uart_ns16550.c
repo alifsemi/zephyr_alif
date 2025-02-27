@@ -620,6 +620,14 @@ static int uart_ns16550_configure(const struct device *dev,
 			goto out;
 		}
 
+#if CONFIG_CLOCK_CONTROL_ALIF
+		/* select UART clock. */
+		ret = clock_control_configure(dev_cfg->clock_dev, dev_cfg->clock_subsys, NULL);
+		if (ret != 0) {
+			goto out;
+		}
+#endif /* CONFIG_CLOCK_CONTROL_ALIF */
+
 		ret = clock_control_on(dev_cfg->clock_dev, dev_cfg->clock_subsys);
 		if (ret != 0 && ret != -EALREADY) {
 			goto out;
