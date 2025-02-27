@@ -661,6 +661,9 @@ static int flash_alif_ospi_init(const struct device *dev)
 	init_config.event_cb = hal_event_update;
 	init_config.user_data = dev_data;
 
+	init_config.xip_incr_cmd = ISSI_XIP_INCR_CMD;
+	init_config.xip_wrap_cmd = ISSI_XIP_WRAP_CMD;
+
 	memset(&dev_data->trans_conf, 0, sizeof(struct ospi_trans_config));
 
 	dev_data->trans_conf.frame_size = 8;
@@ -822,6 +825,10 @@ static int flash_alif_ospi_init(const struct device *dev)
 	}
 
 	dev_data->ISSI_Flags |= FLASH_POWER;
+
+#ifdef CONFIG_ALIF_OSPI_FLASH_XIP
+	alif_hal_ospi_xip_enable(dev_data->ospi_handle);
+#endif
 
 	return ret;
 }
