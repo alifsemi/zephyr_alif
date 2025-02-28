@@ -11,7 +11,18 @@
 #define ALIF_HOST_OSPI_SIZE		KB(16)
 
 #define ALIF_HOST_PERIPHERAL_BASE	0x1A000000
-#define ALIF_HOST_PERIPHERAL_SIZE	0x1000000
+#define ALIF_HOST_PERIPHERAL_SIZE	MB(16)
+
+#define ALIF_HOST_OSPI0_XIP_BASE	0xA0000000
+#define ALIF_HOST_OSPI0_XIP_SIZE	MB(512)
+
+#define REGION_OSPI_FLASH_ATTR(base, size) \
+{\
+	.rbar = RO_Msk | NON_SHAREABLE_Msk, \
+	/* Cache-ability */ \
+	.mair_idx = MPU_MAIR_INDEX_SRAM_NOCACHE, \
+	.r_limit = REGION_LIMIT_ADDR(base, size),  \
+}
 
 static const struct arm_mpu_region mpu_regions[] = {
 	/* Region 0 */
@@ -27,6 +38,10 @@ static const struct arm_mpu_region mpu_regions[] = {
 	MPU_REGION_ENTRY("PERIPHERALS", ALIF_HOST_PERIPHERAL_BASE,
 			 REGION_DEVICE_ATTR(ALIF_HOST_PERIPHERAL_BASE,
 							ALIF_HOST_PERIPHERAL_SIZE)),
+	/* Region 4 */
+	MPU_REGION_ENTRY("OSPI0_XIP", ALIF_HOST_OSPI0_XIP_BASE,
+			 REGION_OSPI_FLASH_ATTR(ALIF_HOST_OSPI0_XIP_BASE,
+							ALIF_HOST_OSPI0_XIP_SIZE)),
 };
 
 const struct arm_mpu_config mpu_config = {
