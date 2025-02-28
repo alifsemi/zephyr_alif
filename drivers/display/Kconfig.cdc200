@@ -3,7 +3,7 @@
 # Copyright (C) 2024 Alif Semiconductor
 # SPDX-License-Identifier: Apache-2.0
 
-menuconfig CDC200
+config CDC200
 	bool "CDC200 driver"
 	default y
 	depends on DT_HAS_TES_CDC_2_1_ENABLED
