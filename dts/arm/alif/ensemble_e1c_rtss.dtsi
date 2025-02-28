@@ -921,6 +921,8 @@
 			ddr-drive-edge;
 			rx-ds-delay = <11>;
 			tx-fifo-threshold = <64>;
+			xip-wait-cycles = <16>;
+			xip-base-address = <0xA0000000 0x20000000>;
 			status = "disabled";
 
 			ospi_flash: ospi_flash@0 {
