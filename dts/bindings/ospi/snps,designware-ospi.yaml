@@ -51,3 +51,18 @@ properties:
     description: transmit fifo threshold
     required: false
     default: 128
+
+  xip-wait-cycles:
+    type: int
+    description: waitcycles on XiP transaction
+    required: false
+    default: 16
+
+  xip-rxds-vl-en:
+    type : boolean
+    description: Enable/Disable RXDS Variable Latency on XiP transaction
+
+  xip-base-address:
+    type: array
+    description: XiP memory address range
+    required: false
