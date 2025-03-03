@@ -18,6 +18,15 @@ extern "C" {
 #define __O volatile	/* Defines 'write only' permissions */
 #define __IO volatile	/* Defines 'read / write' permissions */
 
+#define MHU_ACC_REQ		0x1
+#define MHU_ACC_RDY		0x1
+
+#define MHU_CH_INT_EN		0x1
+#define MHU_CH_INT_ST_SET	0x1
+#define MHU_CH_INT_CLR		0x1
+
+#define MHU_CLR_COMPLETE_CH	0xFFFFFFFF
+
 #define NR2R_INTR		0x1
 #define R2NR_INTR		0x2
 #define CHCOMB_INTR		0x4
