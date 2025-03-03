@@ -49,6 +49,13 @@
 #define SLAVE_ACTIVATE    (1)
 #define SLAVE_DE_ACTIVATE (0)
 
+/* ISSI XiP WRAP Op-code**/
+#define ISSI_XIP_WRAP_CMD	0xFD
+
+/* ISSI XiP INCR Op-code**/
+#define ISSI_XIP_INCR_CMD	0xFD
+
+
 /**IRQ declaration */
 typedef void (*irq_config_func_t)(const struct device *dev);
 

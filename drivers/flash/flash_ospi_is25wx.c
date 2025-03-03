@@ -661,6 +661,11 @@ static int flash_alif_ospi_init(const struct device *dev)
 	init_config.event_cb = hal_event_update;
 	init_config.user_data = dev_data;
 
+	init_config.xip_incr_cmd = ISSI_XIP_INCR_CMD;
+	init_config.xip_wrap_cmd = ISSI_XIP_WRAP_CMD;
+	init_config.xip_rxds_vl_en = DT_PROP(ALIF_OSPI_NODE, xip_rxds_vl_en);
+	init_config.xip_wait_cycles = DT_PROP(ALIF_OSPI_NODE, xip_wait_cycles);
+
 	memset(&dev_data->trans_conf, 0, sizeof(struct ospi_trans_config));
 
 	dev_data->trans_conf.frame_size = 8;
@@ -699,17 +704,17 @@ static int flash_alif_ospi_init(const struct device *dev)
 	}
 
 	/* Prepare command and address for setting flash in octal mode */
-#ifdef CONFIG_FLASH_ADDRESS_IN_SINGLE_FIFO_LOCATION
-	dev_data->cmd_buf[0] = CMD_WRITE_VOL_CONFIG;
-	dev_data->cmd_buf[1] = (uint8_t)(IO_MODE_ADDRESS >> 0);
-	dev_data->cmd_buf[2] = OCTAL_DDR;
-#else
-	dev_data->cmd_buf[0] = CMD_WRITE_VOL_CONFIG;
-	dev_data->cmd_buf[1] = (uint8_t)(IO_MODE_ADDRESS >> 16);
-	dev_data->cmd_buf[2] = (uint8_t)(IO_MODE_ADDRESS >> 8);
-	dev_data->cmd_buf[3] = (uint8_t)(IO_MODE_ADDRESS >> 0);
-	dev_data->cmd_buf[4] = OCTAL_DDR;
-#endif
+	if (IS_ENABLED(CONFIG_FLASH_ADDRESS_IN_SINGLE_FIFO_LOCATION)) {
+		dev_data->cmd_buf[0] = CMD_WRITE_VOL_CONFIG;
+		dev_data->cmd_buf[1] = (uint8_t)(IO_MODE_ADDRESS >> 0);
+		dev_data->cmd_buf[2] = OCTAL_DDR;
+	} else {
+		dev_data->cmd_buf[0] = CMD_WRITE_VOL_CONFIG;
+		dev_data->cmd_buf[1] = (uint8_t)(IO_MODE_ADDRESS >> 16);
+		dev_data->cmd_buf[2] = (uint8_t)(IO_MODE_ADDRESS >> 8);
+		dev_data->cmd_buf[3] = (uint8_t)(IO_MODE_ADDRESS >> 0);
+		dev_data->cmd_buf[4] = OCTAL_DDR;
+	}
 	dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_24_BITS;
 
 	/* Select Chip */
@@ -822,6 +827,9 @@ static int flash_alif_ospi_init(const struct device *dev)
 	}
 
 	dev_data->ISSI_Flags |= FLASH_POWER;
+
+	if (IS_ENABLED(CONFIG_ALIF_OSPI_FLASH_XIP))
+		alif_hal_ospi_xip_enable(dev_data->ospi_handle);
 
 	return ret;
 }
