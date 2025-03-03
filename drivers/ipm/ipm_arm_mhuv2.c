@@ -7,11 +7,44 @@
 
 #define DT_DRV_COMPAT	arm_mhuv2
 
-#define BIT0_1		0x1
-#define TIMEOUT		0xFFFF00
+#define BIT0_1			0x1
+#define TIMEOUT			0xFFFF00
+#define TIMEOUT_POLL_OUT	0x1
+#define TIMEOUT_POLL_IN		0x15 /* busy_wait() overshoots by ~1.7x, adjusting for 35us wait */
 
 #define DRV_MHUV2_CFG(d)	((const struct mhuv2_device_config *)(d)->config)
 #define DRV_MHUV2_DATA(d)	((struct mhuv2_device_data *)(d)->data)
+
+/**
+ * @fn      static int mhuv2_send_access_request(struct MHUV2_SND *sender)
+ * @brief   Send access request to MHUV2 receiver
+ * @param[in] sender : pointer to MHUV2 sender interface
+ * @return  Execution status
+ */
+static int mhuv2_send_access_request(struct MHUV2_SND *sender)
+{
+	uint32_t snd_timeout = TIMEOUT;
+
+	/* Send Access Request */
+	sender->ACCESS_REQUEST = 0x1U;
+
+	if (!(sender->ACCESS_READY & BIT0_1)) {
+		while (snd_timeout) {
+			if ((sender->ACCESS_READY & BIT0_1)) {
+				/* Receiver is ready */
+				break;
+			}
+			--snd_timeout;
+		}
+		if (!snd_timeout) {
+			/* Receiver is busy */
+			sender->ACCESS_REQUEST = 0x0U;
+			return -EBUSY;
+		}
+	}
+
+	return 0;
+}
 
 /**
  * @fn      static int mhuv2_send(const struct device *dev, int wait, uint32_t ch_id,
@@ -28,6 +61,7 @@ static int mhuv2_send(const struct device *dev, int wait, uint32_t ch_id,
 		      const void *pdata, int size)
 {
 	struct mhuv2_device_data *data = DRV_MHUV2_DATA(dev);
+	int ret = 0;
 
 	ARG_UNUSED(wait);
 	ARG_UNUSED(size);
@@ -37,7 +71,11 @@ static int mhuv2_send(const struct device *dev, int wait, uint32_t ch_id,
 	}
 
 	struct MHUV2_SND *SND = (struct MHUV2_SND *)DEVICE_MMIO_GET(dev);
-	uint32_t snd_timeout = TIMEOUT;
+
+	ret = mhuv2_send_access_request(SND);
+	if (ret != 0) {
+		return ret;
+	}
 
 	/* Clear Interrupt Status */
 	SND->INT_CLR = (NR2R_INTR | R2NR_INTR | CHCOMB_INTR);
@@ -45,24 +83,6 @@ static int mhuv2_send(const struct device *dev, int wait, uint32_t ch_id,
 	SND->INT_EN = SND->INT_EN & ~(NR2R_INTR | R2NR_INTR | CHCOMB_INTR);
 	/* Enable Interrupt generation (NR2R Int, R2NR Int, Combined Int) */
 	SND->INT_EN = (NR2R_INTR | R2NR_INTR | CHCOMB_INTR);
-
-	/* Send Access Request */
-	SND->ACCESS_REQUEST = 0x1U;
-
-	if (!(SND->ACCESS_READY & BIT0_1)) {
-		while (snd_timeout) {
-			if ((SND->ACCESS_READY & BIT0_1)) {
-				/* Receiver is ready */
-				break;
-			}
-			--snd_timeout;
-		}
-		if (!snd_timeout) {
-			/* Receiver is busy */
-			SND->ACCESS_REQUEST = 0x00000000;
-			return -EBUSY;
-		}
-	}
 
 	/* Clear any pending channel interrupts */
 	SND->CHANNEL[ch_id].CH_INT_CLR = BIT0_1;
@@ -141,7 +161,7 @@ static int mhuv2_set_enabled(const struct device *dev, int enable)
 }
 
 /**
- * @fn      static int mhuv2_send(const struct device *dev)
+ * @fn      static int mhuv2_init(const struct device *dev)
  * @brief   Initialise  MHU v2
  * @param[in] dev : pointer to Runtime device structure
  * @return  Execution status
@@ -233,7 +253,7 @@ static void mhuv2_send_isr(const struct device *dev)
 }
 
 /**
- * @fn      static void  mhuv2_recv_isr(const struct device *dev)
+ * @fn      static void mhuv2_recv_isr(const struct device *dev)
  * @brief   Recriver MHU v2's interrupt service routine
  * @param[in] dev : pointer to Runtime device structure
  * @return  None
@@ -275,7 +295,7 @@ static void mhuv2_recv_isr(const struct device *dev)
 }
 
 /**
- * @fn      static voi  mhuv2_isr(const struct device *dev)
+ * @fn      static void mhuv2_isr(const struct device *dev)
  * @brief   MHU v2's interrupt service routine
  * @param[in] dev : pointer to Runtime device structure
  * @return  None
@@ -291,6 +311,144 @@ static void mhuv2_isr(const struct device *dev)
 	}
 }
 
+/**
+ * @fn      static int mhuv2_poll_out(const struct device *dev, uint32_t ch_id
+ *				const void *pdata, int size, k_timeout_t timeout)
+ * @brief   MHU v2 sends data in polling mode
+ * @param[in] dev     : pointer to Runtime device structure
+ * @param[in] ch_id   : channel identifier
+ * @param[in] pdata   : pointer to data
+ * @param[in] size    : data size in bytes
+ * @param[in] timeout : wait timeout in ms
+ * @retval 0 If data sent.
+ * @retval -ENOSYS If the operation is not implemented.
+ * @retval -ENOTSUP If the operation is unsupported.
+ * @retval -EINVAL If parameters are invalid.
+ */
+static int mhuv2_poll_out(const struct device *dev, uint32_t ch_id,
+			const void *pdata, int size, k_timeout_t timeout)
+{
+	const struct mhuv2_device_config *config	= DRV_MHUV2_CFG(dev);
+	struct mhuv2_device_data *data			= DRV_MHUV2_DATA(dev);
+	uint64_t usec_timeout;
+	bool ack = false;
+	bool prev_irq_en_sts = false;
+	int ret;
+
+	ARG_UNUSED(size);
+
+	if (!config->irq_type) {
+		return -ENOTSUP;
+	}
+
+	if ((dev == NULL) || (pdata == NULL) || ch_id >= data->max_ch) {
+		return -EINVAL;
+	}
+
+	prev_irq_en_sts = irq_is_enabled(config->irq_num);
+	if (prev_irq_en_sts) {
+		/* Disable interrupt if enabled previously */
+		irq_disable(config->irq_num);
+	}
+
+	struct MHUV2_SND *SND = (struct MHUV2_SND *)DEVICE_MMIO_GET(dev);
+
+	ret = mhuv2_send_access_request(SND);
+	if (ret != 0) {
+		return ret;
+	}
+
+	/* Send busy error if the previous ch xfer is not yet completed */
+	if ((SND->CHANNEL[ch_id].CH_ST & BIT0_1) == BIT0_1) {
+		return -EBUSY;
+	}
+
+	/* Clear Interrupt Status */
+	SND->INT_CLR = (NR2R_INTR | R2NR_INTR | CHCOMB_INTR);
+	/* Clear Interrupt generation (NR2R Int, R2NR Int, Combined Int) */
+	SND->INT_EN = SND->INT_EN & ~(NR2R_INTR | R2NR_INTR | CHCOMB_INTR);
+
+	/* Clear any pending channel interrupts */
+	SND->CHANNEL[ch_id].CH_INT_CLR = BIT0_1;
+
+	/* Disable channel intterupt and set ch data */
+	SND->CHANNEL[ch_id].CH_INT_EN &= ~BIT0_1;
+	SND->CHANNEL[ch_id].CH_SET     = *((uint32_t *)pdata);
+
+	usec_timeout = k_ticks_to_us_near64(timeout.ticks);
+	/* wait for the current ch xfer to complete */
+	while (usec_timeout) {
+		if ((SND->CHANNEL[ch_id].CH_ST & BIT0_1) != BIT0_1) {
+			ack = true;
+			break;
+		}
+		k_busy_wait(TIMEOUT_POLL_OUT);
+		usec_timeout -= TIMEOUT_POLL_OUT;
+	}
+
+	/* Reset access request */
+	SND->ACCESS_REQUEST = 0x0U;
+
+	if (prev_irq_en_sts) {
+		/* Enable interrupt if enabled previously */
+		irq_enable(config->irq_num);
+	}
+
+	if (!ack) {
+		return -EAGAIN;
+	}
+
+	return 0;
+}
+
+/**
+ * @fn      static int mhuv2_poll_in(const struct device *dev, uint32_t ch_id
+ *				const void *pdata, int size, k_timeout_t timeout)
+ * @brief   MHU v2 receives data in polling mode
+ * @param[in] dev     : pointer to Runtime device structure
+ * @param[in] ch_id   : channel identifier
+ * @param[in] pdata   : pointer to data
+ * @param[in] size    : data size in bytes
+ * @param[in] timeout : wait timeout in ms
+ * @retval 0 If data arrived.
+ * @retval -ENOSYS If the operation is not implemented.
+ * @retval -ENOTSUP If the operation is unsupported.
+ * @retval -EINVAL If parameters are invalid.
+ */
+static int mhuv2_poll_in(const struct device *dev, uint32_t ch_id,
+			const void *pdata, int size, k_timeout_t timeout)
+{
+	const struct mhuv2_device_config *config = DRV_MHUV2_CFG(dev);
+	struct mhuv2_device_data *data = DRV_MHUV2_DATA(dev);
+	uint64_t usec_timeout;
+
+	ARG_UNUSED(size);
+
+	if (config->irq_type) {
+		return -ENOTSUP;
+	}
+
+	if ((dev == NULL) || (pdata == NULL) || ch_id >= data->max_ch) {
+		return -EINVAL;
+	}
+
+	struct MHUV2_REC *RECV = (struct MHUV2_REC *)DEVICE_MMIO_GET(dev);
+
+	usec_timeout = k_ticks_to_us_near64(timeout.ticks);
+	/* wait for channel data to arrive */
+	while (usec_timeout > TIMEOUT_POLL_IN) {
+		if (RECV->CHANNEL[ch_id].CH_ST) {
+			(*(uint32_t *)pdata) = RECV->CHANNEL[ch_id].CH_ST;
+			RECV->CHANNEL[ch_id].CH_CLR = 0xFFFFFFFF;
+			return 0;
+		}
+		k_busy_wait(TIMEOUT_POLL_IN);
+		usec_timeout -= TIMEOUT_POLL_IN;
+	}
+
+	return -EAGAIN;
+}
+
 static struct ipm_driver_api mhuv2_driver_api = {
 	.send			= mhuv2_send,
 	.register_callback	= mhuv2_register_cb,
@@ -300,6 +458,8 @@ static struct ipm_driver_api mhuv2_driver_api = {
 #ifdef CONFIG_IPM_CALLBACK_ASYNC
 	.complete		= NULL
 #endif
+	.poll_out		= mhuv2_poll_out,
+	.poll_in		= mhuv2_poll_in
 };
 
 #if defined(CONFIG_ARM_MHUV2)
@@ -323,7 +483,7 @@ static struct ipm_driver_api mhuv2_driver_api = {
 			      mhuv2_init,				\
 			      NULL,					\
 			      &mhuv2_data_##n,				\
-			      &mhuv2_cfg_##n, POST_KERNEL,		\
+			      &mhuv2_cfg_##n, PRE_KERNEL_2,		\
 			      CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,	\
 			      &mhuv2_driver_api);
 #endif
