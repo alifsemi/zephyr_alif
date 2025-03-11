@@ -49,7 +49,7 @@ if OSPI_FLASH_IS25WX
 	  Configure prepare command length
 
 	config ALIF_OSPI_FLASH_XIP
-	bool "Enable XiP mode"
+	bool "XiP mode Enabled"
 	default n
 	help
 	  Enable XiP mode of Flash at initialization.
