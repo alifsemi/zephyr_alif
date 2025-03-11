@@ -15,12 +15,6 @@ properties:
   reg-names:
     required: true
 
-  clock-frequency:
-    type: int
-    required: true
-    description: |
-      Input clock frequency for timer
-
   timer-id:
     type: int
     description: |
@@ -37,16 +31,3 @@ properties:
       * ALIF_UTIMER_COUNTER_DIRECTION_UP           - used as up counter.
       * ALIF_UTIMER_COUNTER_DIRECTION_DOWN         - used as down counter.
       * ALIF_UTIMER_COUNTER_DIRECTION_TRIANGLE     - used as triangle counter.
-
-  driver-enable:
-    type: int
-    required: true
-    description: |
-      Set driver type to enable output.
-
-      Use constants defined in dt-bindings/timer/alif-utimer.h.
-
-      * ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE         - to enable driver A output.
-      * ALIF_UTIMER_DRIVER_B_OUTPUT_ENABLE         - to enable driver B output.
-      * (ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE|ALIF_UTIMER_DRIVER_B_OUTPUT_ENABLE)
-                                                       - to enable both drivers.

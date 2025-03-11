@@ -132,10 +132,15 @@
 		compatible = "alif,utimer";
 		reg = <0x48001000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
+		interrupts = <377 3>, <378 3>,
+				<379 3>, <380 3>, <381 3>,
+				<382 3>, <383 3>, <384 3>;
+		interrupt-names = "comp_capt_a", "comp_capt_b",
+				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <0>;
-		clock-frequency = <400000000>;
+		clocks = <&clock ALIF_UTIMER_CLK>;
 		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-		driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 		status = "disabled";
 
 		pwm {
@@ -149,10 +154,15 @@
 		compatible = "alif,utimer";
 		reg = <0x48002000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
+		interrupts = <385 3>, <386 3>,
+				<387 3>, <388 3>, <389 3>,
+				<390 3>, <391 3>, <392 3>;
+		interrupt-names = "comp_capt_a", "comp_capt_b",
+				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <1>;
-		clock-frequency = <400000000>;
+		clocks = <&clock ALIF_UTIMER_CLK>;
 		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-		driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 		status = "disabled";
 
 		pwm {
@@ -166,10 +176,15 @@
 		compatible = "alif,utimer";
 		reg = <0x48003000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
+		interrupts = <393 3>, <394 3>,
+				<395 3>, <396 3>, <397 3>,
+				<398 3>, <399 3>, <400 3>;
+		interrupt-names = "comp_capt_a", "comp_capt_b",
+				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <2>;
-		clock-frequency = <400000000>;
+		clocks = <&clock ALIF_UTIMER_CLK>;
 		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-		driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 		status = "disabled";
 
 		pwm {
@@ -183,10 +198,15 @@
 		compatible = "alif,utimer";
 		reg = <0x48004000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
+		interrupts = <401 3>, <402 3>,
+				<403 3>, <404 3>, <405 3>,
+				<406 3>, <407 3>, <408 3>;
+		interrupt-names = "comp_capt_a", "comp_capt_b",
+				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <3>;
-		clock-frequency = <400000000>;
+		clocks = <&clock ALIF_UTIMER_CLK>;
 		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-		driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 		status = "disabled";
 
 		pwm {
@@ -200,10 +220,15 @@
 		compatible = "alif,utimer";
 		reg = <0x48005000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
+		interrupts = <409 3>, <410 3>,
+				<411 3>, <412 3>, <413 3>,
+				<414 3>, <415 3>, <416 3>;
+		interrupt-names = "comp_capt_a", "comp_capt_b",
+				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <4>;
-		clock-frequency = <400000000>;
+		clocks = <&clock ALIF_UTIMER_CLK>;
 		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-		driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 		status = "disabled";
 
 		pwm {
@@ -217,10 +242,15 @@
 		compatible = "alif,utimer";
 		reg = <0x48006000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
+		interrupts = <417 3>, <418 3>,
+				<419 3>, <420 3>, <421 3>,
+				<422 3>, <423 3>, <424 3>;
+		interrupt-names = "comp_capt_a", "comp_capt_b",
+				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <5>;
-		clock-frequency = <400000000>;
+		clocks = <&clock ALIF_UTIMER_CLK>;
 		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-		driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 		status = "disabled";
 
 		pwm {
@@ -234,10 +264,15 @@
 		compatible = "alif,utimer";
 		reg = <0x48007000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
+		interrupts = <425 3>, <426 3>,
+				<427 3>, <428 3>, <429 3>,
+				<430 3>, <431 3>, <432 3>;
+		interrupt-names = "comp_capt_a", "comp_capt_b",
+				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <6>;
-		clock-frequency = <400000000>;
+		clocks = <&clock ALIF_UTIMER_CLK>;
 		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-		driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 		status = "disabled";
 
 		pwm {
@@ -251,10 +286,15 @@
 		compatible = "alif,utimer";
 		reg = <0x48008000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
+		interrupts = <433 3>, <434 3>,
+				<435 3>, <436 3>, <437 3>,
+				<438 3>, <439 3>, <440 3>;
+		interrupt-names = "comp_capt_a", "comp_capt_b",
+				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <7>;
-		clock-frequency = <400000000>;
+		clocks = <&clock ALIF_UTIMER_CLK>;
 		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-		driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 		status = "disabled";
 
 		pwm {
@@ -268,10 +308,15 @@
 		compatible = "alif,utimer";
 		reg = <0x48009000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
+		interrupts = <441 3>, <442 3>,
+				<443 3>, <444 3>, <445 3>,
+				<446 3>, <447 3>, <448 3>;
+		interrupt-names = "comp_capt_a", "comp_capt_b",
+				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <8>;
-		clock-frequency = <400000000>;
+		clocks = <&clock ALIF_UTIMER_CLK>;
 		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-		driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 		status = "disabled";
 
 		pwm {
@@ -285,10 +330,15 @@
 		compatible = "alif,utimer";
 		reg = <0x4800A000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
+		interrupts = <449 3>, <450 3>,
+				<451 3>, <452 3>, <453 3>,
+				<454 3>, <455 3>, <456 3>;
+		interrupt-names = "comp_capt_a", "comp_capt_b",
+				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <9>;
-		clock-frequency = <400000000>;
+		clocks = <&clock ALIF_UTIMER_CLK>;
 		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-		driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 		status = "disabled";
 
 		pwm {
@@ -302,10 +352,15 @@
 		compatible = "alif,utimer";
 		reg = <0x4800B000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
+		interrupts = <457 3>, <458 3>,
+				<459 3>, <460 3>, <461 3>,
+				<462 3>, <463 3>, <464 3>;
+		interrupt-names = "comp_capt_a", "comp_capt_b",
+				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <10>;
-		clock-frequency = <400000000>;
+		clocks = <&clock ALIF_UTIMER_CLK>;
 		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-		driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 		status = "disabled";
 
 		pwm {
@@ -319,10 +374,15 @@
 		compatible = "alif,utimer";
 		reg = <0x4800C000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
+		interrupts = <465 3>, <466 3>,
+				<467 3>, <468 3>, <469 3>,
+				<470 3>, <471 3>, <472 3>;
+		interrupt-names = "comp_capt_a", "comp_capt_b",
+				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <11>;
-		clock-frequency = <400000000>;
+		clocks = <&clock ALIF_UTIMER_CLK>;
 		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-		driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 		status = "disabled";
 
 		pwm {
