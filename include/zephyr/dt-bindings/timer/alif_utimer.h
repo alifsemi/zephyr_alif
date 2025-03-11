@@ -11,8 +11,4 @@
 #define ALIF_UTIMER_COUNTER_DIRECTION_DOWN     0x00000010U  /* Counter Sawtooth Down direction */
 #define ALIF_UTIMER_COUNTER_DIRECTION_TRIANGLE 0x00000020U  /* Counter Triangle type */
 
-/* Timer driver type macros */
-#define ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE     0x00000040U  /* Enable signal on UT_T0 pins */
-#define ALIF_UTIMER_DRIVER_B_OUTPUT_ENABLE     0x00000080U  /* Enable signal on UT_T1 pins */
-
 #endif /* ZEPHYR_INCLUDE_DT_BINDINGS_TIMER_ALIF_UTIMER_H_ */
