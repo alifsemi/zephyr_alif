@@ -143,3 +143,9 @@ config OSPI0_XIP_REGION
 	default "ospi0" if $(dt_nodelabel_enabled,ospi0)
 	help
 	    Configure OSPI0 XIP memory mapped region name
+
+config USE_ALIF_HAL_UTIMER
+	bool "UTIMER ll driver access"
+	default n
+	help
+	  Enables UTIMER LL driver on Alif SoCs.
