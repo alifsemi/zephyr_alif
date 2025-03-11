@@ -137,3 +137,9 @@ config  NONSECURE0_REGION
 	default "NS" if ARM_SECURE_FIRMWARE && $(dt_nodelabel_enabled,ns)
 	help
 	    Provide config Non-Secure region
+
+config USE_ALIF_HAL_UTIMER
+	bool "UTIMER ll driver access"
+	default n
+	help
+	  Enables UTIMER LL driver on Alif SoCs.
