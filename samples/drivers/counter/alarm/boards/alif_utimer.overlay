@@ -4,7 +4,7 @@
  */
 
 /*
- * Enabling rtc & disabling lptimer, utimer for this sample application
+ * Enabling utimer & disabling lptimer, rtc for this sample application
  */
 
 &timer0 {
@@ -12,9 +12,9 @@
 };
 
 &rtc0 {
-	status = "okay";
+	status = "disabled";
 };
 
 &utimer0 {
-	status = "disabled";
+	status = "okay";
 };
