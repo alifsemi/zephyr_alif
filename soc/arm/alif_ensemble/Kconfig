@@ -4,6 +4,7 @@
 
 config SOC_FAMILY_ENSEMBLE
 	bool "Alif Ensemble family of SoC"
+	select HAS_SEGGER_RTT
 	select HAS_ALIF_SE_SERVICES
 
 if SOC_FAMILY_ENSEMBLE
