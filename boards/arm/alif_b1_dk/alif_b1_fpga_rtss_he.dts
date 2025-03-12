@@ -60,7 +60,6 @@
 };
 
 &utimer2 {
-	driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 	status = "okay";
 
 	pwm2: pwm {
