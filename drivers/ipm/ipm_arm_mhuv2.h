@@ -6,7 +6,7 @@
 #define ZEPHYR_DRIVERS_IPM_ARM_MHUV2_H_
 
 #include <zephyr/kernel.h>
-#include <zephyr/device.h>
+#include <zephyr/drivers/ipm.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,11 +18,12 @@ extern "C" {
 #define __O volatile	/* Defines 'write only' permissions */
 #define __IO volatile	/* Defines 'read / write' permissions */
 
-#define NUM_OF_CHAN 2
-#define NR2R_INTR 0x1
-#define R2NR_INTR 0x2
-#define COMB_INTR 0x4
-#define MAX_NUM_STAT_REG 124
+#define NR2R_INTR		0x1
+#define R2NR_INTR		0x2
+#define CHCOMB_INTR		0x4
+#define MAX_NUM_STAT_REG	124
+
+#define MHU_CFG_DEF_Msk GENMASK(6, 0)
 
 #define CHCOMB_INT_ST0_BEGIN    0
 #define CHCOMB_INT_ST0_END      31
@@ -33,8 +34,7 @@ extern "C" {
 #define CHCOMB_INT_ST3_BEGIN    96
 #define CHCOMB_INT_ST3_END      123
 
-typedef void (*init_func_t) (const struct device *dev);
-typedef void (*callback_t)(const struct device *ipmdev, void *user_data);
+typedef void (*irq_init_func_t) (const struct device *dev);
 
 struct MHUV2_SENDER_SLOT {
 	__I	uint32_t CH_ST;     /* 0x00 */
@@ -67,7 +67,9 @@ struct MHUV2_SND {
 	__I	uint32_t IIDR;
 	__I	uint32_t AIDR;
 	__I	uint32_t PID4;
-	__I	uint32_t Reserved2[3];
+	__I	uint32_t PID5;
+	__I	uint32_t PID6;
+	__I	uint32_t PID7;
 	__I	uint32_t PID0;
 	__I	uint32_t PID1;
 	__I	uint32_t PID2;
@@ -76,11 +78,6 @@ struct MHUV2_SND {
 	__I	uint32_t CID1;
 	__I	uint32_t CID2;
 	__I	uint32_t CID3;
-};
-
-enum mhuv2_error_t {
-	MHUV2_ERR_NONE = 0,
-	MHUV2_ERR_INVALID_ARG,
 };
 
 struct MHUV2_RECEIVER_SLOT {
@@ -112,7 +109,9 @@ struct MHUV2_REC {
 	__I	uint32_t IIDR;
 	__I	uint32_t AIDR;
 	__I	uint32_t PID4;
-	__I	uint32_t Reserved3[3];
+	__I	uint32_t PID5;
+	__I	uint32_t PID6;
+	__I	uint32_t PID7;
 	__I	uint32_t PID0;
 	__I	uint32_t PID1;
 	__I	uint32_t PID2;
@@ -122,11 +121,6 @@ struct MHUV2_REC {
 	__I	uint32_t CID2;
 	__I	uint32_t CID3;
 };
-
-typedef void (*mhuv2_callback_t)(const struct device *mhuv2dev,
-				callback_t, uint32_t *user_data);
-typedef int (*mhuv2_send_t)(const struct device *mhuv2dev,
-			uint8_t ch_id, const uint32_t *data);
 
 /* peripheral and component ID values */
 #define MHU_SND_IIDR  0x0760043B
@@ -153,22 +147,19 @@ typedef int (*mhuv2_send_t)(const struct device *mhuv2dev,
 #define MHU_REC_AIDR  0x11
 #define MHU_REC_IIDR  0x0760043B
 
-struct mhuv2_driver_api_t {
-	mhuv2_send_t send;
-	mhuv2_callback_t register_callback;
-};
-
 struct mhuv2_device_config {
-	uint8_t *base;
-	int16_t irq_num;
-	init_func_t init_func;
-	bool irq_type;
+	DEVICE_MMIO_ROM;
+	int16_t			irq_num;
+	irq_init_func_t		irq_init_func;
+	bool			irq_type;
 };
 
 /* Device data structure */
 struct mhuv2_device_data {
-	callback_t callback;
-	uint32_t *user_data;
+	DEVICE_MMIO_RAM;
+	uint8_t		max_ch;
+	ipm_callback_t	callback;
+	uint32_t	*user_data;
 };
 
 #ifdef __cplusplus
