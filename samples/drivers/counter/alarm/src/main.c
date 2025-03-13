@@ -55,6 +55,8 @@ struct counter_alarm_cfg alarm_cfg;
 #define TIMER DT_NODELABEL(rtc0)
 #elif defined(CONFIG_COUNTER_TIMER_RPI_PICO)
 #define TIMER DT_NODELABEL(timer)
+#elif defined(CONFIG_COUNTER_ALIF_UTIMER)
+#define TIMER DT_NODELABEL(utimer0)
 #endif
 
 static void test_counter_interrupt_fn(const struct device *counter_dev,
