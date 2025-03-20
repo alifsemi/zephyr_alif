@@ -105,6 +105,9 @@ struct i2c_dw_rom_config {
 	i2c_isr_cb_t	config_func;
 	uint32_t		bitrate;
 
+	uint8_t			tx_tl;
+	uint8_t			rx_tl;
+
 #if defined(CONFIG_PINCTRL)
 	const struct pinctrl_dev_config *pcfg;
 #endif
