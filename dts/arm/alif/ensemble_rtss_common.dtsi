@@ -1001,6 +1001,8 @@
 		pinctrl-names = "default";
 		interrupt-parent = <&nvic>;
 		interrupts = <132 3>;
+		tx_threshold = <0>;
+		rx_threshold = <0>;
 		status = "okay";
 	};
 	i2c1: i2c1@49011000 {
@@ -1013,6 +1015,8 @@
 		pinctrl-names = "default";
 		interrupt-parent = <&nvic>;
 		interrupts = <133 3>;
+		tx_threshold = <0>;
+		rx_threshold = <0>;
 		status = "disabled";
 	};
 
