@@ -37,7 +37,6 @@ if OSPI_FLASH_IS25WX
 
 	config FLASH_ADDRESS_IN_SINGLE_FIFO_LOCATION
 	bool "IS25WX Flash Setup with Single Address mode"
-	default n
 	help
 	 Enables Single Address mode while setting up IS25Wx Flash.
 
@@ -49,8 +48,7 @@ if OSPI_FLASH_IS25WX
 	  Configure prepare command length
 
 	config ALIF_OSPI_FLASH_XIP
-	bool "Enable XiP mode"
-	default n
+	bool "XiP mode Enabled"
 	help
 	  Enable XiP mode of Flash at initialization.
 
