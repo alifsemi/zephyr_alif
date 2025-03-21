@@ -828,8 +828,9 @@ static int flash_alif_ospi_init(const struct device *dev)
 
 	dev_data->ISSI_Flags |= FLASH_POWER;
 
-	if (IS_ENABLED(CONFIG_ALIF_OSPI_FLASH_XIP))
+	if (IS_ENABLED(CONFIG_ALIF_OSPI_FLASH_XIP)) {
 		alif_hal_ospi_xip_enable(dev_data->ospi_handle);
+	}
 
 	return ret;
 }
