@@ -587,8 +587,6 @@
 			     <181 3>, <182 3>,
 			     <183 3>, <184 3>,
 			     <185 3>, <186 3>;
-		pinctrl-0 = < &pinctrl_gpio0 >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
@@ -600,8 +598,6 @@
 			     <189 3>, <190 3>,
 			     <191 3>, <192 3>,
 			     <193 3>, <194 3>;
-		pinctrl-0 = < &pinctrl_gpio1 >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
@@ -613,8 +609,6 @@
 			     <197 3>, <198 3>,
 			     <199 3>, <200 3>,
 			     <201 3>, <202 3>;
-		pinctrl-0 = < &pinctrl_gpio2 >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
@@ -626,8 +620,6 @@
 			     <205 3>, <206 3>,
 			     <207 3>, <208 3>,
 			     <209 3>, <210 3>;
-		pinctrl-0 = < &pinctrl_gpio3 >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
@@ -656,8 +648,6 @@
 			     <221 3>, <222 3>,
 			     <223 3>, <224 3>,
 			     <225 3>, <226 3>;
-		pinctrl-0 = < &pinctrl_gpio5 >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
@@ -669,8 +659,6 @@
 			     <229 3>, <230 3>,
 			     <231 3>, <232 3>,
 			     <233 3>, <234 3>;
-		pinctrl-0 = < &pinctrl_gpio6 >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
@@ -682,8 +670,6 @@
 			     <237 3>, <238 3>,
 			     <239 3>, <240 3>,
 			     <241 3>, <242 3>;
-		pinctrl-0 = < &pinctrl_gpio7 >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
@@ -696,8 +682,6 @@
 			     <245 3>, <246 3>,
 			     <247 3>, <248 3>,
 			     <249 3>, <250 3>;
-		pinctrl-0 = < &pinctrl_gpio8 >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
@@ -709,8 +693,6 @@
 			     <253 3>, <254 3>,
 			     <255 3>, <256 3>,
 			     <257 3>, <258 3>;
-		pinctrl-0 = < &pinctrl_gpio9 >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
@@ -722,8 +704,6 @@
 			     <261 3>, <262 3>,
 			     <263 3>, <264 3>,
 			     <265 3>, <266 3>;
-		pinctrl-0 = < &pinctrl_gpio10 >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
@@ -735,8 +715,6 @@
 			     <269 3>, <270 3>,
 			     <271 3>, <272 3>,
 			     <273 3>, <274 3>;
-		pinctrl-0 = < &pinctrl_gpio11 >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
@@ -748,8 +726,6 @@
 			     <277 3>, <278 3>,
 			     <279 3>, <280 3>,
 			     <281 3>, <282 3>;
-		pinctrl-0 = < &pinctrl_gpio12 >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
@@ -761,8 +737,6 @@
 			     <285 3>, <286 3>,
 			     <287 3>, <288 3>,
 			     <289 3>, <290 3>;
-		pinctrl-0 = < &pinctrl_gpio13 >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
@@ -774,8 +748,6 @@
 			     <293 3>, <294 3>,
 			     <295 3>, <296 3>,
 			     <297 3>, <298 3>;
-		pinctrl-0 = < &pinctrl_gpio14 >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
@@ -787,8 +759,6 @@
 			     <173 3>, <174 3>,
 			     <175 3>, <176 3>,
 			     <177 3>, <178 3>;
-		pinctrl-0 = < &pinctrl_lpgpio >;
-		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
