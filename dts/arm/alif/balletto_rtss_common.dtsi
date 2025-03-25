@@ -274,6 +274,7 @@
 			reg-shift = <2>;
 			current-speed = <1000000>;
 			hw-flow-control;
+			fifo-preserve;
 			status = "okay";
 		};
 
@@ -285,6 +286,7 @@
 			reg-shift = <2>;
 			current-speed = <1000000>;
 			hw-flow-control;
+			fifo-preserve;
 			status = "okay";
 		};
 
