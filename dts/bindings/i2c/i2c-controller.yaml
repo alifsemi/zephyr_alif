@@ -17,3 +17,13 @@ properties:
   clock-frequency:
     type: int
     description: Initial clock frequency in Hz
+  tx_threshold:
+    type: int
+    description: |
+      Transmit FIFO Threshold
+      Valid range: 0 - 31
+  rx_threshold:
+    type: int
+    description: |
+      Receive FIFO Threshold
+      Valid range: 0 - 31
