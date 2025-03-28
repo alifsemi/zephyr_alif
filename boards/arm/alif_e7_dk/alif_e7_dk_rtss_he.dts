@@ -47,6 +47,11 @@
 			label = "SW0";
 		};
 	};
+	ext_flash_xip: memory@c0000000 {
+		compatible = "zephyr,memory-region";
+		reg = <0xc0000000 DT_SIZE_M(64)>;
+		zephyr,memory-region = "OSPI1";
+	};
 };
 
 &uart4 {
