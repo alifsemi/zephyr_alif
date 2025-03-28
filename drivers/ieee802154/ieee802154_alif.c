@@ -529,6 +529,14 @@ static void alif_restore(const struct device *dev)
 	alif_mac154_tx_power_set(DATA(dev)->dbm);
 	alif_mac154_cca_mode_set(CONFIG_IEEE802154_ALIF_MAC154_CCA_MODE);
 	alif_mac154_ed_threshold_set(CONFIG_IEEE802154_ALIF_CCA_THRESHOLD);
+	if (DATA(dev)->enable_reveiver) {
+		struct alif_rx_enable rx_enable_req = {0};
+
+		DATA(dev)->receiver_on = true;
+		DATA(dev)->enable_reveiver = false;
+		rx_enable_req.channel = DATA(dev)->channel;
+		alif_mac154_receive_start(&rx_enable_req);
+	}
 }
 
 static struct alif_802154_frame *alif_rx_frame_allocate(void)
@@ -594,6 +602,7 @@ static void alif_rx_status_callback(enum alif_mac154_status_code status)
 	LOG_DBG("status:: %d", status);
 
 	if (status != ALIF_MAC154_STATUS_OK) {
+		alif_data.enable_reveiver = alif_data.receiver_on;
 		alif_data.receiver_on = false;
 		alif_rx_status_send(status);
 	}
@@ -661,14 +670,19 @@ static void alif_rx_thread(void *arg1, void *arg2, void *arg3)
 		rx_frame = k_fifo_get(&DATA(dev)->rx_fifo, K_FOREVER);
 
 		if (rx_frame->status != ALIF_MAC154_STATUS_OK) {
-			if (rx_frame->status == ALIF_MAC154_STATUS_OUT_OF_SYNC) {
+			if (rx_frame->status == ALIF_MAC154_STATUS_OUT_OF_SYNC ||
+			    rx_frame->status == ALIF_MAC154_STATUS_RESET) {
 				alif_mac154_reset();
 				alif_restore(dev);
-			} else if (rx_frame->status == ALIF_MAC154_STATUS_RX_STOPPED &&
-				   DATA(dev)->receiver_on) {
-				DATA(dev)->receiver_on = false;
-				LOG_INF("RX Start from stopped");
-				alif_rx_start(dev);
+			} else if (rx_frame->status == ALIF_MAC154_STATUS_RX_STOPPED) {
+				if (DATA(dev)->enable_reveiver) {
+					struct alif_rx_enable rx_enable_req = {0};
+
+					DATA(dev)->receiver_on = true;
+					DATA(dev)->enable_reveiver = false;
+					rx_enable_req.channel = DATA(dev)->channel;
+					alif_mac154_receive_start(&rx_enable_req);
+				}
 			} else if (rx_frame->status == ALIF_MAC154_STATUS_TIMER_SYNCH) {
 				if (IS_ENABLED(CONFIG_NET_L2_OPENTHREAD)) {
 					platformAlarmInit();

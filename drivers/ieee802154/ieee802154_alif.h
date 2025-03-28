@@ -110,6 +110,9 @@ struct alif_802154_data {
 	/* Receiver is enabled */
 	bool receiver_on;
 
+	/* Indicate state for RF driver event handler to enable reveiver */
+	bool enable_reveiver;
+
 	/* Interface is up/down */
 	bool interface_up;
 
