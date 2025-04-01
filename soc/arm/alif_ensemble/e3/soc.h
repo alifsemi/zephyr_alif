@@ -18,10 +18,11 @@
 
 /* AON registers. */
 #define AON_BASE            0x1A604000
-#define AON_RTSS_HP_CTRL    (AON_BASE + 0x0)
-#define AON_RTSS_HP_RESET   (AON_BASE + 0x4)
-#define AON_RTSS_HE_CTRL    (AON_BASE + 0x10)
-#define AON_RTSS_HE_RESET   (AON_BASE + 0x14)
+#define AON_RTSS_HP_CTRL    		(AON_BASE + 0x0)
+#define AON_RTSS_HP_RESET   		(AON_BASE + 0x4)
+#define AON_RTSS_HE_CTRL    		(AON_BASE + 0x10)
+#define AON_RTSS_HE_RESET   		(AON_BASE + 0x14)
+#define AON_RTSS_HE_LPUART_CKEN   	(AON_BASE + 0x1C)
 
 /* VBAT registers. */
 #define VBAT_BASE		0x1A609000

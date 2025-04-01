@@ -164,6 +164,12 @@ static int ensemble_e3_dk_rtss_he_init(void)
 	/*LP-SPI Flex GPIO */
 	sys_write32(0x1, VBAT_BASE);
 
+	/* LPUART settings */
+	if (IS_ENABLED(CONFIG_SERIAL)) {
+		/* Enable clock supply for LPUART */
+		sys_write32(0x1, AON_RTSS_HE_LPUART_CKEN);
+	}
+
 	/* Enable DMA */
 #if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay)
 	sys_set_bits(M55HE_CFG_HE_CLK_ENA, BIT(4));
