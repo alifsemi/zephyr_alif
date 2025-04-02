@@ -57,9 +57,6 @@
 &uart4 {
 	status = "okay";
 };
-&nvic {
-	arm,num-irq-priority-bits = <3>;
-};
 
 &mram_storage {
 	partitions {
