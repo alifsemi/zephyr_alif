@@ -47,19 +47,6 @@
 			reg = <0x2000a000 DT_SIZE_K(1496)>;
 			zephyr,memory-region = "DTCM";
 		};
-		ethosu {
-			#address-cells = <1>;
-			#size-cells = <0>;
-			interrupt-parent = <&nvic>;
-			ethosu0: ethosu55@400E1000 {
-				compatible = "arm,ethos-u";
-				reg = <0x400E1000>;
-				interrupts = <55 3>;
-				secure-enable;
-				privilege-enable;
-				status = "okay";
-			};
-		};
 
 		ns: ns@2002a000 {
 			compatible = "zephyr,memory-region", "mmio-region";
@@ -1124,7 +1111,7 @@
 
 		reserved_for_se: partition@1C8000 {
 			label = "SE-reserved";
-			reg = <0x001C5828 DT_SIZE_K(224)>;
+			reg = <0x001C8000 DT_SIZE_K(224)>;
 		};
 	};
 };
@@ -1139,6 +1126,20 @@
 		mhuv2-send-node = <&seservice0s>;
 		mhuv2-recv-node = <&seservice0r>;
 		status = "okay";
+	};
+
+	ethosu {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		interrupt-parent = <&nvic>;
+		ethosu0: ethosu55@400E1000 {
+			compatible = "arm,ethos-u";
+			reg = <0x400E1000>;
+			interrupts = <55 3>;
+			secure-enable;
+			privilege-enable;
+			status = "okay";
+		};
 	};
 
 	ieee802154: ieee802154 {
