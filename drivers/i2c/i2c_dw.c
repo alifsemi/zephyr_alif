@@ -1066,6 +1066,21 @@ static int i2c_dw_initialize(const struct device *dev)
 	}
 #endif
 
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
+	if (rom->clk_id) {
+		if (!device_is_ready(rom->clk_dev)) {
+			LOG_ERR("clock controller device not ready");
+			return -ENODEV;
+		}
+
+		ret = clock_control_on(rom->clk_dev, rom->clk_id);
+		if (ret != 0) {
+			LOG_ERR("Unable to turn on clock: err:%d", ret);
+			return ret;
+		}
+	}
+#endif
+
 #if DT_ANY_INST_ON_BUS_STATUS_OKAY(pcie)
 	if (rom->pcie) {
 		struct pcie_bar mbar;
@@ -1163,6 +1178,12 @@ static int i2c_dw_initialize(const struct device *dev)
 #define RESET_DW_CONFIG(n)
 #endif
 
+#define I2C_DW_CLOCK_INIT(n)							\
+	IF_ENABLED(DT_INST_NODE_HAS_PROP(n, clocks),				\
+		(.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),		\
+		.clk_id  = COND_CODE_1(DT_INST_PHA_HAS_CELL(n, clocks, clkid),	\
+					((clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, clkid)),\
+					((clock_control_subsys_t)0)),))
 #define I2C_DW_INIT_PCIE0(n)
 #define I2C_DW_INIT_PCIE1(n) DEVICE_PCIE_INST_INIT(n, pcie),
 #define I2C_DW_INIT_PCIE(n) \
@@ -1232,6 +1253,7 @@ static int i2c_dw_initialize(const struct device *dev)
 		I2C_CONFIG_REG_INIT(n)                                        \
 		.config_func = i2c_config_##n,                                \
 		.bitrate = DT_INST_PROP(n, clock_frequency),                  \
+		I2C_DW_CLOCK_INIT(n)						\
 		RESET_DW_CONFIG(n)                                            \
 		PINCTRL_DW_CONFIG(n)                                          \
 		I2C_DW_INIT_PCIE(n)                                           \
