@@ -446,6 +446,18 @@
 			status = "disabled";
 		};
 
+		dac0: dac0@49028000 {
+			compatible = "alif,dac";
+			reg = <0x49028000 0x1000>,
+			      <0x49023000 0x100>;
+			reg-names = "dac_reg","cmp_reg";
+			pinctrl-0 = <&pinctrl_dac0>;
+			pinctrl-names = "default";
+			dac_twoscomp_in = <0>;
+			input_mux_val = <0>;
+			status = "disabled";
+		};
+
 		lppdm: lppdm@43002000 {
 			compatible = "alif,alif-pdm";
 			reg = <0x43002000 0x1000>;

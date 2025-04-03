@@ -1470,6 +1470,28 @@
 			write-block-size = <16>;
 		};
 	};
+	dac0: dac0@49028000 {
+		compatible = "alif,dac";
+		reg = <0x49028000 0x1000>,
+		      <0x49023000 0x100>;
+		reg-names = "dac_reg","cmp_reg";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_dac0>;
+		dac_twoscomp_in = <0>;
+		input_mux_val = <0>;
+		status = "disabled";
+	};
+	dac1: dac1@49029000 {
+		compatible = "alif,dac";
+		reg = <0x49029000 0x1000>,
+		      <0x49023000 0x100>;
+		reg-names = "dac_reg","cmp_reg";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_dac1>;
+		dac_twoscomp_in = <0>;
+		input_mux_val = <0>;
+		status = "disabled";
+	};
 };
 
 &{/} {

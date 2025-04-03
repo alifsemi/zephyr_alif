@@ -858,4 +858,16 @@
 			read_enable = < 0x1 >;
 		};
 	};
+	pinctrl_dac0: pinctrl_dac0 {
+		group0 {
+			pinmux = < PIN_P2_2__ANA_S18 >;
+			read_enable = < 0x0 >;
+		};
+	};
+	pinctrl_dac1: pinctrl_dac1 {
+		group0 {
+			pinmux = < PIN_P2_3__ANA_S19 >;
+			read_enable = < 0x0 >;
+		};
+	};
 };

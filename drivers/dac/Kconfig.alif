@@ -1,0 +1,9 @@
+# Copyright (C) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config DAC_ALIF
+	bool "Alif DAC driver"
+	default y
+	depends on DT_HAS_ALIF_DAC_ENABLED
+	help
+	  Enable DAC module for Alif Boards
