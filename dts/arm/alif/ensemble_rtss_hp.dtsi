@@ -17,6 +17,11 @@
 		dtcm_global_base = <0x50800000>;
 		zephyr,memory-region = "DTCM";
 	};
+    ns: ns@200d0000 {
+		compatible = "zephyr,memory-region", "mmio-region";
+		reg = <0x200d0000 DT_SIZE_K(175)>;
+		zephyr,memory-region = "NS";
+    };
 	sram0: sram@2000000 {
 		compatible = "zephyr,memory-region","mmio-sram";
 		reg = <0x02000000 DT_SIZE_K(4096)>;

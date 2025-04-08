@@ -10,7 +10,6 @@ zephyr_sources_ifdef(CONFIG_PM_RTSS
   common/power_rtss.c
   )
 
-zephyr_sources_ifdef(CONFIG_ARM_SECURE_FIRMWARE common/tgu_M55.c)
 
 if(CMAKE_C_COMPILER_ID STREQUAL "ARMClang")
 if(CONFIG_ARM_SECURE_FIRMWARE)
