@@ -5,18 +5,15 @@
 add_subdirectory(${SOC_SERIES})
 zephyr_include_directories(common)
 
-zephyr_sources(common/soc.c)
+zephyr_sources(common/soc_ensemble_common.S)
 zephyr_sources_ifdef(CONFIG_PM_RTSS
   common/power_rtss.c
   )
 
-zephyr_sources_ifdef(CONFIG_ARM_SECURE_FIRMWARE common/tgu_M55.c)
 
 if(CMAKE_C_COMPILER_ID STREQUAL "ARMClang")
-if(CONFIG_ARM_SECURE_FIRMWARE)
   zephyr_linker_section_configure(SECTION ${CONFIG_NONSECURE0_REGION} INPUT ".alif_ns" )
   zephyr_linker_section_configure(SECTION ${CONFIG_NONSECURE0_REGION} INPUT ".alif_ns.*" )
-endif()
 if(CONFIG_SRAM0_REGION)
   zephyr_linker_section_configure(SECTION ${CONFIG_SRAM0_REGION} INPUT ".alif_sram0" )
   zephyr_linker_section_configure(SECTION ${CONFIG_SRAM0_REGION} INPUT ".alif_sram0.*" )
@@ -26,7 +23,7 @@ if(CONFIG_SRAM1_REGION)
   zephyr_linker_section_configure(SECTION ${CONFIG_SRAM1_REGION} INPUT ".alif_sram1.*" )
 endif()
 else()
-  zephyr_linker_sources_ifdef(CONFIG_ARM_SECURE_FIRMWARE SECTIONS common/alif_ns.ld)
+  zephyr_linker_sources(SECTIONS common/alif_ns.ld)
   zephyr_linker_sources(SECTIONS common/alif_sram.ld)
 endif()
 
