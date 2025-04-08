@@ -1,0 +1,17 @@
+# Copyright (c) 2025
+# SPAX-License-Identifier: Apache-2.0
+
+description: Designware USB dwc3 controller
+
+compatible: "snps,dwc3"
+
+include: [base.yaml]
+
+bus: usb
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true

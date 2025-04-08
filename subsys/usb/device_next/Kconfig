@@ -30,7 +30,7 @@ config USBD_THREAD_INIT_PRIO
 
 config USBD_THREAD_STACK_SIZE
 	int "USB device stack thread stack size"
-	default 1024
+	default 2048
 	help
 	  USB device stack thread stack size in bytes.
 

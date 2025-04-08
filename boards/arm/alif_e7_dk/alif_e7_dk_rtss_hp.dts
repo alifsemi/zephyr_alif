@@ -66,6 +66,11 @@
 &uart2 {
 	status = "okay";
 };
+
+zephyr_udc0: &dwc3_hs {
+	status = "okay";
+	};
+
 &nvic {
 	arm,num-irq-priority-bits = <3>;
 };
