@@ -5421,8 +5421,8 @@ void k_heap_free(struct k_heap *h, void *mem) __attribute_nonnull(1);
  * @param bytes Size of memory region, in bytes
  */
 #define K_HEAP_DEFINE(name, bytes)				\
-	Z_HEAP_DEFINE_IN_SECT(name, bytes,			\
-			      __noinit_named(kheap_buf_##name))
+	Z_HEAP_DEFINE_IN_SECT(name, bytes,	__alif_ns_section)
+			   /*   __noinit_named(kheap_buf_##name)) */
 
 /**
  * @brief Define a static k_heap in uncached memory

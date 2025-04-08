@@ -63,6 +63,13 @@ config HWINFO_STM32
 	help
 	  Enable STM32 hwinfo driver.
 
+config HWINFO_ALIF
+	bool "ALIF hwinfo"
+	default y
+	depends on SOC_FAMILY_ENSEMBLE
+	help
+		Enable ALIF hwinfo driver.
+
 config HWINFO_NRF
 	bool "NRF device ID"
 	default y
