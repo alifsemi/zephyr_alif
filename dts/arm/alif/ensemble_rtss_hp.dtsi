@@ -84,24 +84,24 @@
 		#size-cells = <1>;
 		boot_partition: partition@200000 {
 			label = "mcuboot";
-			reg = <0x00200000 0x00010000>;
+			reg = <0x00200000 DT_SIZE_K(64)>;
 			read-only;
 		};
 		slot0_partition: partition@210000 {
 			label = "image-0";
-			reg = <0x00210000 0x00010000>;
+			reg = <0x00210000 DT_SIZE_K(768)>;
 		};
-		slot1_partition: partition@220000 {
+		slot1_partition: partition@2D0000 {
 			label = "image-1";
-			reg = <0x00220000 0x00010000>;
+			reg = <0x002D0000 DT_SIZE_K(768)>;
 		};
-		scratch_partition: partition@230000 {
+		scratch_partition: partition@390000 {
 			label = "image-scratch";
-			reg = <0x00230000 0x00010000>;
+			reg = <0x00390000 DT_SIZE_K(64)>;
 		};
-		storage_partition: partition@240000 {
+		storage_partition: partition@3A0000 {
 			label = "storage";
-			reg = <0x00240000 DT_SIZE_K(10)>;
+			reg = <0x003A0000 DT_SIZE_K(10)>;
 		};
 	};
 };
