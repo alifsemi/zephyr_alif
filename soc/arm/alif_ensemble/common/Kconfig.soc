@@ -89,3 +89,9 @@ config  SRAM1_REGION
 	default "SRAM1" if $(dt_nodelabel_enabled,sram1)
 	help
 	    Provide config SRAM1 region
+
+config USE_ALIF_HAL_UTIMER
+	bool "UTIMER ll driver access"
+	default n
+	help
+	  Enables UTIMER LL driver on Alif SoCs.
