@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: Apache-2.0
+ *
+ * Copyright (C) 2025 Alif Semiconductor.
+ */
+
 #define DT_DRV_COMPAT snps_dwc3
 
 
@@ -250,7 +255,7 @@ static int udc_dwc3_set_address(const struct device *dev, const uint8_t addr)
 
 static int udc_dwc3_host_wakeup(const struct device *dev)
 {
-return 0;
+	return 0;
 }
 static int udc_dwc3_ep_enable(const struct device *dev, struct udc_ep_config *ep_cfg)
 {

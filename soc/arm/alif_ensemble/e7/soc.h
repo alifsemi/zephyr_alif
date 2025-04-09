@@ -58,6 +58,7 @@
 #define EXPMST_DMA_CTRL			(EXPMST_BASE + 0x70)
 #define EXPMST_DMA_IRQ			(EXPMST_BASE + 0x74)
 #define EXPMST_DMA_PERIPH		(EXPMST_BASE + 0x78)
+#define EXPMST_USB_CTRL2		(EXPMST_BASE + 0xAC)
 
 /* M55-HE Config registers. */
 #define M55HE_CFG_HE_CFG_BASE		0x43007000
@@ -102,14 +103,6 @@
 /* Macros for CAN FD mode Control */
 #define CAN0_FD_CTRL_REG          EXPSLV_CANFD_CTRL
 #define CAN0_CTRL_FD_ENA_POS      20U
-
-/* Macros for USB clock enable  */
-#define PERIPH_CLK_ENA_USB_CKEN             (1U << 20)
-#define CLK_ENA_CLK20M                      (1U << 22)
-#define PWR_CTRL_UPHY_PWR_MASK              (1U << 16)
-#define PWR_CTRL_UPHY_ISO                   (1U << 17)
-#define USB_CTRL2_PHY_POR                   (1U << 8)
-
 
 /*
  * CMSIS IRQn_Type enum is broken relative to ARM GNU compiler.

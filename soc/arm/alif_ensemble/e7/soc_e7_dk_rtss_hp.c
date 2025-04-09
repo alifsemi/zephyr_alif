@@ -74,25 +74,22 @@ static int ensemble_e7_dk_rtss_hp_init(void)
 	sys_set_bits(EXPSLV_EXPMST0_CTRL, BIT(8));
 
 	/* enable CGU USB clock 20MHZ  */
-	data = sys_read32(0x1A602014);
-	data |= CLK_ENA_CLK20M;
-	sys_write32(data, 0x1A602014);
+	sys_set_bits(CGU_CLK_ENA, BIT(22));
 
 	/* Enable USB peripheral clock  */
-	data = sys_read32(0x4903F00C);
-	data |= PERIPH_CLK_ENA_USB_CKEN;
-	sys_write32(data, 0x4903F00C);
+	sys_set_bits(EXPMST_PERIPH_CLK_EN, BIT(20));
 
 	/* Enable USB phy pwr mask and disable Phy isolation */
-	data = sys_read32(0x1A609008);
-	data &= ~PWR_CTRL_UPHY_PWR_MASK;
-	data &= ~PWR_CTRL_UPHY_ISO;
-	sys_write32(data, 0x1A609008);
+	sys_clear_bits(VBAT_PWR_CTRL, BIT(16));
+	sys_clear_bits(VBAT_PWR_CTRL, BIT(17));
 
 	/* USB power on reset clear   */
-	data = sys_read32(0x4903F0AC);
-	data &= ~USB_CTRL2_PHY_POR;
-	sys_write32(data, 0x4903F0AC);
+	sys_clear_bits(EXPMST_USB_CTRL2, BIT(8));
+
+
+
+
+
     /* CAN settings */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(can0), okay)
     /* Enable HFOSC and 160MHz clock */
