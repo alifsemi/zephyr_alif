@@ -61,3 +61,16 @@ properties:
   xip-base-address:
     type: array
     description: XiP memory address range
+
+  baud2-delay:
+    type: int
+    description: Enable/disable BAUD2 delay. This needs to be enabled when BAUDR divisor is 2.
+                 Enumerated values
+                 0 - disable BAUD2 delay
+                 1 - enable BAUD2 delay
+                 2 - auto sets BAUD2 delay when BAUDR divisor is 2
+    default: 2
+    enum:
+      - 0
+      - 1
+      - 2
