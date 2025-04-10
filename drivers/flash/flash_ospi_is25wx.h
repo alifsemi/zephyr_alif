@@ -42,9 +42,6 @@
 #define FLASH_INIT  (0x01U)
 #define FLASH_POWER (0x02U)
 
-/** SYS_AXI_CLK */
-#define SYS_AXI_CLK (400 * 1000 * 1000)
-
 /** Connected chip activate */
 #define SLAVE_ACTIVATE    (1)
 #define SLAVE_DE_ACTIVATE (0)
