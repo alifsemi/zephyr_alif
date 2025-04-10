@@ -30,6 +30,12 @@ properties:
     description: speed
     default: 1000000
 
+  clock-frequency:
+    type: int
+    required: true
+    description: |
+      Input clock frequency
+
   cs-pin:
     type: int
     description: slave connected pin
