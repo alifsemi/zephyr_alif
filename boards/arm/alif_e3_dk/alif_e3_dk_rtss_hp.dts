@@ -40,32 +40,3 @@
 &uart2 {
 	status = "okay";
 };
-
-&mram_storage {
-	partitions {
-		compatible = "fixed-partitions";
-		#address-cells = <1>;
-		#size-cells = <1>;
-		boot_partition: partition@200000 {
-			label = "mcuboot";
-			reg = <0x00200000 0x00010000>;
-			read-only;
-		};
-		slot0_partition: partition@210000 {
-			label = "image-0";
-			reg = <0x00210000 0x00010000>;
-		};
-		slot1_partition: partition@220000 {
-			label = "image-1";
-			reg = <0x00220000 0x00010000>;
-		};
-		scratch_partition: partition@230000 {
-			label = "image-scratch";
-			reg = <0x00230000 0x00010000>;
-		};
-		storage_partition: partition@240000 {
-			label = "storage";
-			reg = <0x00240000 DT_SIZE_K(10)>;
-		};
-	};
-};
