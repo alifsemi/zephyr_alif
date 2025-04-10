@@ -1,55 +1,131 @@
-def BRANCH = "main"
-
 pipeline {
     agent any
     options {
         skipDefaultCheckout(true)
     }
     stages {
+        stage('Install Dependencies') {
+            steps {
+                script {
+                    sh """#!/bin/bash -xe
+                    echo -e "✔️ None."
+                    """
+                }
+            }
+        }
+        stage('Environment') {
+            steps {
+                script {
+                    sh """#!/bin/bash -xe
+                        printenv
+                        echo -e "✔️ Displayed all environment setting."
+                    """
+                }
+            }
+        }
         stage('checkout') {
             steps {
-               cleanWs()
-               script {
-                  sh '''#!/bin/bash -xe
-                     printenv
-                     echo "====> ${CHANGE_BRANCH} ${BRANCH_NAME}"
-                     if [ "${BRANCH_NAME}" = "main" ] ; then
-                        BRANCH="main"
-                     elif [ "${CHANGE_BRANCH}" != "null" ] ; then
-                        BRANCH="${CHANGE_BRANCH}"
-                     else
-                        BRANCH="main"
-                     fi
-                     export DOCKER_CMDS="source /opt/*/environment* ; \
-west init -m 'https://github.com/alifsemi/zephyr_alif.git' \
---mr ${BRANCH} --mf west.yml ; cd zephyr ; west update ; \
-if [ \"x${BRANCH}\" = \"xmain\" ] ; then rm -rf build ; \
-west build -b alif_e3_dk_rtss_hp samples/hello_world ; \
-west build -b alif_e3_dk_rtss_he samples/hello_world -p ; \
-west build -b alif_e7_dk_rtss_hp samples/hello_world -p ; \
-west build -b alif_e7_dk_rtss_he samples/hello_world -p ; \
-west build -b alif_b1_dk_rtss_he samples/hello_world -p ; \
-west build -b alif_e1c_dk_rtss_he samples/hello_world -p ; \
-else if ./scripts/checkpatch.pl \
---ignore=GERRIT_CHANGE_ID,EMAIL_SUBJECT,COMMIT_MESSAGE,\
-COMMIT_LOG_LONG_LINE -g \
-origin/${BRANCH}...origin/main ; then rm -rf build ; \
-west build -b alif_e3_dk_rtss_hp samples/hello_world ; \
-west build -b alif_e3_dk_rtss_he samples/hello_world -p ; \
-west build -b alif_e7_dk_rtss_hp samples/hello_world -p ; \
-west build -b alif_e7_dk_rtss_he samples/hello_world -p ; \
-west build -b alif_b1_dk_rtss_he samples/hello_world -p ; \
-west build -b alif_e1c_dk_rtss_he samples/hello_world -p ; \
-else echo 'ERROR:scripts/checkpatch.pl detected errors/warnings.'; \
-echo 'CMD:Run git diff --cached | ./scripts/checkpatch.pl - before \
-committing' ; exit 1 ; fi ; fi"
-                     git clone http://10.10.10.22/zephyr-build-scripts.git -b devkit-b0-v3.6
-                     cd zephyr-build-scripts/docker
-                     ./build-ubuntu-image.sh
-                     ./ubuntu-builder
-                  '''
-               }
+                cleanWs()
+                script {
+                    sh '''#!/bin/bash
+                    export PATH=$WEST_BIN_PATH:$PATH
+                    source "${ZEPHYR_3X_ENV}/environment-setup-x86_64-pokysdk-linux"
+                    repo_name="zephyr_alif"
+                    echo -e "🛠️ $PATH"
+
+                    echo -e "⏳ Checkout Repo '$repo_name' main branch CHANGE_BRANCH: '$CHANGE_BRANCH' BRANCH_NAME: '$BRANCH_NAME'"
+
+                    if [ -d .west ] ; then
+                        rm -rvf .west
+                        rm -rf *
+                    fi
+
+                    west init -m git@github.com:alifsemi/$repo_name.git --mr $CHANGE_BRANCH
+                    echo -e "✅ Cloning is completed."
+                    west update
+                    ls -la
+                    echo -e "☑️ cloning process is completed.\n\n"
+                    if [ ! -d "zephyr" ] ; then
+                        echo -e "🚫 zephyr directory didn't found."
+                        exit -1
+                    fi
+                    cd zephyr
+                    git log -4
+
+                    git format-patch -1
+                    log=$(./scripts/checkpatch.pl --patch *.patch)
+                    echo "$log"
+                    result=$(echo "$log" | grep ".patch total:")
+                    echo "$result"
+                    errors=$(echo "${result}"   | sed -n "s/.*: \\([0-9]\\+\\) errors.*/\\1/p")
+                    warnings=$(echo "${result}" | sed -n "s/.*errors, \\([0-9]\\+\\) warnings.*/\\1/p")
+                    echo "🎯Checkpatch has Errors: $errors Warnings: $warnings\n\n"
+
+                    mapfile -t all_alif_boards_cfgs < <(west boards | grep "alif")
+                    test_apps=("samples/hello_world")
+                    total_buildError=0
+                    total_cfg_run_cnt=0
+                    skipped_cfg_run_cnt=0
+                    actual_cfg_run_cnt=0
+                    fail_cfg_run_cnt=0
+                    success_cfg_run_cnt=0
+
+                    for testApp in ${!test_apps[@]}
+                    do
+                        for boardName in ${!all_alif_boards_cfgs[@]}
+                        do
+                           total_cfg_run_cnt=$((total_cfg_run_cnt + 1))
+                           echo " 🚩Building for Board: ${all_alif_boards_cfgs[boardName]} AND test-app: ${test_apps[testApp]}"
+                           if [ -d build ] ; then
+                              rm -rf build
+                              echo -e "❌ Deleting Build folder..."
+                           fi
+
+                           actual_cfg_run_cnt=$((actual_cfg_run_cnt + 1))
+                           west build -b ${all_alif_boards_cfgs[boardName]} ${test_apps[testApp]}
+                           tmp=$?
+                           echo -e "\n\n"
+                           total_buildError=$((total_buildError + tmp))
+                           echo -e "🚫Error Status total_buildError: $total_buildError and tmp: $tmp"
+                           if [ "$tmp" -ne 0 ] ; then
+                               fail_cfg_run_cnt=$((fail_cfg_run_cnt + 1))
+                           fi
+                        done
+                    done
+                    echo -e "✅ All Build is completed."
+                    echo -e "\n\n"
+                    echo -e "  🏆Check-Patch Result =>  Error: $errors, Warnings: $warnings"
+                    echo -e "  🏆Success: $((actual_cfg_run_cnt - fail_cfg_run_cnt)), Failed: $fail_cfg_run_cnt, Skipped: $skipped_cfg_run_cnt"
+                    echo -e "  🔥Total Run => ($actual_cfg_run_cnt/$total_cfg_run_cnt)"
+                    total_buildError=$((total_buildError + errors))
+                    exit $total_buildError
+                    '''
+                }
             }
+        }
+    }
+    post {
+        failure {
+            echo 'Build failed. Sending email...'
+            emailext (
+                subject: "🚨 Jenkins Job Failed: ${env.JOB_NAME} [${env.BUILD_NUMBER}]",
+                body: """
+                   <p>Build failed for job: <b>${env.CHANGE_URL}</b></p>
+                   <p>Build Number: <b>${env.BUILD_NUMBER}</b></p>
+                   <p>View details: <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                """,
+                to: "${env.DEFAULT_OWNER_EMAILS}",
+                mimeType: 'text/html'
+            )
+        }
+
+        success {
+            echo 'Build succeeded.'
+        }
+
+        always {
+            echo "Cleaning up workspace..."
+            deleteDir()
         }
     }
 }
