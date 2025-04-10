@@ -648,7 +648,7 @@ static int flash_alif_ospi_init(const struct device *dev)
 
 	memset(&init_config, 0, sizeof(struct ospi_init));
 
-	init_config.core_clk = SYS_AXI_CLK;
+	init_config.core_clk = DT_PROP(ALIF_OSPI_NODE, clock_frequency);
 	init_config.bus_speed = DT_PROP(ALIF_OSPI_NODE, bus_speed);
 	init_config.tx_fifo_threshold = DT_PROP(ALIF_OSPI_NODE, tx_fifo_threshold);
 	init_config.rx_fifo_threshold = 0;
