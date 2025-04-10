@@ -958,10 +958,21 @@
 				compatible = "issi,xspi-flash-controller";
 				reg = <0x0>;
 				erase-value = <0xff>;
-				num-of-sector = <8192>;
-				page-size = <256>;
+				num-of-sector = <16384>;
+				page-size = <4096>;
 				sector-size = <4096>;
-				write-block-size = <2>;
+				write-block-size = <1>;
+
+				/* Flash Size 64MB */
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				flash_storage: flash_storage@0 {
+					compatible = "soc-nv-flash";
+					reg = <0x0 DT_SIZE_M(64)>;
+					erase-block-size = <DT_SIZE_K(4)>;
+					write-block-size = <1>;
+				};
 			};
 		};
 

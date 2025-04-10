@@ -12,6 +12,8 @@
 
 #define OSPI_MAX_RX_COUNT 256
 
+#define OSPI_MAX_TX_COUNT 128
+
 #define OSPI_FLASH_CMD_BUF 261 /* 256 + CMD (1) + ADDRESS (4) */
 
 #define OSPI_FLASH_CMD_READ_STATUS_ERR (0x02)
@@ -62,6 +64,7 @@ struct alif_flash_ospi_config {
 	uint32_t *regs;                        /* OSPI Reg */
 	uint32_t *aes_regs;                    /* AES Reg* */
 	struct flash_parameters flash_param;   /* Flash Parameter */
+	struct flash_pages_layout       flash_layout;
 	const struct pinctrl_dev_config *pcfg; /* PINCTRL */
 };
 
