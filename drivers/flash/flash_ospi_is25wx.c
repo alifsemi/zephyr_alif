@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define DT_DRV_COMPAT snps_desigware_ospi
+#define DT_DRV_COMPAT issi_xspi_flash_controller
 
 #include <string.h>
 #include <zephyr/drivers/flash.h>
@@ -18,8 +18,8 @@
 
 LOG_MODULE_REGISTER(OSPI_FLASH, CONFIG_FLASH_LOG_LEVEL);
 
-#define ALIF_FLASH_NODE DT_NODELABEL(ospi_flash)
-#define ALIF_OSPI_NODE  DT_PARENT(ALIF_FLASH_NODE)
+#define OSPI_FLASH_NODE DT_NODELABEL(ospi_flash)
+#define OSPI_CTRL_NODE  DT_PARENT(OSPI_FLASH_NODE)
 
 #define OSPI_AES_REG_NODE_NAME aes_reg
 
@@ -198,7 +198,7 @@ static int flash_alif_ospi_read(const struct device *dev, off_t address, void *b
 				size_t length)
 {
 	uint32_t cmd[4], data_cnt, event;
-	uint16_t *data_ptr;
+	uint8_t *data_ptr;
 	int32_t cnt;
 	int32_t ret;
 
@@ -220,7 +220,7 @@ static int flash_alif_ospi_read(const struct device *dev, off_t address, void *b
 	}
 
 	cnt = length;
-	data_ptr = (uint16_t *)buffer;
+	data_ptr = (uint8_t *)buffer;
 	dev_data->trans_conf.wait_cycles = 0;
 	dev_data->trans_conf.addr_len = 0;
 
@@ -241,7 +241,7 @@ static int flash_alif_ospi_read(const struct device *dev, off_t address, void *b
 
 	dev_data->trans_conf.wait_cycles = 16;
 	dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_32_BITS;
-	dev_data->trans_conf.frame_size = 16;
+	dev_data->trans_conf.frame_size = 8;
 
 	/* Prepare Interface and update Configuration */
 	ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle, &dev_data->trans_conf);
@@ -295,8 +295,7 @@ static int flash_alif_ospi_read(const struct device *dev, off_t address, void *b
 			break;
 		}
 
-		/* For 16 bit frames, update address by data_cnt * 2*/
-		address += (data_cnt * 2);
+		address += (data_cnt);
 		length -= data_cnt;
 		data_ptr += data_cnt;
 	}
@@ -308,7 +307,7 @@ static int flash_alif_ospi_read(const struct device *dev, off_t address, void *b
 static int flash_alif_ospi_write(const struct device *dev, off_t address, const void *buffer,
 				 size_t length)
 {
-	const uint16_t *data_ptr;
+	const uint8_t *data_ptr;
 	int32_t status, ret;
 	uint32_t event, data_cnt, index, i, cnt, data_i = 0;
 	uint8_t val;
@@ -349,7 +348,7 @@ static int flash_alif_ospi_write(const struct device *dev, off_t address, const 
 			break;
 		}
 
-		data_cnt = (OSPI_MAX_RX_COUNT - (address % OSPI_MAX_RX_COUNT)) >> 1;
+		data_cnt = (OSPI_MAX_TX_COUNT - (address % OSPI_MAX_TX_COUNT));
 		if (data_cnt > cnt) {
 			data_cnt = cnt;
 		}
@@ -366,7 +365,7 @@ static int flash_alif_ospi_write(const struct device *dev, off_t address, const 
 
 		dev_data->trans_conf.wait_cycles = 0;
 		dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_32_BITS;
-		dev_data->trans_conf.frame_size = 16;
+		dev_data->trans_conf.frame_size = 8;
 
 		ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle, &dev_data->trans_conf);
 		if (ret != 0) {
@@ -405,10 +404,7 @@ static int flash_alif_ospi_write(const struct device *dev, off_t address, const 
 			break;
 		}
 
-		/* For 16 bit data frames, increment the byte address
-		 * with 2 * data_cnt programmed
-		 */
-		address += (data_cnt * 2);
+		address += (data_cnt);
 		cnt -= data_cnt;
 
 		ret = set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
@@ -649,13 +645,13 @@ static int flash_alif_ospi_init(const struct device *dev)
 	memset(&init_config, 0, sizeof(struct ospi_init));
 
 	init_config.core_clk = SYS_AXI_CLK;
-	init_config.bus_speed = DT_PROP(ALIF_OSPI_NODE, bus_speed);
-	init_config.tx_fifo_threshold = DT_PROP(ALIF_OSPI_NODE, tx_fifo_threshold);
+	init_config.bus_speed = DT_PROP(OSPI_CTRL_NODE, bus_speed);
+	init_config.tx_fifo_threshold = DT_PROP(OSPI_CTRL_NODE, tx_fifo_threshold);
 	init_config.rx_fifo_threshold = 0;
 	init_config.rx_sample_delay = 0;
-	init_config.ddr_drive_edge = DT_PROP(ALIF_OSPI_NODE, ddr_drive_edge);
-	init_config.cs_pin = DT_PROP(ALIF_OSPI_NODE, cs_pin);
-	init_config.rx_ds_delay = DT_PROP(ALIF_OSPI_NODE, rx_ds_delay);
+	init_config.ddr_drive_edge = DT_PROP(OSPI_CTRL_NODE, ddr_drive_edge);
+	init_config.cs_pin = DT_PROP(OSPI_CTRL_NODE, cs_pin);
+	init_config.rx_ds_delay = DT_PROP(OSPI_CTRL_NODE, rx_ds_delay);
 	init_config.base_regs = dev_cfg->regs;
 	init_config.aes_regs = dev_cfg->aes_regs;
 	init_config.event_cb = hal_event_update;
@@ -663,8 +659,8 @@ static int flash_alif_ospi_init(const struct device *dev)
 
 	init_config.xip_incr_cmd = ISSI_XIP_INCR_CMD;
 	init_config.xip_wrap_cmd = ISSI_XIP_WRAP_CMD;
-	init_config.xip_rxds_vl_en = DT_PROP(ALIF_OSPI_NODE, xip_rxds_vl_en);
-	init_config.xip_wait_cycles = DT_PROP(ALIF_OSPI_NODE, xip_wait_cycles);
+	init_config.xip_rxds_vl_en = DT_PROP(OSPI_CTRL_NODE, xip_rxds_vl_en);
+	init_config.xip_wait_cycles = DT_PROP(OSPI_CTRL_NODE, xip_wait_cycles);
 
 	memset(&dev_data->trans_conf, 0, sizeof(struct ospi_trans_config));
 
@@ -835,8 +831,22 @@ static int flash_alif_ospi_init(const struct device *dev)
 	return ret;
 }
 
+
+#ifdef CONFIG_FLASH_PAGE_LAYOUT
+void flash_alif_ospi_page_layout(const struct device *dev,
+				const struct flash_pages_layout **layout,
+				size_t *layout_size)
+{
+	struct alif_flash_ospi_config *dev_cfg = (struct alif_flash_ospi_config *) dev->config;
+
+	*layout = &(dev_cfg->flash_layout);
+	*layout_size = 1;
+}
+#endif
+
+
 /* PINCTRL Definition Macro for Node */
-PINCTRL_DT_DEFINE(ALIF_OSPI_NODE);
+PINCTRL_DT_DEFINE(OSPI_CTRL_NODE);
 
 static const struct flash_parameters *flash_alif_ospi_get_parameters(const struct device *dev)
 {
@@ -850,19 +860,29 @@ static const struct flash_driver_api flash_alif_ospi_driver_api = {
 	.write = flash_alif_ospi_write,
 	.erase = flash_alif_ospi_erase,
 	.get_parameters = flash_alif_ospi_get_parameters,
+#ifdef CONFIG_FLASH_PAGE_LAYOUT
+	.page_layout = flash_alif_ospi_page_layout,
+#endif
+
 };
 
 struct alif_flash_ospi_config alif_flash_ospi_config = {
-	.pcfg = PINCTRL_DT_DEV_CONFIG_GET(ALIF_OSPI_NODE),
+	.pcfg = PINCTRL_DT_DEV_CONFIG_GET(OSPI_CTRL_NODE),
 
-	.flash_param.write_block_size = DT_PROP(ALIF_FLASH_NODE, write_block_size),
-	.flash_param.erase_value = DT_PROP(ALIF_FLASH_NODE, erase_value),
-	.flash_param.num_of_sector = DT_PROP(ALIF_FLASH_NODE, num_of_sector),
-	.flash_param.sector_size = DT_PROP(ALIF_FLASH_NODE, sector_size),
-	.flash_param.page_size = DT_PROP(ALIF_FLASH_NODE, erase_value),
+	.flash_param.write_block_size = DT_PROP(OSPI_FLASH_NODE, write_block_size),
+	.flash_param.erase_value = DT_PROP(OSPI_FLASH_NODE, erase_value),
+	.flash_param.num_of_sector = DT_PROP(OSPI_FLASH_NODE, num_of_sector),
+	.flash_param.sector_size = DT_PROP(OSPI_FLASH_NODE, sector_size),
+	.flash_param.page_size = DT_PROP(OSPI_FLASH_NODE, page_size),
 
-	.regs = (uint32_t *)DT_REG_ADDR(ALIF_OSPI_NODE),
-	.aes_regs = (uint32_t *)DT_PROP_BY_IDX(ALIF_OSPI_NODE, OSPI_AES_REG_NODE_NAME, 0),
+#ifdef CONFIG_FLASH_PAGE_LAYOUT
+	.flash_layout.pages_size = DT_PROP(OSPI_FLASH_NODE, page_size),
+	.flash_layout.pages_count = DT_PROP(OSPI_FLASH_NODE, num_of_sector) *
+		DT_PROP(OSPI_FLASH_NODE, sector_size) / DT_PROP(OSPI_FLASH_NODE, page_size),
+#endif
+
+	.regs = (uint32_t *)DT_REG_ADDR(OSPI_CTRL_NODE),
+	.aes_regs = (uint32_t *)DT_PROP_BY_IDX(OSPI_CTRL_NODE, OSPI_AES_REG_NODE_NAME, 0),
 
 	.irq_config = flash_alif_ospi_irq_config_func,
 };
@@ -879,13 +899,13 @@ static void OSPI_IRQHandler(const struct device *dev)
 	alif_hal_ospi_irq_handler(dev_data->ospi_handle);
 }
 
-DEVICE_DT_DEFINE(ALIF_OSPI_NODE, &flash_alif_ospi_init, NULL, &flash_ospi_data,
+DEVICE_DT_DEFINE(OSPI_FLASH_NODE, &flash_alif_ospi_init, NULL, &flash_ospi_data,
 		 &alif_flash_ospi_config, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
 		 &flash_alif_ospi_driver_api);
 
 static void flash_alif_ospi_irq_config_func(const struct device *dev)
 {
-	IRQ_CONNECT(DT_IRQN(ALIF_OSPI_NODE), DT_IRQ(ALIF_OSPI_NODE, priority), OSPI_IRQHandler,
-		    DEVICE_DT_GET(ALIF_OSPI_NODE), 0);
-	irq_enable(DT_IRQN(ALIF_OSPI_NODE));
+	IRQ_CONNECT(DT_IRQN(OSPI_CTRL_NODE), DT_IRQ(OSPI_CTRL_NODE, priority), OSPI_IRQHandler,
+		    DEVICE_DT_GET(OSPI_FLASH_NODE), 0);
+	irq_enable(DT_IRQN(OSPI_CTRL_NODE));
 }
