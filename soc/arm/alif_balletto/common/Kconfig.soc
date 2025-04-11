@@ -137,3 +137,9 @@ config  NONSECURE0_REGION
 	default "NS" if ARM_SECURE_FIRMWARE && $(dt_nodelabel_enabled,ns)
 	help
 	    Provide config Non-Secure region
+
+config OSPI0_XIP_REGION
+	string
+	default "ospi0" if $(dt_nodelabel_enabled,ospi0)
+	help
+	    Configure OSPI0 XIP memory mapped region name
