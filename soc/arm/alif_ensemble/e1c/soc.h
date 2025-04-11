@@ -6,6 +6,8 @@
 #ifndef _SOC_H_
 #define _SOC_H_
 
+#include "stdint.h"
+
 #define __NVIC_PRIO_BITS          NUM_IRQ_PRIO_BITS
 
 #define __MVE_FP                  1U        /* MVE floating point present */

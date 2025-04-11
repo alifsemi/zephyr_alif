@@ -6,6 +6,8 @@
 #ifndef _SOC_H_
 #define _SOC_H_
 
+#include "stdint.h"
+
 /* Host Base System Control Registers */
 #define HOST_BASE_SYS_CTRL	0x1A010000
 #define HOST_BSYS_PWR_REQ	(HOST_BASE_SYS_CTRL + 0x400)

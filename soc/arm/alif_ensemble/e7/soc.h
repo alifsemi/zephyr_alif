@@ -6,6 +6,8 @@
 #ifndef _SOC_H_
 #define _SOC_H_
 
+#include "stdint.h"
+
 #define __MPU_PRESENT 1
 
 /* Host Base System Control Registers */

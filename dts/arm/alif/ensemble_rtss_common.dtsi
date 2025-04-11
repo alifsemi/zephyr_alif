@@ -41,6 +41,13 @@
 			status = "okay";
 		};
 	};
+	ns: ns@200d0000 {
+		compatible = "zephyr,memory-region";
+		/* Ensemble TGU Block Size(16KB) Aligned always */
+		reg = <0x200d0000 DT_SIZE_K(176)>;
+		zephyr,memory-region = "NON_SECURE0";
+		status = "disabled";
+	};
 	peripheral@40000000 {
 		#address-cells = < 0x1 >;
 		#size-cells = < 0x1 >;
