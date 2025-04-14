@@ -656,6 +656,7 @@ static int flash_alif_ospi_init(const struct device *dev)
 	init_config.ddr_drive_edge = DT_PROP(ALIF_OSPI_NODE, ddr_drive_edge);
 	init_config.cs_pin = DT_PROP(ALIF_OSPI_NODE, cs_pin);
 	init_config.rx_ds_delay = DT_PROP(ALIF_OSPI_NODE, rx_ds_delay);
+	init_config.baud2_delay = DT_PROP(ALIF_OSPI_NODE, baud2_delay);
 	init_config.base_regs = dev_cfg->regs;
 	init_config.aes_regs = dev_cfg->aes_regs;
 	init_config.event_cb = hal_event_update;
