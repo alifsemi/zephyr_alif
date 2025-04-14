@@ -1,5 +1,6 @@
 # Copyright (c) 2018 Synopsys, Inc. All rights reserved.
 # Copyright (c) 2023 Meta Platforms All rights reserved.
+# Copyright (c) 2024 Alif Semiconductor
 # SPDX-License-Identifier: Apache-2.0
 
 description: Synopsys DesignWare SPI node
@@ -14,6 +15,14 @@ properties:
 
   interrupts:
     required: true
+
+  dwc-ssi:
+    type: boolean
+    description: |
+      Enable this flag for DWC_ssi only. For SPI devices on apb
+      like DW_apb_ssi, disable this flag. Using this flag for the
+      combined single driver to differentiate DW-apb-ssi and
+      DWC-ssi IPs
 
   aux-reg:
     type: boolean

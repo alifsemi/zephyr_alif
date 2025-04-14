@@ -3,6 +3,7 @@
 /*
  * Copyright (c) 2015 Intel Corporation.
  * Copyright (c) 2023 Synopsys, Inc. All rights reserved.
+ * Copyright (c) 2024 Alif Semiconductor
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -50,6 +51,8 @@ struct spi_dw_data {
 	struct spi_context ctx;
 	uint8_t dfs;	/* dfs in bytes: 1,2 or 4 */
 	uint8_t fifo_diff;	/* cannot be bigger than FIFO depth */
+	uint8_t dwc_ssi;	/* enable it for dwc ssi operation on AHB*/
+	uint8_t _unused;
 };
 
 /* Register operation functions */
@@ -194,16 +197,32 @@ static int reg_test_bit(uint8_t bit, mm_reg_t addr, uint32_t off)
 #define DW_SPI_CTRLR0_SRL_BIT		(13)
 #endif
 
+#define DWC_SSI_SPI_CTRLR0_SCPH_BIT	(8)
+#define DWC_SSI_SPI_CTRLR0_SCPOL_BIT	(9)
+#define DWC_SSI_SPI_CTRLR0_TMOD_SHIFT	(10)
+#define DWC_SSI_SPI_CTRLR0_SLV_OE_BIT	(12)
+#define DWC_SSI_SPI_CTRLR0_SRL_BIT	(13)
+
 #define DW_SPI_CTRLR0_SCPH		BIT(DW_SPI_CTRLR0_SCPH_BIT)
 #define DW_SPI_CTRLR0_SCPOL		BIT(DW_SPI_CTRLR0_SCPOL_BIT)
 #define DW_SPI_CTRLR0_SRL		BIT(DW_SPI_CTRLR0_SRL_BIT)
 #define DW_SPI_CTRLR0_SLV_OE		BIT(DW_SPI_CTRLR0_SLV_OE_BIT)
+
+#define DWC_SSI_SPI_CTRLR0_SCPH	BIT(DWC_SSI_SPI_CTRLR0_SCPH_BIT)
+#define DWC_SSI_SPI_CTRLR0_SCPOL	BIT(DWC_SSI_SPI_CTRLR0_SCPOL_BIT)
+#define DWC_SSI_SPI_CTRLR0_SRL		BIT(DWC_SSI_SPI_CTRLR0_SRL_BIT)
+#define DWC_SSI_SPI_CTRLR0_SLV_OE	BIT(DWC_SSI_SPI_CTRLR0_SLV_OE_BIT)
 
 #define DW_SPI_CTRLR0_TMOD_TX_RX	(0)
 #define DW_SPI_CTRLR0_TMOD_TX		(1 << DW_SPI_CTRLR0_TMOD_SHIFT)
 #define DW_SPI_CTRLR0_TMOD_RX		(2 << DW_SPI_CTRLR0_TMOD_SHIFT)
 #define DW_SPI_CTRLR0_TMOD_EEPROM	(3 << DW_SPI_CTRLR0_TMOD_SHIFT)
 #define DW_SPI_CTRLR0_TMOD_RESET	(3 << DW_SPI_CTRLR0_TMOD_SHIFT)
+
+#define DWC_SSI_SPI_CTRLR0_TMOD_TX	(1 << DWC_SSI_SPI_CTRLR0_TMOD_SHIFT)
+#define DWC_SSI_SPI_CTRLR0_TMOD_RX	(2 << DWC_SSI_SPI_CTRLR0_TMOD_SHIFT)
+#define DWC_SSI_SPI_CTRLR0_TMOD_EEPROM	(3 << DWC_SSI_SPI_CTRLR0_TMOD_SHIFT)
+#define DWC_SSI_SPI_CTRLR0_TMOD_RESET	(3 << DWC_SSI_SPI_CTRLR0_TMOD_SHIFT)
 
 #define DW_SPI_CTRLR0_DFS_16(__bpw)	((__bpw) - 1)
 #define DW_SPI_CTRLR0_DFS_32(__bpw)	(((__bpw) - 1) << 16)
@@ -216,6 +235,11 @@ static int reg_test_bit(uint8_t bit, mm_reg_t addr, uint32_t off)
 #define SPI_WS_TO_DFS(__bpw)		(((__bpw) & ~0x38) ?		\
 					 (((__bpw) / 8) + 1) :		\
 					 ((__bpw) / 8))
+
+/* SPI_MST_BIT value */
+#define DWC_SSI_SPI_MST_BIT		(31)
+/* SSI_IS_MST bit */
+#define DWC_SSI_SPI_IS_MST_BIT		BIT(DWC_SSI_SPI_MST_BIT)
 
 /* SSIENR bits */
 #define DW_SPI_SSIENR_SSIEN_BIT		(0)
@@ -272,6 +296,9 @@ static int reg_test_bit(uint8_t bit, mm_reg_t addr, uint32_t off)
 #define DW_SPI_IMR_MASK_RX		(~(DW_SPI_IMR_RXUIM | \
 					   DW_SPI_IMR_RXOIM | \
 					   DW_SPI_IMR_RXFIM))
+
+#define  SPI_UPDATE_DWC_SSI_FLAG(_node_id, _dwc_ssi)	\
+	._dwc_ssi = DT_PROP(_node_id, dwc_ssi) ? 1:0
 
 /*
  * Including the right register definition file
