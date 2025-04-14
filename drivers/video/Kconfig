@@ -43,6 +43,8 @@ source "drivers/video/Kconfig.ov2640"
 
 source "drivers/video/Kconfig.arx3a0"
 
+source "drivers/video/Kconfig.hm0360"
+
 source "drivers/video/Kconfig.alif"
 
 source "drivers/video/Kconfig.dw"
