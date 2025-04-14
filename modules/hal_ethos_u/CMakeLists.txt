@@ -19,6 +19,15 @@ if(CONFIG_ARM_ETHOS_U AND CONFIG_MULTITHREADING)
 
     add_subdirectory(${ZEPHYR_CURRENT_MODULE_DIR} ethos-u-core-driver)
 
+    if (CONFIG_SOC_FAMILY_ENSEMBLE AND NOT CONFIG_SOC_SERIES_ENSEMBLE_E1C)
+        target_compile_definitions(ethosu_core_driver PRIVATE
+            NPU_QCONFIG=1
+            NPU_REGIONCFG_0=1
+            NPU_REGIONCFG_1=0
+            NPU_REGIONCFG_2=1
+        )
+    endif()
+
     target_link_libraries(ethosu_core_driver PUBLIC
        zephyr_interface)
 
