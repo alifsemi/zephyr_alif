@@ -21,6 +21,7 @@ config UDC_BUF_COUNT
 config UDC_BUF_POOL_SIZE
 	int "Memory available for requests"
 	range 64 32768
+	default 2048 if SOC_FAMILY_ENSEMBLE
 	default 1024
 	help
 	  Total amount of memory available for UDC requests.
@@ -53,5 +54,6 @@ source "drivers/usb/udc/Kconfig.kinetis"
 source "drivers/usb/udc/Kconfig.skeleton"
 source "drivers/usb/udc/Kconfig.virtual"
 source "drivers/usb/udc/Kconfig.stm32"
+source "drivers/usb/udc/Kconfig.dwc3"
 
 endif # UDC_DRIVER

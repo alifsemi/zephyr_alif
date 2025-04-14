@@ -73,6 +73,19 @@ static int ensemble_e7_dk_rtss_hp_init(void)
 	/* enable pdm in expansion master */
 	sys_set_bits(EXPSLV_EXPMST0_CTRL, BIT(8));
 
+	/* enable CGU USB clock 20MHZ  */
+	sys_set_bits(CGU_CLK_ENA, BIT(22));
+
+	/* Enable USB peripheral clock  */
+	sys_set_bits(EXPMST_PERIPH_CLK_EN, BIT(20));
+
+	/* Enable USB phy pwr mask and disable Phy isolation */
+	sys_clear_bits(VBAT_PWR_CTRL, BIT(16));
+	sys_clear_bits(VBAT_PWR_CTRL, BIT(17));
+
+	/* USB power on reset clear   */
+	sys_clear_bits(EXPMST_USB_CTRL2, BIT(8));
+
     /* CAN settings */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(can0), okay)
     /* Enable HFOSC and 160MHz clock */

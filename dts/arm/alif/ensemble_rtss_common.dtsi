@@ -525,6 +525,13 @@
 		status = "disabled";
 	};
 
+	dwc3_hs: usb@48200000 {
+		compatible = "snps,dwc3";
+		reg = <0x48200000 0xca04>;
+		interrupts = <101 3>;
+		status = "okay";
+	};
+
 	lpuart: uart@43008000 {
 		compatible = "ns16550";
 		reg = <0x43008000 0x100>;

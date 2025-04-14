@@ -67,6 +67,10 @@
 	status = "okay";
 };
 
+zephyr_udc0: &dwc3_hs {
+	status = "disabled";
+};
+
 &mram_storage {
 	partitions {
 		compatible = "fixed-partitions";
