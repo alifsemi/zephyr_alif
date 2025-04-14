@@ -3,7 +3,7 @@
 /*
  * Copyright (c) 2015 Intel Corporation.
  * Copyright (c) 2023 Synopsys, Inc. All rights reserved.
- *
+ * Copyright (c) 2024 Alif Semiconductor.
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -48,6 +48,12 @@ DEFINE_MM_REG_WRITE(txftlr, DW_SPI_REG_TXFTLR, 32)
 DEFINE_MM_REG_WRITE(rxftlr, DW_SPI_REG_RXFTLR, 32)
 DEFINE_MM_REG_READ(rxftlr, DW_SPI_REG_RXFTLR, 32)
 DEFINE_MM_REG_READ(txftlr, DW_SPI_REG_TXFTLR, 32)
+DEFINE_MM_REG_READ(dmatdlr, DW_SPI_REG_DMATDLR, 32)
+DEFINE_MM_REG_READ(dmardlr, DW_SPI_REG_DMARDLR, 32)
+DEFINE_MM_REG_WRITE(dmatdlr, DW_SPI_REG_DMATDLR, 32)
+DEFINE_MM_REG_WRITE(dmardlr, DW_SPI_REG_DMARDLR, 32)
+DEFINE_MM_REG_WRITE(dmacr, DW_SPI_REG_DMACR, 32)
+DEFINE_MM_REG_READ(dmacr, DW_SPI_REG_DMACR, 32)
 DEFINE_MM_REG_WRITE(dr, DW_SPI_REG_DR, 32)
 DEFINE_MM_REG_READ(dr, DW_SPI_REG_DR, 32)
 DEFINE_MM_REG_READ(ssi_comp_version, DW_SPI_REG_SSI_COMP_VERSION, 32)

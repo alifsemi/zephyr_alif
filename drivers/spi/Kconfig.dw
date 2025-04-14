@@ -2,6 +2,7 @@
 
 # Copyright (c) 2015-2016 Intel Corporation
 # Copyright (c) 2023 Meta Platforms
+# Copyright (c) 2024 Alif Semiconductor
 # SPDX-License-Identifier: Apache-2.0
 
 menuconfig SPI_DW
@@ -20,6 +21,13 @@ config SPI_DW_ACCESS_WORD_ONLY
 	  In some case, e.g. ARC HS Development kit, the peripheral space of
 	  DesignWare SPI only allows word access, byte access will raise
 	  exception.
+
+config SPI_DW_USE_DMA
+	bool "DMA path for transfers"
+	default n
+	help
+	  Eventhough the code path will be enabled by this, dma will be enabled
+	  based on the dts.
 
 config SPI_DW_HSSI
 	bool "DesignWare SPI HSSI variant"
