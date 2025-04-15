@@ -37,6 +37,7 @@
 #define EXPSLV_UART_CTRL	(EXPSLV_BASE + 0x8)
 #define EXPSLV_CANFD_CTRL	(EXPSLV_BASE + 0xC)
 #define EXPSLV_SSI_CTRL		(EXPSLV_BASE + 0x28)
+#define EXPSLV_ADC_CTRL		(EXPSLV_BASE + 0x30)
 #define EXPSLV_DAC_CTRL		(EXPSLV_BASE + 0x34)
 #define EXPSLV_CMP_CTRL		(EXPSLV_BASE + 0x38)
 
@@ -80,6 +81,7 @@
 
 /* ANA Register */
 #define ANA_BASE			0x1A60A000
+#define ANA_VBAT_REG1			(ANA_BASE + 0x38)
 #define ANA_VBAT_REG2			(ANA_BASE + 0x3C)
 
 /* LPGPIO Base address for LPTIMER pin config */
