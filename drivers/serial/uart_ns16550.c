@@ -2037,7 +2037,9 @@ static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_actio
 		   (PM_DEVICE_DT_INST_DEFINE(n, uart_ns16550_pm_action);))           \
 	DEVICE_DT_INST_DEFINE(n, &uart_ns16550_init, PM_DEVICE_DT_INST_GET(n),       \
 			      &uart_ns16550_dev_data_##n, &uart_ns16550_dev_cfg_##n, \
-			      PRE_KERNEL_1, CONFIG_SERIAL_INIT_PRIORITY,             \
+			      COND_CODE_1(DT_INST_NODE_HAS_PROP(n, dmas),            \
+					  (POST_KERNEL), (PRE_KERNEL_1)),            \
+			      CONFIG_SERIAL_INIT_PRIORITY,                           \
 			      &uart_ns16550_driver_api);                             \
 	UART_NS16550_IRQ_FUNC_DEFINE(n)
 
@@ -2057,7 +2059,8 @@ static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_actio
 		   (PM_DEVICE_DT_INST_DEFINE(n, uart_ns16550_pm_action);))           \
 	DEVICE_DT_INST_DEFINE(n, &uart_ns16550_init, PM_DEVICE_DT_INST_GET(n),       \
 			      &uart_ns16550_dev_data_##n, &uart_ns16550_dev_cfg_##n, \
-			      PRE_KERNEL_1,            \
+			      COND_CODE_1(DT_INST_NODE_HAS_PROP(n, dmas),            \
+					  (POST_KERNEL), (PRE_KERNEL_1)),            \
 			      CONFIG_SERIAL_INIT_PRIORITY,                           \
 			      &uart_ns16550_driver_api);                             \
 	UART_NS16550_PCIE_IRQ_FUNC_DEFINE(n)
