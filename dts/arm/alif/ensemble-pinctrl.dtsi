@@ -870,4 +870,15 @@
 			read_enable = < 0x0 >;
 		};
 	};
+	pinctrl_sdmmc:pinctrl_sdmmc {
+		group0 {
+			pinmux = < PIN_P7_0__SD_CMD_A >,
+				 < PIN_P7_1__SD_CLK_A >,
+				 < PIN_P5_0__SD_D0_A >,
+				 < PIN_P5_1__SD_D1_A >,
+				 < PIN_P5_2__SD_D2_A >,
+				 < PIN_P5_3__SD_D3_A >;
+			read_enable = < 0x1 >;
+		};
+	};
 };

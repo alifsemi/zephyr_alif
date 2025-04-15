@@ -25,7 +25,8 @@
 #define DISK_DRIVE_NAME "SD"
 #define DISK_MOUNT_PT "/"DISK_DRIVE_NAME":"
 
-static FATFS fat_fs;
+static FATFS Z_GENERIC_SECTION(CONFIG_SD_BUFFER_SECTION) fat_fs;
+
 /* mounting info */
 static struct fs_mount_t mp = {
 	.type = FS_FATFS,

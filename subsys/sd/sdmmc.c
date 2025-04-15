@@ -202,6 +202,23 @@ static int sdmmc_read_scr(struct sd_card *card)
 	return 0;
 }
 
+/* Sets block count for SD card */
+static int sdmmc_set_blockcnt(struct sd_card *card, uint32_t block_cnt)
+{
+	struct sdhc_command cmd = {0};
+
+	/* check CMD23 Support */
+	if (!(card->flags & SD_CMD23_FLAG))
+		return 0;
+
+	cmd.opcode = SD_SET_BLOCK_COUNT;
+	cmd.arg = block_cnt;
+	cmd.timeout_ms = CONFIG_SD_CMD_TIMEOUT;
+	cmd.response_type =  (SD_RSP_TYPE_R1 | SD_SPI_RSP_TYPE_R1);
+
+	return sdhc_request(card->sdhc, &cmd, NULL);
+}
+
 /* Sets block length of SD card */
 static int sdmmc_set_blocklen(struct sd_card *card, uint32_t block_len)
 {
@@ -468,6 +485,9 @@ static int sdmmc_set_bus_speed(struct sd_card *card)
 		/* Change host bus speed */
 		card->bus_io.timing = timing;
 		card->bus_io.clock = card->switch_caps.uhs_max_dtr;
+#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_FAMILY_BALLETTO)
+		card->bus_io.clock = SD_CLOCK_25MHZ;
+#endif
 		LOG_DBG("Setting bus clock to: %d", card->bus_io.clock);
 		ret = sdhc_set_io(card->sdhc, &card->bus_io);
 		if (ret) {
@@ -726,6 +746,12 @@ int sdmmc_card_init(struct sd_card *card)
 		if (ret) {
 			LOG_ERR("HS card init failed");
 		}
+		ret = sdmmc_set_blocklen(card, SDMMC_DEFAULT_BLOCK_SIZE);
+		if (ret) {
+			LOG_ERR("Could not set SD blocklen to 512");
+			return ret;
+		}
+		card->block_size = SDMMC_DEFAULT_BLOCK_SIZE;
 	}
 	return ret;
 }
@@ -738,11 +764,17 @@ int sdmmc_ioctl(struct sd_card *card, uint8_t cmd, void *buf)
 int sdmmc_read_blocks(struct sd_card *card, uint8_t *rbuf,
 	uint32_t start_block, uint32_t num_blocks)
 {
+	if (num_blocks > 1)
+		sdmmc_set_blockcnt(card, num_blocks);
+
 	return card_read_blocks(card, rbuf, start_block, num_blocks);
 }
 
 int sdmmc_write_blocks(struct sd_card *card, const uint8_t *wbuf,
 	uint32_t start_block, uint32_t num_blocks)
 {
+	if (num_blocks > 1)
+		sdmmc_set_blockcnt(card, num_blocks);
+
 	return card_write_blocks(card, wbuf, start_block, num_blocks);
 }

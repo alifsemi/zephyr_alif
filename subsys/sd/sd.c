@@ -18,6 +18,10 @@
 
 LOG_MODULE_REGISTER(sd, CONFIG_SD_LOG_LEVEL);
 
+static uint8_t Z_GENERIC_SECTION(CONFIG_SD_BUFFER_SECTION)
+		cmd_dma_buff[CONFIG_SD_BUFFER_SIZE]
+		__aligned(MAX(4, CONFIG_SDHC_BUFFER_ALIGNMENT));
+
 /* Idle all cards on bus. Can be used to clear errors on cards */
 static inline int sd_idle(struct sd_card *card)
 {
@@ -236,7 +240,12 @@ int sd_init(const struct device *sdhc_dev, struct sd_card *card)
 	if (!sdhc_dev) {
 		return -ENODEV;
 	}
+
 	card->sdhc = sdhc_dev;
+
+	/* setup card internal buffer */
+	card->card_buffer = &cmd_dma_buff[0];
+
 	ret = sdhc_get_host_props(card->sdhc, &card->host_props);
 	if (ret) {
 		LOG_ERR("SD host controller returned invalid properties");

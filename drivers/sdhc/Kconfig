@@ -49,6 +49,11 @@ config SDHC_SUPPORTS_NATIVE_MODE
 	  Selected by host controller driver if native SD mode support is
 	  required. Enables native protocol in SD protocol stack.
 
+config SDHC_RSP_136_HAS_CRC
+	bool
+	help
+	  enables the response 136 CRC shifting
+
 module = SDHC
 module-str = sdhc
 source "subsys/logging/Kconfig.template.log_config"

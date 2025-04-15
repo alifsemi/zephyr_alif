@@ -12,6 +12,10 @@
 #include <zephyr/sd/sd_spec.h>
 #include <zephyr/cache.h>
 #include "intel_emmc_host.h"
+#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_FAMILY_BALLETTO)
+#include "soc_memory_map.h"
+#include <zephyr/drivers/pinctrl.h>
+#endif
 #if DT_ANY_INST_ON_BUS_STATUS_OKAY(pcie)
 BUILD_ASSERT(IS_ENABLED(CONFIG_PCIE), "DT need CONFIG_PCIE");
 #include <zephyr/drivers/pcie/pcie.h>
@@ -33,6 +37,9 @@ struct emmc_config {
 	struct pcie_dev *pcie;
 #else
 	DEVICE_MMIO_ROM;
+#endif
+#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_FAMILY_BALLETTO)
+	const struct pinctrl_dev_config *pincfg;
 #endif
 	emmc_isr_cb_t config_func;
 	uint32_t max_bus_freq;
@@ -439,10 +446,13 @@ static int emmc_dma_init(const struct device *dev, struct sdhc_data *data, bool 
 			LOG_DBG("desc_table:%llx", emmc->desc_table[i]);
 		}
 
-		regs->adma_sys_addr1 = (uint32_t)((uintptr_t)emmc->desc_table & ADDRESS_32BIT_MASK);
+#if defined(CONFIG_CACHE_MANAGEMENT)
+		sys_cache_data_flush_range(&emmc->desc_table[0], sizeof(emmc->desc_table));
+#endif
+		regs->adma_sys_addr1 =
+		(uint32_t)(((uintptr_t)emmc->desc_table) & ADDRESS_32BIT_MASK);
 		regs->adma_sys_addr2 =
 			(uint32_t)(((uintptr_t)emmc->desc_table >> 32) & ADDRESS_32BIT_MASK);
-
 		LOG_DBG("adma: %llx %x %p", emmc->desc_table[0], regs->adma_sys_addr1,
 			emmc->desc_table);
 	} else {
@@ -626,8 +636,12 @@ static enum emmc_response_type emmc_decode_resp_type(enum sd_rsp_type type)
 		break;
 
 	case SD_RSP_TYPE_R5b:
+		resp_type = EMMC_HOST_RESP_LEN_48B;
+		break;
 	case SD_RSP_TYPE_R6:
 	case SD_RSP_TYPE_R7:
+		resp_type = EMMC_HOST_RESP_LEN_48;
+		break;
 	default:
 		resp_type = EMMC_HOST_INVAL_HOST_RESP_LEN;
 	}
@@ -653,10 +667,30 @@ static void update_cmd_response(const struct device *dev, struct sdhc_command *s
 
 		LOG_DBG("cmd resp: %x %x %x %x", resp0, resp1, resp2, resp3);
 
+#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_FAMILY_BALLETTO)
+		sdhc_cmd->response[0u] = resp0;
+		sdhc_cmd->response[1U] = resp1;
+		sdhc_cmd->response[2U] = resp2;
+		sdhc_cmd->response[3U] = resp3;
+#else
 		sdhc_cmd->response[0u] = resp3;
 		sdhc_cmd->response[1U] = resp2;
 		sdhc_cmd->response[2U] = resp1;
 		sdhc_cmd->response[3U] = resp0;
+#endif
+
+	    /* shifting truncated CRC
+	     * 0-7 8bits crc is added in response
+	     * remove the crc and shift the actual response
+	     */
+
+		if (IS_ENABLED(CONFIG_SDHC_RSP_136_HAS_CRC)) {
+			for (int i = 0; i < 4; i++) {
+				sdhc_cmd->response[i] <<= 8;
+				if (i != 3)
+					sdhc_cmd->response[i] |= sdhc_cmd->response[i + 1] >> 24;
+			}
+		}
 	} else {
 		LOG_DBG("cmd resp: %x", resp0);
 		sdhc_cmd->response[0u] = resp0;
@@ -1235,6 +1269,15 @@ static int emmc_init(const struct device *dev)
 	k_sem_init(&emmc->lock, 1, 1);
 	k_event_init(&emmc->irq_event);
 
+#if defined(CONFIG_PINCTRL)
+	int ret = pinctrl_apply_state(config->pincfg, PINCTRL_STATE_DEFAULT);
+
+	if (ret < 0) {
+		LOG_ERR("Applying Pinctrl state. error ret - %d", ret);
+		return ret;
+	}
+#endif
+
 #if DT_ANY_INST_ON_BUS_STATUS_OKAY(pcie)
 	if (config->pcie) {
 		struct pcie_bar mbar;
@@ -1326,23 +1369,28 @@ static const struct sdhc_driver_api emmc_api = {
 #define DEFINE_PCIE1(n)          DEVICE_PCIE_INST_DECLARE(n)
 #define EMMC_HOST_PCIE_DEFINE(n) _CONCAT(DEFINE_PCIE, DT_INST_ON_BUS(n, pcie))(n)
 
-#define EMMC_HOST_DEV_CFG(n)                                                                       \
-	EMMC_HOST_PCIE_DEFINE(n);                                                                  \
-	EMMC_HOST_IRQ_CONFIG(n);                                                                   \
-	static const struct emmc_config emmc_config_data_##n = {                                   \
-		REG_INIT(n) INIT_PCIE(n).config_func = emmc_config_##n,                            \
-		.hs200_mode = DT_INST_PROP_OR(n, mmc_hs200_1_8v, 0),                               \
-		.hs400_mode = DT_INST_PROP_OR(n, mmc_hs400_1_8v, 0),                               \
-		.dw_4bit = DT_INST_ENUM_HAS_VALUE(n, bus_width, 4),                                \
-		.dw_8bit = DT_INST_ENUM_HAS_VALUE(n, bus_width, 8),                                \
-		.max_bus_freq = DT_INST_PROP_OR(n, max_bus_freq, 40000),                           \
-		.min_bus_freq = DT_INST_PROP_OR(n, min_bus_freq, 40000),                           \
-		.power_delay_ms = DT_INST_PROP_OR(n, power_delay_ms, 500),                         \
-	};                                                                                         \
-                                                                                                   \
-	static struct emmc_data emmc_priv_data_##n;                                                \
-                                                                                                   \
-	DEVICE_DT_INST_DEFINE(n, emmc_init, NULL, &emmc_priv_data_##n, &emmc_config_data_##n,      \
+#define EMMC_HOST_DEV_CFG(n)                                        \
+		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, pinctrl_0),				\
+		(PINCTRL_DT_INST_DEFINE(n)));	\
+	EMMC_HOST_PCIE_DEFINE(n);                                       \
+	EMMC_HOST_IRQ_CONFIG(n);                                        \
+	static const struct emmc_config emmc_config_data_##n = {        \
+		REG_INIT(n) INIT_PCIE(n).config_func = emmc_config_##n,     \
+		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, pinctrl_0),				\
+			(.pincfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n))),			\
+		.hs200_mode = DT_INST_PROP_OR(n, mmc_hs200_1_8v, 0),        \
+		.hs400_mode = DT_INST_PROP_OR(n, mmc_hs400_1_8v, 0),        \
+		.dw_4bit = DT_INST_ENUM_HAS_VALUE(n, bus_width, 4),         \
+		.dw_8bit = DT_INST_ENUM_HAS_VALUE(n, bus_width, 8),         \
+		.max_bus_freq = DT_INST_PROP_OR(n, max_bus_freq, 40000),    \
+		.min_bus_freq = DT_INST_PROP_OR(n, min_bus_freq, 40000),    \
+		.power_delay_ms = DT_INST_PROP_OR(n, power_delay_ms, 500),  \
+	};                                                              \
+                                                                    \
+	static struct emmc_data Z_GENERIC_SECTION(CONFIG_SDHC_DESCRIPTOR_SECTION) \
+					emmc_priv_data_##n;  \
+                                                                              \
+	DEVICE_DT_INST_DEFINE(n, emmc_init, NULL, &emmc_priv_data_##n, &emmc_config_data_##n, \
 			      POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &emmc_api);
 
 DT_INST_FOREACH_STATUS_OKAY(EMMC_HOST_DEV_CFG)

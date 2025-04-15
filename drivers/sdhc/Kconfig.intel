@@ -13,6 +13,19 @@ config INTEL_EMMC_HOST
 	  validated using intel's EMMC host controller.
 
 if INTEL_EMMC_HOST
+
+config SDHC_BUFFER_ALIGNMENT
+	default 512 if SOC_FAMILY_ENSEMBLE || SOC_FAMILY_BALLETO
+	default 1
+	help
+	  SDHC DMA Alignment
+
+config SDHC_DESCRIPTOR_SECTION
+	string
+	default ".bss"
+	help
+	  SD Card internal Buffer Linker Section
+
 config INTEL_EMMC_HOST_INTR
 	bool "EMMC host controller interrupt mode"
 	default y
