@@ -112,6 +112,9 @@ struct i2c_dw_rom_config {
 	clock_control_subsys_t clk_id;
 #endif
 
+	uint8_t			tx_tl;
+	uint8_t			rx_tl;
+
 #if defined(CONFIG_PINCTRL)
 	const struct pinctrl_dev_config *pcfg;
 #endif
