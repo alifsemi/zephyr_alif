@@ -367,6 +367,7 @@ static void i2c_dw_isr(const struct device *port)
 	uint32_t value;
 	int ret = 0;
 	uint32_t reg_base = get_regs(port);
+	uint8_t rx_fifo_level;
 
 	/* Cache ic_intr_stat for processing, so there is no need to read
 	 * the register multiple times.
@@ -444,6 +445,10 @@ static void i2c_dw_isr(const struct device *port)
 
 		/* STOP detected: finish processing this message */
 		if (intr_stat.bits.stop_det) {
+			if (((dw->xfr_flags & I2C_MSG_RW_MASK) == I2C_MSG_READ)
+					&& read_rxflr(reg_base)) {
+				i2c_dw_data_read(port);
+			}
 			value = read_clr_stop_det(reg_base);
 			goto done;
 		}
@@ -453,6 +458,7 @@ static void i2c_dw_isr(const struct device *port)
 		const struct i2c_target_callbacks *slave_cb = dw->slave_cfg->callbacks;
 		uint32_t slave_activity = test_bit_status_activity(reg_base);
 		uint8_t data;
+		uint8_t index;
 
 		i2c_dw_slave_read_clear_intr_bits(port);
 
@@ -463,9 +469,25 @@ static void i2c_dw_isr(const struct device *port)
 					slave_cb->write_requested(dw->slave_cfg);
 				}
 			}
-			data = i2c_dw_read_byte_non_blocking(port);
-			if (slave_cb->write_received) {
-				slave_cb->write_received(dw->slave_cfg, data);
+
+			rx_fifo_level = read_rxflr(reg_base);
+			for (index = 0; index < rx_fifo_level; index++) {
+				data = i2c_dw_read_byte_non_blocking(port);
+				if (slave_cb->write_received) {
+					slave_cb->write_received(dw->slave_cfg, data);
+				}
+			}
+		}
+
+		if (intr_stat.bits.stop_det) {
+			rx_fifo_level = read_rxflr(reg_base);
+			if(rx_fifo_level) {
+				for (index = 0; index < rx_fifo_level; index++) {
+					data = i2c_dw_read_byte_non_blocking(port);
+					if (slave_cb->write_received) {
+						slave_cb->write_received(dw->slave_cfg, data);
+					}
+				}
 			}
 		}
 
@@ -494,6 +516,7 @@ done:
 
 static int i2c_dw_setup(const struct device *dev, uint16_t slave_address)
 {
+	const struct i2c_dw_rom_config * const rom = dev->config;
 	struct i2c_dw_dev_config * const dw = dev->data;
 	uint32_t value;
 	union ic_con_register ic_con;
@@ -579,7 +602,7 @@ static int i2c_dw_setup(const struct device *dev, uint16_t slave_address)
 	 *
 	 * TODO: extend the threshold for multi-byte RX.
 	 */
-	write_rx_tl(0, reg_base);
+	write_rx_tl(rom->rx_tl, reg_base);
 
 	/* Set TX fifo threshold level.
 	 * TX_EMPTY interrupt is triggered only when the
@@ -589,7 +612,7 @@ static int i2c_dw_setup(const struct device *dev, uint16_t slave_address)
 	 * cause some pauses during transfers, but this keeps
 	 * the device from interrupting often.
 	 */
-	write_tx_tl(0, reg_base);
+	write_tx_tl(rom->tx_tl, reg_base);
 
 	ic_tar.raw = read_tar(reg_base);
 
@@ -899,7 +922,7 @@ static inline void i2c_dw_write_byte_non_blocking(const struct device *dev, uint
 
 static int i2c_dw_set_master_mode(const struct device *dev)
 {
-	union ic_comp_param_1_register ic_comp_param_1;
+	const struct i2c_dw_rom_config * const rom = dev->config;
 	uint32_t reg_base = get_regs(dev);
 	union ic_con_register ic_con;
 
@@ -912,16 +935,15 @@ static int i2c_dw_set_master_mode(const struct device *dev)
 
 	set_bit_enable_en(reg_base);
 
-	ic_comp_param_1.raw = read_comp_param_1(reg_base);
-
-	write_tx_tl(ic_comp_param_1.bits.tx_buffer_depth + 1, reg_base);
-	write_rx_tl(ic_comp_param_1.bits.rx_buffer_depth + 1, reg_base);
+	write_tx_tl(rom->tx_tl, reg_base);
+	write_rx_tl(rom->rx_tl, reg_base);
 
 	return 0;
 }
 
 static int i2c_dw_set_slave_mode(const struct device *dev, uint8_t addr, uint8_t flags)
 {
+	const struct i2c_dw_rom_config * const rom = dev->config;
 	uint32_t reg_base = get_regs(dev);
 	union ic_con_register ic_con;
 
@@ -947,8 +969,8 @@ static int i2c_dw_set_slave_mode(const struct device *dev, uint8_t addr, uint8_t
 
 	set_bit_enable_en(reg_base);
 
-	write_tx_tl(0, reg_base);
-	write_rx_tl(0, reg_base);
+	write_tx_tl(rom->tx_tl, reg_base);
+	write_rx_tl(rom->rx_tl, reg_base);
 
 	LOG_DBG("I2C: Host registered as Slave Device");
 
@@ -1264,6 +1286,8 @@ static int i2c_dw_initialize(const struct device *dev)
 		I2C_CONFIG_REG_INIT(n)                                        \
 		.config_func = i2c_config_##n,                                \
 		.bitrate = DT_INST_PROP(n, clock_frequency),                  \
+		.tx_tl = DT_INST_PROP(n, tx_threshold),                       \
+		.rx_tl = DT_INST_PROP(n, rx_threshold),                       \
 		I2C_DW_CLOCK_INIT(n)						\
 		RESET_DW_CONFIG(n)                                            \
 		PINCTRL_DW_CONFIG(n)                                          \

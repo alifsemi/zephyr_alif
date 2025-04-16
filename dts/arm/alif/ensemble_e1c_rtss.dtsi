@@ -360,6 +360,8 @@
 			pinctrl-names = "default";
 			interrupt-parent = <&nvic>;
 			interrupts = <132 0>;
+			tx_threshold = <16>;
+			rx_threshold = <0>;
 			status = "disabled";
 		};
 
@@ -373,6 +375,8 @@
 			pinctrl-names = "default";
 			interrupt-parent = <&nvic>;
 			interrupts = <133 0>;
+			tx_threshold = <16>;
+			rx_threshold = <0>;
 			status = "okay";
 		};
 
