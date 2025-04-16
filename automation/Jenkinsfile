@@ -1,8 +1,14 @@
 pipeline {
     agent any
+
+    environment {
+        REPO_NAME='zephyr'
+    }
+
     options {
         skipDefaultCheckout(true)
     }
+
     stages {
         stage('Install Dependencies') {
             steps {
@@ -13,7 +19,8 @@ pipeline {
                 }
             }
         }
-        stage('Environment') {
+
+        stage('Display Environment Variables') {
             steps {
                 script {
                     sh """#!/bin/bash -xe
@@ -23,34 +30,41 @@ pipeline {
                 }
             }
         }
+
         stage('checkout') {
             steps {
                 cleanWs()
+
+                script {
+                    echo "⏳ Checkout '${REPO_NAME}' repo..."
+                }
+
+                dir("${REPO_NAME}") {
+                    checkout scm
+                }
+
                 script {
                     sh '''#!/bin/bash
                     export PATH=$WEST_BIN_PATH:$PATH
                     source "${ZEPHYR_3X_ENV}/environment-setup-x86_64-pokysdk-linux"
-                    repo_name="zephyr_alif"
                     echo -e "🛠️ $PATH"
+                    echo -e "✅ Checkout is completed "${REPO_NAME}"."
 
-                    echo -e "⏳ Checkout Repo '$repo_name' main branch CHANGE_BRANCH: '$CHANGE_BRANCH' BRANCH_NAME: '$BRANCH_NAME'"
-
-                    if [ -d .west ] ; then
-                        rm -rvf .west
-                        rm -rf *
-                    fi
-
-                    west init -m git@github.com:alifsemi/$repo_name.git --mr $CHANGE_BRANCH
-                    echo -e "✅ Cloning is completed."
-                    west update
-                    ls -la
-                    echo -e "☑️ cloning process is completed.\n\n"
-                    if [ ! -d "zephyr" ] ; then
-                        echo -e "🚫 zephyr directory didn't found."
+                    if [ ! -d "${REPO_NAME}" ] ; then
+                        echo -e "🚫 ${REPO_NAME} directory didn't found."
                         exit -1
                     fi
-                    cd zephyr
+
+                    cd "${REPO_NAME}"
+
+                    echo -e "✅ west initialization started"
+                    west init -l .
+
+                    echo -e "☑️ west initialization is completed."
+                    west update
+                    echo -e "☑️ west update is completed."
                     git log -4
+                    ls -la ../
 
                     git format-patch -1
                     log=$(./scripts/checkpatch.pl --patch *.patch)
@@ -61,7 +75,7 @@ pipeline {
                     warnings=$(echo "${result}" | sed -n "s/.*errors, \\([0-9]\\+\\) warnings.*/\\1/p")
                     echo "🎯Checkpatch has Errors: $errors Warnings: $warnings\n\n"
 
-                    mapfile -t all_alif_boards_cfgs < <(west boards | grep "alif")
+                    mapfile -t all_alif_boards_cfgs < <(west boards | grep "alif" | grep -v "fpga")
                     test_apps=("samples/hello_world")
                     total_buildError=0
                     total_cfg_run_cnt=0
