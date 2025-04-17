@@ -522,8 +522,6 @@ static int hci_alif_open(void)
 	int ret;
 	k_tid_t tid;
 
-	LOG_DBG("");
-
 	ret = take_es0_into_use();
 	if (ret < 0) {
 		return -EIO;

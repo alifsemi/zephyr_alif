@@ -57,12 +57,10 @@
 
 &uart_hci {
 	clock-frequency = <160000000>;
-	dlf = <0>;
 };
 
 &uart_ahi {
 	clock-frequency = <160000000>;
-	dlf = <0>;
 	pinctrl-0 = < &pinctrl_ahi_trace >;
 	pinctrl-names = "default";
 };
