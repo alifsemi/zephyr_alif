@@ -59,9 +59,9 @@
 
 	pinctrl_ut1: pinctrl_utimer1 {
 		group0 {
-			pinmux = < PIN_P4_2__UT1_T0_A >,
-				 < PIN_P4_3__UT1_T1_A >;
-			read_enable = < 0x0 >;
+			pinmux = < PIN_P6_2__UT1_T0_B >,
+				 < PIN_P6_3__UT1_T1_B >;
+			read_enable = < 0x1 >;
 		};
 	};
 

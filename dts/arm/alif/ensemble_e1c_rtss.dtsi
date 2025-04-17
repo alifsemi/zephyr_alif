@@ -123,9 +123,23 @@
 			counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
 			status = "disabled";
 
+			counter {
+				compatible = "alif,counter";
+				status = "disabled";
+			};
+
 			pwm {
 				compatible = "alif,pwm";
 				#pwm-cells = <3>;
+				status = "disabled";
+			};
+
+			qdec {
+				compatible = "alif,qdec";
+				counts-per-revolution = <1000>;
+				input-filter-enable;
+				filter-prescaler = <16>;
+				filter-taps = <1>;
 				status = "disabled";
 			};
 		};
@@ -137,7 +151,7 @@
 			interrupts = <385 3>, <386 3>,
 					<387 3>, <388 3>, <389 3>,
 					<390 3>, <391 3>, <392 3>;
-				interrupt-names = "comp_capt_a", "comp_capt_b",
+			interrupt-names = "comp_capt_a", "comp_capt_b",
 					"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
 					"comp_b_buf2", "underflow", "overflow";
 			timer-id = <1>;
@@ -145,9 +159,23 @@
 			counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
 			status = "disabled";
 
+			counter {
+				compatible = "alif,counter";
+				status = "disabled";
+			};
+
 			pwm {
 				compatible = "alif,pwm";
 				#pwm-cells = <3>;
+				status = "disabled";
+			};
+
+			qdec {
+				compatible = "alif,qdec";
+				counts-per-revolution = <1000>;
+				input-filter-enable;
+				filter-prescaler = <16>;
+				filter-taps = <1>;
 				status = "disabled";
 			};
 		};
@@ -167,9 +195,23 @@
 			counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
 			status = "disabled";
 
+			counter {
+				compatible = "alif,counter";
+				status = "disabled";
+			};
+
 			pwm {
 				compatible = "alif,pwm";
 				#pwm-cells = <3>;
+				status = "disabled";
+			};
+
+			qdec {
+				compatible = "alif,qdec";
+				counts-per-revolution = <1000>;
+				input-filter-enable;
+				filter-prescaler = <16>;
+				filter-taps = <1>;
 				status = "disabled";
 			};
 		};
@@ -189,9 +231,23 @@
 			counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
 			status = "disabled";
 
+			counter {
+				compatible = "alif,counter";
+				status = "disabled";
+			};
+
 			pwm {
 				compatible = "alif,pwm";
 				#pwm-cells = <3>;
+				status = "disabled";
+			};
+
+			qdec {
+				compatible = "alif,qdec";
+				counts-per-revolution = <1000>;
+				input-filter-enable;
+				filter-prescaler = <16>;
+				filter-taps = <1>;
 				status = "disabled";
 			};
 		};

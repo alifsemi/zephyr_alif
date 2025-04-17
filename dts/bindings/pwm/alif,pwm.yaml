@@ -13,7 +13,7 @@ properties:
     const: 3
     description: |
       Number of items to expect in a PWM
-      - channel (unused)
+      - channel
       - period to set in ns
       - flags for PWM
 

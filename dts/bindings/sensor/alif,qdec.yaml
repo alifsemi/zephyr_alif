@@ -1,0 +1,40 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+description: ALIF UTIMER Quadrature Decoder
+
+compatible: "alif,qdec"
+
+include: [base.yaml, pinctrl-device.yaml]
+
+properties:
+  pinctrl-0:
+    required: true
+
+  pinctrl-names:
+    required: true
+
+  counts-per-revolution:
+    type: int
+    required: true
+    description: |
+         Number of counts for one complete revolution.
+
+  input-filter-enable:
+    type: boolean
+    description: |
+         Enable filter function for input signals.
+
+  filter-prescaler:
+    type: int
+    description: |
+         Value to sample input signals periodically before entering
+         filter taps (range: 0-63).
+
+  filter-taps:
+    type: int
+    description: |
+         Number of filter taps (range: 0-15).
+
+
