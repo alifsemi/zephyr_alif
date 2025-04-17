@@ -12,6 +12,8 @@
 
 #define OSPI_MAX_RX_COUNT 256
 
+#define OSPI_MAX_TX_COUNT 128
+
 #define OSPI_FLASH_CMD_BUF 261 /* 256 + CMD (1) + ADDRESS (4) */
 
 #define OSPI_FLASH_CMD_READ_STATUS_ERR (0x02)
@@ -42,9 +44,6 @@
 #define FLASH_INIT  (0x01U)
 #define FLASH_POWER (0x02U)
 
-/** SYS_AXI_CLK */
-#define SYS_AXI_CLK (400 * 1000 * 1000)
-
 /** Connected chip activate */
 #define SLAVE_ACTIVATE    (1)
 #define SLAVE_DE_ACTIVATE (0)
@@ -65,6 +64,7 @@ struct alif_flash_ospi_config {
 	uint32_t *regs;                        /* OSPI Reg */
 	uint32_t *aes_regs;                    /* AES Reg* */
 	struct flash_parameters flash_param;   /* Flash Parameter */
+	struct flash_pages_layout       flash_layout;
 	const struct pinctrl_dev_config *pcfg; /* PINCTRL */
 };
 
