@@ -116,9 +116,23 @@
 			counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
 			status = "disabled";
 
+			counter {
+				compatible = "alif,counter";
+				status = "disabled";
+			};
+
 			pwm {
 				compatible = "alif,pwm";
 				#pwm-cells = <3>;
+				status = "disabled";
+			};
+
+			qdec {
+				compatible = "alif,qdec";
+				counts-per-revolution = <1000>;
+				input-filter-enable;
+				filter-prescaler = <16>;
+				filter-taps = <1>;
 				status = "disabled";
 			};
 		};
@@ -138,9 +152,23 @@
 			counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
 			status = "disabled";
 
+			counter {
+				compatible = "alif,counter";
+				status = "disabled";
+			};
+
 			pwm {
 				compatible = "alif,pwm";
 				#pwm-cells = <3>;
+				status = "disabled";
+			};
+
+			qdec {
+				compatible = "alif,qdec";
+				counts-per-revolution = <1000>;
+				input-filter-enable;
+				filter-prescaler = <16>;
+				filter-taps = <1>;
 				status = "disabled";
 			};
 		};
@@ -160,9 +188,23 @@
 			counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
 			status = "disabled";
 
+			counter {
+				compatible = "alif,counter";
+				status = "disabled";
+			};
+
 			pwm {
 				compatible = "alif,pwm";
 				#pwm-cells = <3>;
+				status = "disabled";
+			};
+
+			qdec {
+				compatible = "alif,qdec";
+				counts-per-revolution = <1000>;
+				input-filter-enable;
+				filter-prescaler = <16>;
+				filter-taps = <1>;
 				status = "disabled";
 			};
 		};
@@ -182,9 +224,23 @@
 			counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
 			status = "disabled";
 
+			counter {
+				compatible = "alif,counter";
+				status = "disabled";
+			};
+
 			pwm {
 				compatible = "alif,pwm";
 				#pwm-cells = <3>;
+				status = "disabled";
+			};
+
+			qdec {
+				compatible = "alif,qdec";
+				counts-per-revolution = <1000>;
+				input-filter-enable;
+				filter-prescaler = <16>;
+				filter-taps = <1>;
 				status = "disabled";
 			};
 		};
