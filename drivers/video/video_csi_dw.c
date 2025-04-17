@@ -27,6 +27,10 @@ static int csi2_is_format_supported(uint32_t fourcc)
 	case VIDEO_PIX_FMT_Y12P:
 	case VIDEO_PIX_FMT_Y14P:
 	case VIDEO_PIX_FMT_Y16:
+	case VIDEO_PIX_FMT_BGGR8:
+	case VIDEO_PIX_FMT_GBRG8:
+	case VIDEO_PIX_FMT_GRBG8:
+	case VIDEO_PIX_FMT_RGGB8:
 		return true;
 	default:
 		return false;
@@ -42,6 +46,10 @@ static int32_t fourcc_to_csi_data_type(uint32_t fourcc)
 	case VIDEO_PIX_FMT_Y7P:
 		return CSI2_DT_RAW7;
 	case VIDEO_PIX_FMT_GREY:
+	case VIDEO_PIX_FMT_BGGR8:
+	case VIDEO_PIX_FMT_GBRG8:
+	case VIDEO_PIX_FMT_GRBG8:
+	case VIDEO_PIX_FMT_RGGB8:
 		return CSI2_DT_RAW8;
 	case VIDEO_PIX_FMT_Y10P:
 		return CSI2_DT_RAW10;

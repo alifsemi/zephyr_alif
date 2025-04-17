@@ -1,0 +1,28 @@
+# Copyright (C) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Himax HM0360 CMOS video sensor
+
+compatible: "himax,hm0360"
+
+include: [base.yaml, pinctrl-device.yaml, i2c-device.yaml]
+
+properties:
+  reset-gpios:
+    type: phandle-array
+    description: |
+      The RESETn pin is asserted to disable the sensor causing a hard
+      reset. This pin is alias to XSHUTDOWN pin in sensor schematics.
+      The sensor receives this as an active-low signal.
+
+  power-gpios:
+    type: phandle-array
+    description: |
+      The Power Pin is asserted to enable the 1.2 V and 2.7 V signals needed
+      by sensor. The sensor receives this as an active-high signal.
+
+  xsleep-gpios:
+    type: phandle-array
+    description: |
+      The XSLEEP Pin is asserted to put the sensor in Low power sleep mode.
+      The sensor receives this as an active-low signal.
