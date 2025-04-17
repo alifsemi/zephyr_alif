@@ -23,6 +23,20 @@ LOG_MODULE_REGISTER(dma_pl330);
 static int dma_pl330_submit(const struct device *dev, uint64_t dst,
 			    uint64_t src, uint32_t channel, uint32_t size);
 
+static bool is_channel_active(struct dma_pl330_ch_config const *const channel_cfg)
+{
+	bool const active = *((volatile int *)&channel_cfg->channel_active);
+
+	compiler_barrier();
+	return active;
+}
+
+static void set_channel_active(struct dma_pl330_ch_config *const channel_cfg, bool state)
+{
+	compiler_barrier();
+	*((volatile int *)&channel_cfg->channel_active) = state;
+}
+
 static void dma_pl330_get_counter(struct dma_pl330_ch_internal *ch_handle,
 				  uint32_t *psrc_byte_width,
 				  uint32_t *pdst_byte_width,
@@ -617,13 +631,10 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 	}
 
 	channel_cfg = &dev_data->channels[channel];
-	k_mutex_lock(&channel_cfg->ch_mutex, K_FOREVER);
-	if (channel_cfg->channel_active) {
-		k_mutex_unlock(&channel_cfg->ch_mutex);
+	if (is_channel_active(channel_cfg)) {
 		return -EBUSY;
 	}
-	channel_cfg->channel_active = 1;
-	k_mutex_unlock(&channel_cfg->ch_mutex);
+	set_channel_active(channel_cfg, 1);
 
 	ch_handle = &channel_cfg->internal;
 	memset(ch_handle, 0, sizeof(*ch_handle));
@@ -687,9 +698,7 @@ static int dma_pl330_transfer_start(const struct device *dev,
 			       channel_cfg->src_addr, channel,
 			       channel_cfg->trans_size);
 
-	k_mutex_lock(&channel_cfg->ch_mutex, K_FOREVER);
-	channel_cfg->channel_active = 0;
-	k_mutex_unlock(&channel_cfg->ch_mutex);
+	set_channel_active(channel_cfg, 0);
 
 	return ret;
 }
@@ -787,7 +796,6 @@ static int dma_pl330_initialize(const struct device *dev)
 		channel_cfg = &dev_data->channels[channel];
 		channel_cfg->dma_exec_addr = dev_cfg->mcode_base +
 					(channel * MICROCODE_SIZE_MAX);
-		k_mutex_init(&channel_cfg->ch_mutex);
 	}
 
 	for (event_index = 0; event_index < DMA_MAX_EVENTS; event_index++) {
@@ -804,6 +812,7 @@ static int dma_pl330_initialize(const struct device *dev)
 								& DMA_AXI_DATA_WIDTH_MASK;
 
 	LOG_INF("Device %s initialized", dev->name);
+
 	return 0;
 }
 
