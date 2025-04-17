@@ -21,8 +21,8 @@ LOG_MODULE_REGISTER(pwm_alif_utimer, CONFIG_PWM_LOG_LEVEL);
 
 /** PWM configuration */
 struct pwm_alif_utimer_config {
-	uint32_t global_base;
-	uint32_t timer_base;
+	DEVICE_MMIO_NAMED_ROM(global);
+	DEVICE_MMIO_NAMED_ROM(timer);
 	uint32_t counterdirection;
 	const uint8_t timer_id;
 	const struct pinctrl_dev_config *pcfg;
@@ -32,11 +32,16 @@ struct pwm_alif_utimer_config {
 
 /** PWM runtime data configuration */
 struct pwm_alif_utimer_data {
+	DEVICE_MMIO_NAMED_RAM(global);
+	DEVICE_MMIO_NAMED_RAM(timer);
 	uint32_t prev_period;
 	uint32_t prev_pulse;
 	uint32_t frequency;
 	pwm_flags_t prev_flags;
 };
+
+#define DEV_CFG(_dev) ((const struct pwm_alif_utimer_config *)(_dev)->config)
+#define DEV_DATA(_dev) ((struct pwm_alif_utimer_data *const)(_dev)->data)
 
 static void utimer_set_direction(uint32_t reg_base, uint8_t direction)
 {
@@ -84,10 +89,10 @@ static int pwm_alif_utimer_set_cycles(const struct device *dev, uint32_t channel
 			 uint32_t period_cycles,
 			 uint32_t pulse_cycles, pwm_flags_t flags)
 {
-	const struct pwm_alif_utimer_config *cfg = dev->config;
-	struct pwm_alif_utimer_data *data = dev->data;
-	uint32_t timer_base = cfg->timer_base;
-	uint32_t global_base = cfg->global_base;
+	const struct pwm_alif_utimer_config *cfg = DEV_CFG(dev);
+	struct pwm_alif_utimer_data *data = DEV_DATA(dev);
+	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
+	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
 	uint32_t value;
 
 	if (channel > NUM_CHANNELS) {
@@ -156,7 +161,7 @@ static int pwm_alif_utimer_set_cycles(const struct device *dev, uint32_t channel
 static int pwm_alif_utimer_get_cycles_per_sec(const struct device *dev, uint32_t channel,
 				 uint64_t *cycles)
 {
-	struct pwm_alif_utimer_data *data = dev->data;
+	struct pwm_alif_utimer_data *data = DEV_DATA(dev);
 
 	ARG_UNUSED(channel);
 
@@ -171,10 +176,10 @@ static const struct pwm_driver_api pwm_alif_utimer_driver_api = {
 
 static int pwm_alif_utimer_init(const struct device *dev)
 {
-	const struct pwm_alif_utimer_config *cfg = dev->config;
-	struct pwm_alif_utimer_data *data = dev->data;
-	uint32_t timer_base = cfg->timer_base;
-	uint32_t global_base = cfg->global_base;
+	const struct pwm_alif_utimer_config *cfg = DEV_CFG(dev);
+	struct pwm_alif_utimer_data *data = DEV_DATA(dev);
+	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
+	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
 	int32_t ret;
 
 	/* apply pin configuration */
@@ -202,7 +207,7 @@ static int pwm_alif_utimer_init(const struct device *dev)
 	alif_utimer_enable_timer_clock(global_base, cfg->timer_id);
 
 	/* program enable for start, stop and clear counter */
-	alif_utimer_enable_soft_counter_ctrl(cfg->timer_base);
+	alif_utimer_enable_soft_counter_ctrl(timer_base);
 
 	/* set counter direction */
 	utimer_set_direction(timer_base, cfg->counterdirection);
@@ -220,8 +225,8 @@ static int pwm_alif_utimer_init(const struct device *dev)
 	PINCTRL_DT_INST_DEFINE(n);								\
 	static struct pwm_alif_utimer_data pwm_alif_utimer_data_##n;				\
 	static const struct pwm_alif_utimer_config pwm_alif_utimer_cfg_##n = {			\
-		.global_base = (uint32_t) DT_REG_ADDR_BY_NAME(DT_INST_PARENT(n), global),	\
-		.timer_base = (uint32_t) DT_REG_ADDR_BY_NAME(DT_INST_PARENT(n), timer),		\
+		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(global, DT_INST_PARENT(n)),			\
+		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(timer, DT_INST_PARENT(n)),			\
 		.counterdirection = DT_PROP(DT_INST_PARENT(n), counter_direction),		\
 		.timer_id = DT_PROP(DT_INST_PARENT(n), timer_id),				\
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),					\

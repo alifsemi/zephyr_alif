@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define DT_DRV_COMPAT alif_utimer
+#define DT_DRV_COMPAT alif_counter
 
 #include <zephyr/drivers/counter.h>
 #include <zephyr/irq.h>
@@ -23,6 +23,8 @@ struct counter_alif_utimer_ch_data {
 };
 
 struct counter_alif_utimer_data {
+	DEVICE_MMIO_NAMED_RAM(global);
+	DEVICE_MMIO_NAMED_RAM(timer);
 	uint32_t guard_period;
 	uint32_t frequency;
 	counter_top_callback_t top_cb;
@@ -32,10 +34,10 @@ struct counter_alif_utimer_data {
 };
 
 struct counter_alif_utimer_config {
+	DEVICE_MMIO_NAMED_ROM(global);
+	DEVICE_MMIO_NAMED_ROM(timer);
 	struct counter_config_info counter_info;
-	uint32_t global_base;
-	uint32_t timer_base;
-	const uint8_t timer;
+	const uint8_t timer_id;
 	uint32_t counterdirection;
 	const struct device *clk_dev;
 	clock_control_subsys_t clkid;
@@ -43,6 +45,9 @@ struct counter_alif_utimer_config {
 	void (*set_irq_pending)(uint8_t interrupt);
 	uint32_t (*get_irq_pending)(uint8_t interrupt);
 };
+
+#define DEV_CFG(_dev) ((const struct counter_alif_utimer_config *)(_dev)->config)
+#define DEV_DATA(_dev) ((struct counter_alif_utimer_data *const)(_dev)->data)
 
 static void utimer_set_direction(uint32_t reg_base, uint8_t direction)
 {
@@ -61,19 +66,21 @@ static void utimer_set_direction(uint32_t reg_base, uint8_t direction)
 
 static int32_t counter_alif_utimer_start(const struct device *dev)
 {
-	const struct counter_alif_utimer_config *cfg = dev->config;
+	const struct counter_alif_utimer_config *cfg = DEV_CFG(dev);
+	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
 
 	/* start the timer counter*/
-	alif_utimer_start_counter(cfg->global_base, cfg->timer);
+	alif_utimer_start_counter(global_base, cfg->timer_id);
 	return 0;
 }
 
 static int32_t counter_alif_utimer_stop(const struct device *dev)
 {
-	const struct counter_alif_utimer_config *cfg = dev->config;
+	const struct counter_alif_utimer_config *cfg = DEV_CFG(dev);
+	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
 
 	/* stop the timer counter */
-	alif_utimer_stop_counter(cfg->global_base, cfg->timer);
+	alif_utimer_stop_counter(global_base, cfg->timer_id);
 
 	return 0;
 }
@@ -81,25 +88,25 @@ static int32_t counter_alif_utimer_stop(const struct device *dev)
 static int32_t counter_alif_utimer_get_value(const struct device *dev,
 					uint32_t *ticks)
 {
-	const struct counter_alif_utimer_config *cfg = dev->config;
+	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
 
-	*ticks = alif_utimer_get_counter_value(cfg->timer_base);
+	*ticks = alif_utimer_get_counter_value(timer_base);
 
 	return 0;
 }
 
 static uint32_t counter_alif_utimer_get_top_value(const struct device *dev)
 {
-	const struct counter_alif_utimer_config *cfg = dev->config;
+	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
 
-	return alif_utimer_get_counter_reload_value(cfg->timer_base);
+	return alif_utimer_get_counter_reload_value(timer_base);
 }
 
 static uint32_t counter_alif_utimer_get_pending_int(const struct device *dev)
 {
-	const struct counter_alif_utimer_config *cfg = dev->config;
+	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
 
-	return alif_utimer_get_pending_interrupt(cfg->timer_base);
+	return alif_utimer_get_pending_interrupt(timer_base);
 }
 
 static uint32_t ticks_add(uint32_t val1, uint32_t val2, uint32_t top)
@@ -127,8 +134,8 @@ static uint32_t ticks_sub(uint32_t val, uint32_t old, uint32_t top)
 
 static void set_cc_int_pending(const struct device *dev, uint8_t chan)
 {
-	const struct counter_alif_utimer_config *cfg = dev->config;
-	struct counter_alif_utimer_data *data = dev->data;
+	const struct counter_alif_utimer_config *cfg = DEV_CFG(dev);
+	struct counter_alif_utimer_data *data = DEV_DATA(dev);
 
 	atomic_or(&data->cc_int_pending, BIT(chan));
 	cfg->set_irq_pending(chan);
@@ -137,8 +144,8 @@ static void set_cc_int_pending(const struct device *dev, uint8_t chan)
 static int32_t set_compare(const struct device *dev, uint8_t chan, uint32_t val,
 		  uint32_t flags)
 {
-	const struct counter_alif_utimer_config *cfg = dev->config;
-	struct counter_alif_utimer_data *data = dev->data;
+	struct counter_alif_utimer_data *data = DEV_DATA(dev);
+	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
 
 	__ASSERT_NO_MSG(data->guard_period < counter_alif_utimer_get_top_value(dev));
 	bool absolute = flags & COUNTER_ALARM_CFG_ABSOLUTE;
@@ -151,15 +158,15 @@ static int32_t set_compare(const struct device *dev, uint8_t chan, uint32_t val,
 	__ASSERT(alif_utimer_check_interrupt_enabled(dev, evt_bit) == 0,
 				"Expected that CC interrupt is disabled.");
 
-	alif_utimer_enable_compare_match(cfg->timer_base, chan);
+	alif_utimer_enable_compare_match(timer_base, chan);
 
 	/* First take care of a risk of an event coming from CC being set to
 	 * next tick. Reconfigure CC to future (now tick is the furthest
 	 * future).
 	 */
-	now = alif_utimer_get_counter_value(cfg->timer_base);
-	alif_utimer_set_compare_value(cfg->timer_base, chan, now);
-	alif_utimer_clear_interrupt(cfg->timer_base, evt_bit);
+	now = alif_utimer_get_counter_value(timer_base);
+	alif_utimer_set_compare_value(timer_base, chan, now);
+	alif_utimer_clear_interrupt(timer_base, evt_bit);
 
 	if (absolute) {
 		max_rel_val = top - data->guard_period;
@@ -180,13 +187,13 @@ static int32_t set_compare(const struct device *dev, uint8_t chan, uint32_t val,
 		val = ticks_add(now, val, top);
 	}
 
-	alif_utimer_set_compare_value(cfg->timer_base, chan, val);
+	alif_utimer_set_compare_value(timer_base, chan, val);
 
 	/* decrement value to detect also case when
 	 * val == alif_utimer_get_counter_value(dev). Otherwise,
 	 * condition would need to include comparing diff against 0.
 	 */
-	diff = ticks_sub(val - 1, alif_utimer_get_counter_value(cfg->timer_base), top);
+	diff = ticks_sub(val - 1, alif_utimer_get_counter_value(timer_base), top);
 	if (diff > max_rel_val) {
 		if (absolute) {
 			err = -ETIME;
@@ -201,7 +208,7 @@ static int32_t set_compare(const struct device *dev, uint8_t chan, uint32_t val,
 			data->alarm[chan].alarm_cb = NULL;
 		}
 	} else {
-		alif_utimer_enable_interrupt(cfg->timer_base, evt_bit);
+		alif_utimer_enable_interrupt(timer_base, evt_bit);
 	}
 
 	return err;
@@ -210,9 +217,9 @@ static int32_t set_compare(const struct device *dev, uint8_t chan, uint32_t val,
 static int32_t counter_alif_utimer_set_alarm(const struct device *dev, uint8_t chan,
 			const struct counter_alarm_cfg *alarm_cfg)
 {
-	struct counter_alif_utimer_data *data = dev->data;
+	const struct counter_alif_utimer_config *cfg = DEV_CFG(dev);
+	struct counter_alif_utimer_data *data = DEV_DATA(dev);
 	struct counter_alif_utimer_ch_data *chdata = &data->alarm[chan];
-	const struct counter_alif_utimer_config *cfg = dev->config;
 
 	if (chan > cfg->counter_info.channels) {
 		LOG_ERR("Invalid counter channel number");
@@ -236,8 +243,9 @@ static int32_t counter_alif_utimer_set_alarm(const struct device *dev, uint8_t c
 
 static int32_t counter_alif_utimer_cancel_alarm(const struct device *dev, uint8_t chan)
 {
-	const struct counter_alif_utimer_config *cfg = dev->config;
-	struct counter_alif_utimer_data *data = dev->data;
+	const struct counter_alif_utimer_config *cfg = DEV_CFG(dev);
+	struct counter_alif_utimer_data *data = DEV_DATA(dev);
+	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
 	struct counter_alif_utimer_ch_data *chdata = &data->alarm[chan];
 	uint8_t evt_bit = chan;
 
@@ -245,8 +253,8 @@ static int32_t counter_alif_utimer_cancel_alarm(const struct device *dev, uint8_
 		LOG_ERR("Invalid counter channel number");
 	}
 
-	alif_utimer_disable_compare_match(cfg->timer_base, chan);
-	alif_utimer_disable_interrupt(cfg->timer_base, evt_bit);
+	alif_utimer_disable_compare_match(timer_base, chan);
+	alif_utimer_disable_interrupt(timer_base, evt_bit);
 	chdata->alarm_cb = NULL;
 	return 0;
 }
@@ -254,8 +262,9 @@ static int32_t counter_alif_utimer_cancel_alarm(const struct device *dev, uint8_
 static int32_t counter_alif_utimer_set_top_value(const struct device *dev,
 			const struct counter_top_cfg *cfg)
 {
-	const struct counter_alif_utimer_config *config = dev->config;
-	struct counter_alif_utimer_data *data = dev->data;
+	const struct counter_alif_utimer_config *config = DEV_CFG(dev);
+	struct counter_alif_utimer_data *data = DEV_DATA(dev);
+	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
 	int err = 0;
 
 	for (int i = 0; i < config->counter_info.channels; i++) {
@@ -269,29 +278,29 @@ static int32_t counter_alif_utimer_set_top_value(const struct device *dev,
 	}
 
 	if (cfg->flags & COUNTER_CONFIG_INFO_COUNT_UP) {
-		alif_utimer_set_up_counter(config->timer_base);
+		alif_utimer_set_up_counter(timer_base);
 	} else {
-		alif_utimer_set_down_counter(config->timer_base);
+		alif_utimer_set_down_counter(timer_base);
 	}
 
-	alif_utimer_disable_interrupt(config->timer_base, CHAN_INTERRUPT_OVER_FLOW_BIT);
-	alif_utimer_set_counter_reload_value(config->timer_base, cfg->ticks);
-	alif_utimer_clear_interrupt(config->timer_base, CHAN_INTERRUPT_OVER_FLOW_BIT);
+	alif_utimer_disable_interrupt(timer_base, CHAN_INTERRUPT_OVER_FLOW_BIT);
+	alif_utimer_set_counter_reload_value(timer_base, cfg->ticks);
+	alif_utimer_clear_interrupt(timer_base, CHAN_INTERRUPT_OVER_FLOW_BIT);
 
 	data->top_cb = cfg->callback;
 	data->top_user_data = cfg->user_data;
 
 	if (!(cfg->flags & COUNTER_TOP_CFG_DONT_RESET)) {
-		alif_utimer_set_counter_value(config->timer_base, 0x0);
-	} else if (alif_utimer_get_counter_value(config->timer_base) >= cfg->ticks) {
+		alif_utimer_set_counter_value(timer_base, 0x0);
+	} else if (alif_utimer_get_counter_value(timer_base) >= cfg->ticks) {
 		err = -ETIME;
 		if (cfg->flags & COUNTER_TOP_CFG_RESET_WHEN_LATE) {
-			alif_utimer_set_counter_value(config->timer_base, 0x0);
+			alif_utimer_set_counter_value(timer_base, 0x0);
 		}
 	}
 
 	if (cfg->callback) {
-		alif_utimer_enable_interrupt(config->timer_base, CHAN_INTERRUPT_OVER_FLOW_BIT);
+		alif_utimer_enable_interrupt(timer_base, CHAN_INTERRUPT_OVER_FLOW_BIT);
 	}
 
 	return err;
@@ -300,7 +309,7 @@ static int32_t counter_alif_utimer_set_top_value(const struct device *dev,
 static int32_t counter_alif_utimer_set_guard_period(const struct device *dev, uint32_t guard,
 						uint32_t flags)
 {
-	struct counter_alif_utimer_data *data = dev->data;
+	struct counter_alif_utimer_data *data = DEV_DATA(dev);
 
 	ARG_UNUSED(flags);
 
@@ -315,14 +324,14 @@ static int32_t counter_alif_utimer_set_guard_period(const struct device *dev, ui
 
 static uint32_t counter_alif_utimer_get_frequrncy(const struct device *dev)
 {
-	struct counter_alif_utimer_data *data = dev->data;
+	struct counter_alif_utimer_data *data = DEV_DATA(dev);
 
 	return data->frequency;
 }
 
 static uint32_t counter_alif_utimer_get_guard_period(const struct device *dev, uint32_t flags)
 {
-	struct counter_alif_utimer_data *data = dev->data;
+	struct counter_alif_utimer_data *data = DEV_DATA(dev);
 
 	ARG_UNUSED(flags);
 	return data->guard_period;
@@ -330,15 +339,15 @@ static uint32_t counter_alif_utimer_get_guard_period(const struct device *dev, u
 
 static void top_irq_handle(const struct device *dev)
 {
-	const struct counter_alif_utimer_config *cfg = dev->config;
-	struct counter_alif_utimer_data *data = dev->data;
+	struct counter_alif_utimer_data *data = DEV_DATA(dev);
+	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
 
 	counter_top_callback_t cb = data->top_cb;
 
-	if ((alif_utimer_get_pending_interrupt(cfg->timer_base) & CHAN_INTERRUPT_OVER_FLOW) &&
-		alif_utimer_check_interrupt_enabled(cfg->timer_base,
+	if ((alif_utimer_get_pending_interrupt(timer_base) & CHAN_INTERRUPT_OVER_FLOW) &&
+		alif_utimer_check_interrupt_enabled(timer_base,
 				CHAN_INTERRUPT_OVER_FLOW_BIT)) {
-		alif_utimer_clear_interrupt(cfg->timer_base, CHAN_INTERRUPT_OVER_FLOW_BIT);
+		alif_utimer_clear_interrupt(timer_base, CHAN_INTERRUPT_OVER_FLOW_BIT);
 		__ASSERT(cb != NULL, "top event enabled - expecting callback");
 		cb(dev, data->top_user_data);
 	}
@@ -346,25 +355,25 @@ static void top_irq_handle(const struct device *dev)
 
 static void alarm_irq_handle(const struct device *dev, uint32_t chan)
 {
-	const struct counter_alif_utimer_config *cfg = dev->config;
-	struct counter_alif_utimer_data *data = dev->data;
+	struct counter_alif_utimer_data *data = DEV_DATA(dev);
+	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
 	struct counter_alif_utimer_ch_data *alarm = &data->alarm[chan];
 	counter_alarm_callback_t cb;
 	uint8_t evt_bit = chan;
-	bool hw_irq_pending = ((alif_utimer_get_pending_interrupt(cfg->timer_base) &
-		BIT(evt_bit)) && alif_utimer_check_interrupt_enabled(cfg->timer_base, evt_bit));
+	bool hw_irq_pending = ((alif_utimer_get_pending_interrupt(timer_base) &
+		BIT(evt_bit)) && alif_utimer_check_interrupt_enabled(timer_base, evt_bit));
 	bool sw_irq_pending = (data->cc_int_pending & evt_bit);
 
 	if (hw_irq_pending || sw_irq_pending) {
-		alif_utimer_clear_interrupt(cfg->timer_base, evt_bit);
+		alif_utimer_clear_interrupt(timer_base, evt_bit);
 		atomic_and(&data->cc_int_pending, ~BIT(evt_bit));
-		alif_utimer_disable_interrupt(cfg->timer_base, evt_bit);
+		alif_utimer_disable_interrupt(timer_base, evt_bit);
 
 		cb = alarm->alarm_cb;
 		alarm->alarm_cb = NULL;
 
 		if (cb) {
-			cb(dev, chan, alif_utimer_get_counter_value(cfg->timer_base),
+			cb(dev, chan, alif_utimer_get_counter_value(timer_base),
 					alarm->alarm_user_data);
 		}
 	}
@@ -385,14 +394,16 @@ static void counter_irq_handler(const void *arg)
 static int32_t counter_alif_utimer_init(const struct device *dev)
 {
 	int32_t ret;
-	const struct counter_alif_utimer_config *cfg = dev->config;
-	struct counter_alif_utimer_data *data = dev->data;
+	const struct counter_alif_utimer_config *cfg = DEV_CFG(dev);
+	struct counter_alif_utimer_data *data = DEV_DATA(dev);
+	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
+	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
 
-	alif_utimer_enable_timer_clock(cfg->global_base, cfg->timer);
-	utimer_set_direction(cfg->timer_base, cfg->counterdirection);
-	alif_utimer_enable_soft_counter_ctrl(cfg->timer_base);
-	alif_utimer_set_counter_reload_value(cfg->timer_base, cfg->counter_info.max_top_value);
-	alif_utimer_enable_counter(cfg->timer_base);
+	alif_utimer_enable_timer_clock(global_base, cfg->timer_id);
+	utimer_set_direction(timer_base, cfg->counterdirection);
+	alif_utimer_enable_soft_counter_ctrl(timer_base);
+	alif_utimer_set_counter_reload_value(timer_base, cfg->counter_info.max_top_value);
+	alif_utimer_enable_counter(timer_base);
 
 	/* get clock rate from clock manager */
 	if (!device_is_ready(cfg->clk_dev)) {
@@ -425,71 +436,73 @@ static const struct counter_driver_api counter_alif_utimer_api = {
 	.set_guard_period = counter_alif_utimer_set_guard_period
 };
 
-#define COUNTER_ALIF_UTIMER(n)                                                                \
-	static void counter_utimer##n##_irq_config(const struct device *dev)                  \
-	{                                                                                     \
-		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, comp_capt_a, irq),                         \
-					DT_INST_IRQ_BY_NAME(n, comp_capt_a, priority),        \
-					counter_irq_handler,                                  \
-					DEVICE_DT_INST_GET(n),                                \
-					0);                                                   \
-		irq_enable((DT_INST_IRQ_BY_NAME(n, comp_capt_a, irq)));                       \
-		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, comp_capt_b, irq),                         \
-					DT_INST_IRQ_BY_NAME(n, comp_capt_b, priority),        \
-					counter_irq_handler,                                  \
-					DEVICE_DT_INST_GET(n),                                \
-					0);                                                   \
-		irq_enable((DT_INST_IRQ_BY_NAME(n, comp_capt_b, irq)));                       \
-		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, overflow, irq),                            \
-					DT_INST_IRQ_BY_NAME(n, overflow, priority),           \
-					counter_irq_handler,                                  \
-					DEVICE_DT_INST_GET(n),                                \
-					0);                                                   \
-		irq_enable((DT_INST_IRQ_BY_NAME(n, overflow, irq)));                          \
-	}                                                                                     \
-	static void set_irq_pending_##n(uint8_t chan)                                         \
-	{                                                                                     \
-		if (chan) {                                                                   \
-			(NVIC_SetPendingIRQ(DT_INST_IRQ_BY_NAME(n, comp_capt_b, irq)));       \
-		} else {                                                                      \
-			(NVIC_SetPendingIRQ(DT_INST_IRQ_BY_NAME(n, comp_capt_a, irq)));       \
-		}                                                                             \
-	}                                                                                     \
-	static uint32_t get_irq_pending_##n(uint8_t chan)                                     \
-	{                                                                                     \
-		if (chan) {                                                                   \
-			return NVIC_GetPendingIRQ(DT_INST_IRQ_BY_NAME(n, comp_capt_b, irq));  \
-		} else {                                                                      \
-			return NVIC_GetPendingIRQ(DT_INST_IRQ_BY_NAME(n, comp_capt_a, irq));  \
-		}                                                                             \
-	}                                                                                     \
-	static struct counter_alif_utimer_data counter_alif_utimer_data_##n;                  \
-	static const struct counter_alif_utimer_config counter_alif_utimer_cfg_##n = {        \
-		.counter_info = {                                                             \
-			.max_top_value = UINT32_MAX,                                          \
-			.flags = ((DT_INST_PROP(n, counter_direction) ==                      \
-					ALIF_UTIMER_COUNTER_DIRECTION_UP) ?                   \
-					COUNTER_CONFIG_INFO_COUNT_UP : 0),                    \
-			.channels = NUM_CHANNELS,                                             \
-		},                                                                            \
-		.global_base = (uint32_t) DT_INST_REG_ADDR_BY_NAME(n, global),                \
-		.timer_base = (uint32_t) DT_INST_REG_ADDR_BY_NAME(n, timer),                  \
-		.timer = DT_INST_PROP(n, timer_id),                                           \
-		.counterdirection = DT_INST_PROP(n, counter_direction),                       \
-		.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),			      \
-		.clkid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, clkid),	              \
-		.irq_config = counter_utimer##n##_irq_config,                                 \
-		.set_irq_pending = set_irq_pending_##n,                                       \
-		.get_irq_pending = get_irq_pending_##n,                                       \
-	};                                                                                    \
-                                                                                              \
-	DEVICE_DT_INST_DEFINE(n,                                                              \
-			      &counter_alif_utimer_init,                                      \
-			      NULL,                                                           \
-			      &counter_alif_utimer_data_##n,                                  \
-			      &counter_alif_utimer_cfg_##n,                                   \
-			      PRE_KERNEL_1,                                                   \
-			      CONFIG_COUNTER_INIT_PRIORITY,                                   \
+#define TIMER(x)	DT_INST_PARENT(x)
+
+#define COUNTER_ALIF_UTIMER(n)                                                                  \
+	static void counter_utimer##n##_irq_config(const struct device *dev)                    \
+	{                                                                                       \
+		IRQ_CONNECT(DT_IRQ_BY_NAME(TIMER(n), comp_capt_a, irq),                         \
+					DT_IRQ_BY_NAME(TIMER(n), comp_capt_a, priority),        \
+					counter_irq_handler,                                    \
+					DEVICE_DT_INST_GET(n),                                  \
+					0);                                                     \
+		irq_enable(DT_IRQ_BY_NAME(TIMER(n), comp_capt_a, irq));                         \
+		IRQ_CONNECT(DT_IRQ_BY_NAME(TIMER(n), comp_capt_b, irq),                         \
+					DT_IRQ_BY_NAME(TIMER(n), comp_capt_b, priority),        \
+					counter_irq_handler,                                    \
+					DEVICE_DT_INST_GET(n),                                  \
+					0);                                                     \
+		irq_enable(DT_IRQ_BY_NAME(TIMER(n), comp_capt_b, irq));                         \
+		IRQ_CONNECT(DT_IRQ_BY_NAME(TIMER(n), overflow, irq),                            \
+					DT_IRQ_BY_NAME(TIMER(n), overflow, priority),           \
+					counter_irq_handler,                                    \
+					DEVICE_DT_INST_GET(n),                                  \
+					0);                                                     \
+		irq_enable(DT_IRQ_BY_NAME(TIMER(n), overflow, irq));                            \
+	}                                                                                       \
+	static void set_irq_pending_##n(uint8_t chan)                                           \
+	{                                                                                       \
+		if (chan) {                                                                     \
+			NVIC_SetPendingIRQ(DT_IRQ_BY_NAME(TIMER(n), comp_capt_b, irq));         \
+		} else {                                                                        \
+			NVIC_SetPendingIRQ(DT_IRQ_BY_NAME(TIMER(n), comp_capt_a, irq));         \
+		}                                                                               \
+	}                                                                                       \
+	static uint32_t get_irq_pending_##n(uint8_t chan)                                       \
+	{                                                                                       \
+		if (chan) {                                                                     \
+			return NVIC_GetPendingIRQ(DT_IRQ_BY_NAME(TIMER(n), comp_capt_b, irq));  \
+		} else {                                                                        \
+			return NVIC_GetPendingIRQ(DT_IRQ_BY_NAME(TIMER(n), comp_capt_a, irq));  \
+		}                                                                               \
+	}                                                                                       \
+	static struct counter_alif_utimer_data counter_alif_utimer_data_##n;                    \
+	static const struct counter_alif_utimer_config counter_alif_utimer_cfg_##n = {          \
+		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(global, DT_INST_PARENT(n)),	                \
+		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(timer, DT_INST_PARENT(n)),		        \
+		.counter_info = {                                                               \
+			.max_top_value = UINT32_MAX,                                            \
+			.flags = ((DT_PROP(TIMER(n), counter_direction) ==                      \
+					 ALIF_UTIMER_COUNTER_DIRECTION_UP) ?                    \
+					 COUNTER_CONFIG_INFO_COUNT_UP : 0),                     \
+			.channels = NUM_CHANNELS,                                               \
+		},                                                                              \
+		.timer_id = DT_PROP(TIMER(n), timer_id),                                        \
+		.counterdirection = DT_PROP(TIMER(n), counter_direction),                       \
+		.clk_dev = DEVICE_DT_GET(DT_CLOCKS_CTLR(TIMER(n))),                             \
+		.clkid = (clock_control_subsys_t)DT_CLOCKS_CELL(TIMER(n), clkid),               \
+		.irq_config = counter_utimer##n##_irq_config,                                   \
+		.set_irq_pending = set_irq_pending_##n,                                         \
+		.get_irq_pending = get_irq_pending_##n,                                         \
+	};                                                                                      \
+                                                                                                \
+	DEVICE_DT_INST_DEFINE(n,                                                                \
+			      &counter_alif_utimer_init,                                        \
+			      NULL,                                                             \
+			      &counter_alif_utimer_data_##n,                                    \
+			      &counter_alif_utimer_cfg_##n,                                     \
+			      PRE_KERNEL_1,                                                     \
+			      CONFIG_COUNTER_INIT_PRIORITY,                                     \
 			      &counter_alif_utimer_api);
 
 DT_INST_FOREACH_STATUS_OKAY(COUNTER_ALIF_UTIMER);

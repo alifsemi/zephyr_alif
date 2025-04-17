@@ -5,7 +5,7 @@
 config COUNTER_ALIF_UTIMER
 	bool "ALIF Universal Timer Counter driver"
 	default y
-	depends on DT_HAS_ALIF_UTIMER_ENABLED
+	depends on DT_HAS_ALIF_COUNTER_ENABLED
 	select USE_ALIF_HAL_UTIMER
 	help
-	  Enable counter driver for UTIMER driver.
+	  Enable ALIF UTIMER counter driver.
