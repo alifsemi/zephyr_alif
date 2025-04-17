@@ -1,0 +1,28 @@
+# Copyright (C) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Alif DAC controller
+
+compatible: "alif,dac"
+
+include: [base.yaml, pinctrl-device.yaml]
+
+properties:
+  reg:
+    required: true
+
+  dac_twoscomp_in:
+    type: int
+    required: true
+    description: Converts two's complement to unsigned binary data
+    enum:
+      - 0
+      - 1
+
+  input_mux_val:
+    type: int
+    required: true
+    description: DAC input through bypass mode
+    enum:
+      - 0
+      - 1
