@@ -279,7 +279,8 @@
 			clock-frequency = <160000000>;
 			interrupts = <50 0>;
 			reg-shift = <2>;
-			current-speed = <1000000>;
+			current-speed = <3000000>;
+			dlf = <5>;
 			hw-flow-control;
 			status = "okay";
 		};
@@ -290,7 +291,8 @@
 			clock-frequency = <160000000>;
 			interrupts = <51 0>;
 			reg-shift = <2>;
-			current-speed = <1000000>;
+			current-speed = <3000000>;
+			dlf = <5>;
 			hw-flow-control;
 			status = "okay";
 		};

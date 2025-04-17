@@ -18,6 +18,7 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/byteorder.h>
 #include <string.h>
+#include <zephyr/sys/__assert.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/hci.h>
@@ -519,12 +520,19 @@ static int hci_alif_close(void)
 
 static int hci_alif_open(void)
 {
+	if (!IS_ENABLED(CONFIG_UART_USE_RUNTIME_CONFIGURE)) {
+		__ASSERT(0, "Baudrate must be readable from the UART driver");
+	}
+
 	int ret;
 	k_tid_t tid;
 
-	LOG_DBG("");
+	struct uart_config cfg;
+	
+	uart_config_get(hci_alif_dev, &cfg);
+	uint32_t baudrate = cfg.baudrate;
 
-	ret = take_es0_into_use();
+	ret = take_es0_into_use(baudrate);
 	if (ret < 0) {
 		return -EIO;
 	}
