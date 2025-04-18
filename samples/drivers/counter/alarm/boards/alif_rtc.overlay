@@ -17,4 +17,8 @@
 
 &utimer0 {
 	status = "disabled";
+
+	counter {
+		status = "disabled";
+	}
 };
