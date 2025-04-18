@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define DT_DRV_COMPAT alif_utimer
+#define DT_DRV_COMPAT alif_counter
 
 #include <zephyr/drivers/counter.h>
 #include <zephyr/irq.h>
@@ -425,71 +425,73 @@ static const struct counter_driver_api counter_alif_utimer_api = {
 	.set_guard_period = counter_alif_utimer_set_guard_period
 };
 
-#define COUNTER_ALIF_UTIMER(n)                                                                \
-	static void counter_utimer##n##_irq_config(const struct device *dev)                  \
-	{                                                                                     \
-		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, comp_capt_a, irq),                         \
-					DT_INST_IRQ_BY_NAME(n, comp_capt_a, priority),        \
-					counter_irq_handler,                                  \
-					DEVICE_DT_INST_GET(n),                                \
-					0);                                                   \
-		irq_enable((DT_INST_IRQ_BY_NAME(n, comp_capt_a, irq)));                       \
-		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, comp_capt_b, irq),                         \
-					DT_INST_IRQ_BY_NAME(n, comp_capt_b, priority),        \
-					counter_irq_handler,                                  \
-					DEVICE_DT_INST_GET(n),                                \
-					0);                                                   \
-		irq_enable((DT_INST_IRQ_BY_NAME(n, comp_capt_b, irq)));                       \
-		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, overflow, irq),                            \
-					DT_INST_IRQ_BY_NAME(n, overflow, priority),           \
-					counter_irq_handler,                                  \
-					DEVICE_DT_INST_GET(n),                                \
-					0);                                                   \
-		irq_enable((DT_INST_IRQ_BY_NAME(n, overflow, irq)));                          \
-	}                                                                                     \
-	static void set_irq_pending_##n(uint8_t chan)                                         \
-	{                                                                                     \
-		if (chan) {                                                                   \
-			(NVIC_SetPendingIRQ(DT_INST_IRQ_BY_NAME(n, comp_capt_b, irq)));       \
-		} else {                                                                      \
-			(NVIC_SetPendingIRQ(DT_INST_IRQ_BY_NAME(n, comp_capt_a, irq)));       \
-		}                                                                             \
-	}                                                                                     \
-	static uint32_t get_irq_pending_##n(uint8_t chan)                                     \
-	{                                                                                     \
-		if (chan) {                                                                   \
-			return NVIC_GetPendingIRQ(DT_INST_IRQ_BY_NAME(n, comp_capt_b, irq));  \
-		} else {                                                                      \
-			return NVIC_GetPendingIRQ(DT_INST_IRQ_BY_NAME(n, comp_capt_a, irq));  \
-		}                                                                             \
-	}                                                                                     \
-	static struct counter_alif_utimer_data counter_alif_utimer_data_##n;                  \
-	static const struct counter_alif_utimer_config counter_alif_utimer_cfg_##n = {        \
-		.counter_info = {                                                             \
-			.max_top_value = UINT32_MAX,                                          \
-			.flags = ((DT_INST_PROP(n, counter_direction) ==                      \
-					ALIF_UTIMER_COUNTER_DIRECTION_UP) ?                   \
-					COUNTER_CONFIG_INFO_COUNT_UP : 0),                    \
-			.channels = NUM_CHANNELS,                                             \
-		},                                                                            \
-		.global_base = (uint32_t) DT_INST_REG_ADDR_BY_NAME(n, global),                \
-		.timer_base = (uint32_t) DT_INST_REG_ADDR_BY_NAME(n, timer),                  \
-		.timer = DT_INST_PROP(n, timer_id),                                           \
-		.counterdirection = DT_INST_PROP(n, counter_direction),                       \
-		.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),			      \
-		.clkid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, clkid),	              \
-		.irq_config = counter_utimer##n##_irq_config,                                 \
-		.set_irq_pending = set_irq_pending_##n,                                       \
-		.get_irq_pending = get_irq_pending_##n,                                       \
-	};                                                                                    \
-                                                                                              \
-	DEVICE_DT_INST_DEFINE(n,                                                              \
-			      &counter_alif_utimer_init,                                      \
-			      NULL,                                                           \
-			      &counter_alif_utimer_data_##n,                                  \
-			      &counter_alif_utimer_cfg_##n,                                   \
-			      PRE_KERNEL_1,                                                   \
-			      CONFIG_COUNTER_INIT_PRIORITY,                                   \
+#define TIMER(x)	DT_INST_PARENT(x)
+
+#define COUNTER_ALIF_UTIMER(n)                                                                  \
+	static void counter_utimer##n##_irq_config(const struct device *dev)                    \
+	{                                                                                       \
+		IRQ_CONNECT(DT_IRQ_BY_NAME(TIMER(n), comp_capt_a, irq),                         \
+					DT_IRQ_BY_NAME(TIMER(n), comp_capt_a, priority),        \
+					counter_irq_handler,                                    \
+					DEVICE_DT_INST_GET(n),                                  \
+					0);                                                     \
+		irq_enable(DT_IRQ_BY_NAME(TIMER(n), comp_capt_a, irq));                         \
+		IRQ_CONNECT(DT_IRQ_BY_NAME(TIMER(n), comp_capt_b, irq),                         \
+					DT_IRQ_BY_NAME(TIMER(n), comp_capt_b, priority),        \
+					counter_irq_handler,                                    \
+					DEVICE_DT_INST_GET(n),                                  \
+					0);                                                     \
+		irq_enable(DT_IRQ_BY_NAME(TIMER(n), comp_capt_b, irq));                         \
+		IRQ_CONNECT(DT_IRQ_BY_NAME(TIMER(n), overflow, irq),                            \
+					DT_IRQ_BY_NAME(TIMER(n), overflow, priority),           \
+					counter_irq_handler,                                    \
+					DEVICE_DT_INST_GET(n),                                  \
+					0);                                                     \
+		irq_enable(DT_IRQ_BY_NAME(TIMER(n), overflow, irq));                            \
+	}                                                                                       \
+	static void set_irq_pending_##n(uint8_t chan)                                           \
+	{                                                                                       \
+		if (chan) {                                                                     \
+			NVIC_SetPendingIRQ(DT_IRQ_BY_NAME(TIMER(n), comp_capt_b, irq));         \
+		} else {                                                                        \
+			NVIC_SetPendingIRQ(DT_IRQ_BY_NAME(TIMER(n), comp_capt_a, irq));         \
+		}                                                                               \
+	}                                                                                       \
+	static uint32_t get_irq_pending_##n(uint8_t chan)                                       \
+	{                                                                                       \
+		if (chan) {                                                                     \
+			return NVIC_GetPendingIRQ(DT_IRQ_BY_NAME(TIMER(n), comp_capt_b, irq));  \
+		} else {                                                                        \
+			return NVIC_GetPendingIRQ(DT_IRQ_BY_NAME(TIMER(n), comp_capt_a, irq));  \
+		}                                                                               \
+	}                                                                                       \
+	static struct counter_alif_utimer_data counter_alif_utimer_data_##n;                    \
+	static const struct counter_alif_utimer_config counter_alif_utimer_cfg_##n = {          \
+		.counter_info = {                                                               \
+			.max_top_value = UINT32_MAX,                                            \
+			.flags = ((DT_PROP(TIMER(n), counter_direction) ==                      \
+					 ALIF_UTIMER_COUNTER_DIRECTION_UP) ?                    \
+					 COUNTER_CONFIG_INFO_COUNT_UP : 0),                     \
+			.channels = NUM_CHANNELS,                                               \
+		},                                                                              \
+		.global_base = (uint32_t) DT_REG_ADDR_BY_NAME(TIMER(n), global),                \
+		.timer_base = (uint32_t) DT_REG_ADDR_BY_NAME(TIMER(n), timer),                  \
+		.timer = DT_PROP(TIMER(n), timer_id),                                           \
+		.counterdirection = DT_PROP(TIMER(n), counter_direction),                       \
+		.clk_dev = DEVICE_DT_GET(DT_CLOCKS_CTLR(TIMER(n))),			        \
+		.clkid = (clock_control_subsys_t)DT_CLOCKS_CELL(TIMER(n), clkid),	        \
+		.irq_config = counter_utimer##n##_irq_config,                                   \
+		.set_irq_pending = set_irq_pending_##n,                                         \
+		.get_irq_pending = get_irq_pending_##n,                                         \
+	};                                                                                      \
+                                                                                                \
+	DEVICE_DT_INST_DEFINE(n,                                                                \
+			      &counter_alif_utimer_init,                                        \
+			      NULL,                                                             \
+			      &counter_alif_utimer_data_##n,                                    \
+			      &counter_alif_utimer_cfg_##n,                                     \
+			      PRE_KERNEL_1,                                                     \
+			      CONFIG_COUNTER_INIT_PRIORITY,                                     \
 			      &counter_alif_utimer_api);
 
 DT_INST_FOREACH_STATUS_OKAY(COUNTER_ALIF_UTIMER);
