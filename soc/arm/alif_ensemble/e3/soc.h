@@ -29,6 +29,16 @@
 #define VBAT_PWR_CTRL		(VBAT_BASE + 0x8)
 #define VBAT_RTC_CLK_EN		(VBAT_BASE + 0x10)
 
+/* ANA Register */
+#define ANA_BASE               0x1A60A000
+#define ANA_VBAT_REG1          (ANA_BASE + 0x38)
+#define ANA_VBAT_REG2          (ANA_BASE + 0x3C)
+
+/* Expansion Slave registers. */
+#define EXPSLV_BASE            0x4902F000
+#define EXPSLV_ADC_CTRL        (EXPSLV_BASE + 0x30)
+#define EXPSLV_CMP_CTRL        (EXPSLV_BASE + 0x38)
+
 /* Expansion Slave registers. */
 #define EXPSLV_BASE		0x4902F000
 #define EXPSLV_EXPMST0_CTRL	(EXPSLV_BASE)
