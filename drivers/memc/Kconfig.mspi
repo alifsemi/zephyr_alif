@@ -31,5 +31,6 @@ config MEMC_MSPI_IS66WV
 	depends on DT_HAS_IS66WV_ENABLED
 	depends on $(dt_compat_on_bus,$(DT_COMPAT_IS66WV),mspi)
 	select MEMC_MSPI
+	select MSPI_AMBIQ_CONTROLLER if SOC_FAMILY_AMBIQ
 
 endmenu
