@@ -66,14 +66,33 @@ pipeline {
                     git log -4
                     ls -la ../
 
+                    commit=$(git log -n 1 --pretty=format:"%H")
+                    commit_author_name=$(git show -s --format="%an" "$commit")
+                    commit_author_email=$(git show -s --format="%ae" "$commit")
+                    commit_body=$(git show -s --format="%b" "$commit")
+                    commit_subject=$(git show -s --format="%s" "$commit")
+                    commit_complete_msg=$(git show -s --format="%B" "$commit")
+
                     git format-patch -1
                     log=$(./scripts/checkpatch.pl --patch *.patch)
-                    echo "$log"
+                    echo -e "$log"
                     result=$(echo "$log" | grep ".patch total:")
-                    echo "$result"
-                    errors=$(echo "${result}"   | sed -n "s/.*: \\([0-9]\\+\\) errors.*/\\1/p")
+                    echo -e "$result"
+                    check_patch_errors=$(echo "${result}"   | sed -n "s/.*: \\([0-9]\\+\\) errors.*/\\1/p")
                     warnings=$(echo "${result}" | sed -n "s/.*errors, \\([0-9]\\+\\) warnings.*/\\1/p")
-                    echo "🎯Checkpatch has Errors: $errors Warnings: $warnings\n\n"
+                    echo -e "🎯Check-Patch has Errors=> $check_patch_errors Warnings: $warnings\n\n"
+
+                    pr_checker_log=$(${VALIDATION_SCRIPT_DIR}/pr_commit_checker.sh)
+                    pr_checker_err=$?
+                    echo -e "🎯PR Checker=>\n$pr_checker_log"
+
+                    gitlint_log=$(git log -1 --pretty=%B | gitlint 2>&1)
+                    if [ -n "$gitlint_log" ] ; then
+                        gitlint_err=1
+                        echo -e "🎯GITLINT log=>\n$gitlint_log"
+                    else
+                       gitlint_err=0
+                    fi
 
                     mapfile -t all_alif_boards_cfgs < <(west boards | grep "alif" | grep -v "fpga")
                     test_apps=("samples/hello_world")
@@ -89,7 +108,7 @@ pipeline {
                         for boardName in ${!all_alif_boards_cfgs[@]}
                         do
                            total_cfg_run_cnt=$((total_cfg_run_cnt + 1))
-                           echo "🚩 Building for Board: ${all_alif_boards_cfgs[boardName]} AND test-app: ${test_apps[testApp]}"
+                           echo -e "🚩 Building for Board: ${all_alif_boards_cfgs[boardName]} AND test-app: ${test_apps[testApp]}"
                            if [ -d build ] ; then
                               rm -rf build
                               echo -e "❌ Deleting Build folder..."
@@ -108,11 +127,13 @@ pipeline {
                     done
                     echo -e "✅ All Build is completed."
                     echo -e "\n\n"
-                    echo -e " 🏆Check-Patch Result =>  Error: $errors, Warnings: $warnings"
+                    echo -e " 🏆GitLint Result     =>  ${gitlint_err}"
+                    echo -e " 🏆PR Checker  Result =>  ${pr_checker_err}"
+                    echo -e " 🏆Check-Patch Result =>  Error: $check_patch_errors, Warnings: $warnings"
                     echo -e " 🏆Success: $((actual_cfg_run_cnt - fail_cfg_run_cnt)), Failed: $fail_cfg_run_cnt, Skipped: $skipped_cfg_run_cnt"
                     echo -e " 🔥Total Run => ($actual_cfg_run_cnt/$total_cfg_run_cnt)"
-                    total_buildError=$((total_buildError + errors))
-                    exit $total_buildError
+                    total_jenkins_Error=$((total_buildError + check_patch_errors + pr_checker_err + gitlint_err))
+                    exit $total_jenkins_Error
                     '''
                 }
             }
