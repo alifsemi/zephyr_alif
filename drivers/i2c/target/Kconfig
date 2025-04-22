@@ -25,6 +25,16 @@ config I2C_TARGET_BUFFER_MODE
 	help
 	  This is an option to enable buffer mode.
 
+if I2C_TARGET_BUFFER_MODE
+
+config I2C_TAR_DATA_BUF_MAX_LEN
+	int "I2C Target device data buffer maximum length"
+	default 32
+	help
+	  I2C Target device data buffer length.
+
+endif #I2C_TARGET_BUFFER_MODE
+
 source "drivers/i2c/target/Kconfig.eeprom"
 
 endif # I2C_TARGET

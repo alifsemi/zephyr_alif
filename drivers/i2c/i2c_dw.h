@@ -155,6 +155,12 @@ struct i2c_dw_dev_config {
 	bool xfr_status;
 #endif
 
+#ifdef CONFIG_I2C_TARGET_BUFFER_MODE
+	uint8_t			data_read_buf[CONFIG_I2C_TAR_DATA_BUF_MAX_LEN];
+	uint8_t			*data_write_buf;
+	uint32_t		bytes_to_write;
+	uint32_t		buf_byte_idx;
+#endif
 	struct i2c_target_config *slave_cfg;
 };
 
