@@ -422,7 +422,11 @@ static int emmc_dma_init(const struct device *dev, struct sdhc_data *data, bool 
 	}
 
 	if (IS_ENABLED(CONFIG_INTEL_EMMC_HOST_ADMA)) {
+#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_FAMILY_BALLETTO)
+		uint8_t *buff = local_to_global(data->data);
+#else
 		uint8_t *buff = data->data;
+#endif
 
 		/* Setup DMA trasnfer using ADMA2 */
 		memset(emmc->desc_table, 0, sizeof(emmc->desc_table));
@@ -449,15 +453,25 @@ static int emmc_dma_init(const struct device *dev, struct sdhc_data *data, bool 
 #if defined(CONFIG_CACHE_MANAGEMENT)
 		sys_cache_data_flush_range(&emmc->desc_table[0], sizeof(emmc->desc_table));
 #endif
+#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_FAMILY_BALLETTO)
+		regs->adma_sys_addr1 = (uint32_t)((uintptr_t)local_to_global(emmc->desc_table) &
+								ADDRESS_32BIT_MASK);
+#else
 		regs->adma_sys_addr1 =
 		(uint32_t)(((uintptr_t)emmc->desc_table) & ADDRESS_32BIT_MASK);
+#endif
 		regs->adma_sys_addr2 =
 			(uint32_t)(((uintptr_t)emmc->desc_table >> 32) & ADDRESS_32BIT_MASK);
+
 		LOG_DBG("adma: %llx %x %p", emmc->desc_table[0], regs->adma_sys_addr1,
 			emmc->desc_table);
 	} else {
 		/* Setup DMA trasnfer using SDMA */
+#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_FAMILY_BALLETTO)
+		regs->sdma_sysaddr = (uint32_t)local_to_global(data->data);
+#else
 		regs->sdma_sysaddr = (uint32_t)((uintptr_t)data->data);
+#endif
 		LOG_DBG("sdma_sysaddr: %x", regs->sdma_sysaddr);
 	}
 	return 0;
