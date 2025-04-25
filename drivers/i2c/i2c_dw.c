@@ -534,6 +534,7 @@ static void i2c_dw_isr(const struct device *port)
 				while (test_bit_status_tfnt(reg_base)) {
 					if (dw->buf_byte_idx >= dw->bytes_to_write) {
 						dw->buf_byte_idx = 0;
+						dw->data_write_buf = NULL;
 						break;
 					}
 
