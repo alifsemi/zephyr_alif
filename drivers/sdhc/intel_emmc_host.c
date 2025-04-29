@@ -423,7 +423,7 @@ static int emmc_dma_init(const struct device *dev, struct sdhc_data *data, bool 
 
 	if (IS_ENABLED(CONFIG_INTEL_EMMC_HOST_ADMA)) {
 #if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_FAMILY_BALLETTO)
-		uint8_t *buff = local_to_global(data->data);
+		uint8_t *buff = (uint8_t *)local_to_global(data->data);
 #else
 		uint8_t *buff = data->data;
 #endif
@@ -435,7 +435,8 @@ static int emmc_dma_init(const struct device *dev, struct sdhc_data *data, bool 
 		__ASSERT_NO_MSG(data->blocks < CONFIG_INTEL_EMMC_HOST_ADMA_DESC_SIZE);
 #endif
 		for (int i = 0; i < data->blocks; i++) {
-			emmc->desc_table[i] = ((uint64_t)buff) << EMMC_HOST_ADMA_BUFF_ADD_LOC;
+			emmc->desc_table[i] = ((uint64_t)(uint32_t)buff) <<
+									EMMC_HOST_ADMA_BUFF_ADD_LOC;
 			emmc->desc_table[i] |= data->block_size << EMMC_HOST_ADMA_BUFF_LEN_LOC;
 
 			if (i == (data->blocks - 1u)) {
@@ -461,7 +462,8 @@ static int emmc_dma_init(const struct device *dev, struct sdhc_data *data, bool 
 		(uint32_t)(((uintptr_t)emmc->desc_table) & ADDRESS_32BIT_MASK);
 #endif
 		regs->adma_sys_addr2 =
-			(uint32_t)(((uintptr_t)emmc->desc_table >> 32) & ADDRESS_32BIT_MASK);
+			(uint32_t)((((uint64_t)(uintptr_t)emmc->desc_table) >> 32) &
+					ADDRESS_32BIT_MASK);
 
 		LOG_DBG("adma: %llx %x %p", emmc->desc_table[0], regs->adma_sys_addr1,
 			emmc->desc_table);
@@ -1088,10 +1090,9 @@ static int emmc_set_io(const struct device *dev, struct sdhc_io *ios)
 	if (host_io->bus_width != ios->bus_width) {
 		LOG_DBG("bus_width: %d", host_io->bus_width);
 
-		if (ios->bus_width == SDHC_BUS_WIDTH4BIT) {
+		if (ios->bus_width == SDHC_BUS_WIDTH8BIT) {
 			SET_BITS(regs->host_ctrl1, EMMC_HOST_CTRL1_EXT_DAT_WIDTH_LOC,
-				 EMMC_HOST_CTRL1_EXT_DAT_WIDTH_MASK,
-				 ios->bus_width == SDHC_BUS_WIDTH8BIT ? 1 : 0);
+				 EMMC_HOST_CTRL1_EXT_DAT_WIDTH_MASK, 1);
 		} else {
 			SET_BITS(regs->host_ctrl1, EMMC_HOST_CTRL1_DAT_WIDTH_LOC,
 				 EMMC_HOST_CTRL1_DAT_WIDTH_MASK,

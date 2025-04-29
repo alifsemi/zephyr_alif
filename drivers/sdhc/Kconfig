@@ -50,9 +50,10 @@ config SDHC_SUPPORTS_NATIVE_MODE
 	  required. Enables native protocol in SD protocol stack.
 
 config SDHC_RSP_136_HAS_CRC
-	bool
+	bool "Enable SDHC Response 136 CRC Shifting"
+	default n
 	help
-	  enables the response 136 CRC shifting
+	  CRC shifting for sdmmc response 136
 
 module = SDHC
 module-str = sdhc
