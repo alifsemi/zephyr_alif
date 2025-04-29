@@ -13,7 +13,6 @@
 #define __IOM           volatile
 #define __OM            volatile
 #define __IM            volatile const
-#define __STATIC_INLINE static inline
 
 /**
  * enum I2S_INSTANCE
