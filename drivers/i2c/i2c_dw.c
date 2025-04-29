@@ -367,7 +367,6 @@ static void i2c_dw_isr(const struct device *port)
 	uint32_t value;
 	int ret = 0;
 	uint32_t reg_base = get_regs(port);
-	uint8_t rx_fifo_level;
 
 	/* Cache ic_intr_stat for processing, so there is no need to read
 	 * the register multiple times.
@@ -457,6 +456,7 @@ static void i2c_dw_isr(const struct device *port)
 #ifdef CONFIG_I2C_TARGET
 		const struct i2c_target_callbacks *slave_cb = dw->slave_cfg->callbacks;
 		uint32_t slave_activity = test_bit_status_activity(reg_base);
+		uint8_t rx_fifo_level;
 		uint8_t data;
 		uint8_t index;
 
