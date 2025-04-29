@@ -4,11 +4,11 @@
  */
 
 /*
- * I2S_1 => Speaker Output
- * I2S_3 => Mic Input
+ * I2S_4(LPI2S) => Speaker Output
+ * I2S_3        => Mic Input
  */
 
-i2s_tx: &i2s1 {
+i2s_tx: &i2s4 {
 	status = "okay";
 };
 
