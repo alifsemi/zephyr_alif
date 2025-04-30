@@ -28,6 +28,13 @@
 			reg = <0x2000a000 DT_SIZE_K(1496)>;
 			zephyr,memory-region = "DTCM";
 		};
+
+		ns: ns@2002a000 {
+			compatible = "zephyr,memory-region", "mmio-region";
+			reg = <0x2002a000 DT_SIZE_K(384)>;
+			zephyr,memory-region = "NS";
+		};
+
 		peripheral@40000000 {
 			#address-cells = < 0x1 >;
 			#size-cells = < 0x1 >;
@@ -64,9 +71,7 @@
 			reg = <0x48001000 0x1000 0x48000000 0x24>;
 			reg-names = "timer", "global";
 			timer-id = <0>;
-			clock-frequency = <24000000>;
 			counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-			driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 			status = "disabled";
 
 			pwm {
@@ -81,9 +86,7 @@
 			reg = <0x48002000 0x1000 0x48000000 0x24>;
 			reg-names = "timer", "global";
 			timer-id = <1>;
-			clock-frequency = <24000000>;
 			counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-			driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 			status = "disabled";
 
 			pwm {
@@ -98,9 +101,7 @@
 			reg = <0x48003000 0x1000 0x48000000 0x24>;
 			reg-names = "timer", "global";
 			timer-id = <2>;
-			clock-frequency = <24000000>;
 			counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-			driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 			status = "disabled";
 
 			pwm {
@@ -115,9 +116,7 @@
 			reg = <0x48004000 0x1000 0x48000000 0x24>;
 			reg-names = "timer", "global";
 			timer-id = <3>;
-			clock-frequency = <24000000>;
 			counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
-			driver-enable = < ALIF_UTIMER_DRIVER_A_OUTPUT_ENABLE >;
 			status = "disabled";
 
 			pwm {
