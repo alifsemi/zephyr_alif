@@ -1005,6 +1005,7 @@
 		clocks = <&syst_hclk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
+		rx-delay = <4>;
 		status = "disabled";
 	};
 	spi1: spi@48104000 {
@@ -1021,6 +1022,7 @@
 		clocks = <&syst_hclk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
+		rx-delay = <4>;
 		status = "disabled";
 	};
 	spi2: spi@48105000 {
@@ -1037,6 +1039,7 @@
 		clocks = <&syst_hclk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
+		rx-delay = <4>;
 		status = "disabled";
 	};
 	spi3: spi@48106000 {
@@ -1053,6 +1056,7 @@
 		clocks = <&syst_hclk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
+		rx-delay = <4>;
 		status = "disabled";
 	};
 	spi4: lpspi@43000000 {
@@ -1068,6 +1072,7 @@
 		clocks = <&syst_pclk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
+		rx-delay = <4>;
 		status = "disabled";
 	};
 

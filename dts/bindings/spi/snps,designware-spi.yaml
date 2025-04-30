@@ -53,3 +53,15 @@ properties:
     enum:
       - 16
       - 32
+
+  rx-delay:
+    type: int
+    description: |
+      The number of SPI_CLK cycles that are delayed before the
+      actual sample of the RxD input occurs.
+
+  slv-slct-toggle:
+    type: boolean
+    description: |
+      Enable or Disable the chip select line toggle between
+      consecutive data frames.
