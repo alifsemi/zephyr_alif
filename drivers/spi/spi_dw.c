@@ -634,6 +634,13 @@ static int transceive(const struct device *dev,
 	reg_data &= (spi->dwc_ssi) ? ~DWC_SSI_SPI_CTRLR0_TMOD_RESET : ~DW_SPI_CTRLR0_TMOD_RESET;
 	reg_data |= tmod;
 
+	/* Updating SSTE */
+	if (spi->dwc_ssi) {
+		reg_data |= (info->slv_slct_toggle) ? DWC_SSI_CTRLR0_SSTE : ~DWC_SSI_CTRLR0_SSTE;
+	} else {
+		reg_data |= (info->slv_slct_toggle) ? DW_SPI_CTRLR0_SSTE : ~DW_SPI_CTRLR0_SSTE;
+	}
+
 	write_ctrlr0(info, reg_data);
 
 	/* Set buffers info */
@@ -810,6 +817,9 @@ int spi_dw_init(const struct device *dev)
 
 	info->config_func();
 
+	/* update rx sample delay */
+	write_rxdly(info, info->rx_delay);
+
 	/* Masking interrupt and making sure controller is disabled */
 	write_imr(info, DW_SPI_IMR_MASK);
 	clear_bit_ssienr(info);
@@ -838,19 +848,19 @@ int spi_dw_init(const struct device *dev)
 }
 
 #define SPI_DW_INST_DMA_IS_ENABLED(inst)                                       \
-			UTIL_OR(DT_INST_DMAS_HAS_NAME(inst, txdma),                        \
+			UTIL_OR(DT_INST_DMAS_HAS_NAME(inst, txdma),            \
 				DT_INST_DMAS_HAS_NAME(inst, rxdma))
 
-#define SPI_DW_DMA_INIT(inst)                                                  \
-	IF_ENABLED(DT_INST_DMAS_HAS_NAME(inst, txdma),                             \
+#define SPI_DW_DMA_INIT(inst)                                                          \
+	IF_ENABLED(DT_INST_DMAS_HAS_NAME(inst, txdma),                                 \
 		(.dma_tx.enabled = 1,                                                  \
 		 .dma_tx.ch = DT_INST_DMAS_CELL_BY_NAME(inst, txdma, channel),         \
 		 .dma_tx.periph = DT_INST_DMAS_CELL_BY_NAME(inst, txdma, periph),))    \
-	IF_ENABLED(DT_INST_DMAS_HAS_NAME(inst, rxdma),                             \
+	IF_ENABLED(DT_INST_DMAS_HAS_NAME(inst, rxdma),                                 \
 		(.dma_rx.enabled = 1,                                                  \
 		 .dma_rx.ch = DT_INST_DMAS_CELL_BY_NAME(inst, rxdma, channel),         \
 		 .dma_rx.periph = DT_INST_DMAS_CELL_BY_NAME(inst, rxdma, periph),))    \
-	COND_CODE_1(DT_INST_DMAS_HAS_NAME(inst, txdma),                            \
+	COND_CODE_1(DT_INST_DMAS_HAS_NAME(inst, txdma),                                \
 		(.dma_dev = DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_NAME(inst, txdma)),),   \
 		(.dma_dev = DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_NAME(inst, rxdma)),))
 
@@ -858,37 +868,37 @@ int spi_dw_init(const struct device *dev)
 void spi_dw_irq_config_##inst(void)                                \
 {                                                                  \
 COND_CODE_1(IS_EQ(DT_NUM_IRQS(DT_DRV_INST(inst)), 1),              \
-	(IRQ_CONNECT(DT_INST_IRQN(inst),                           \
-		DT_INST_IRQ(inst, priority),                       \
-		spi_dw_isr, DEVICE_DT_INST_GET(inst),              \
-		0);                                                \
-	irq_enable(DT_INST_IRQN(inst));),                          \
-	(IRQ_CONNECT(DT_INST_IRQ_BY_NAME(inst, rx_avail, irq),     \
-		DT_INST_IRQ_BY_NAME(inst, rx_avail, priority),     \
-		spi_dw_isr, DEVICE_DT_INST_GET(inst),              \
-		0);                                                \
-	IRQ_CONNECT(DT_INST_IRQ_BY_NAME(inst, tx_req, irq),        \
-		DT_INST_IRQ_BY_NAME(inst, tx_req, priority),       \
-		spi_dw_isr, DEVICE_DT_INST_GET(inst),              \
-		0);                                                \
-	IRQ_CONNECT(DT_INST_IRQ_BY_NAME(inst, err_int, irq),       \
-		DT_INST_IRQ_BY_NAME(inst, err_int, priority),      \
-		spi_dw_isr, DEVICE_DT_INST_GET(inst),              \
-		0);                                                \
-	irq_enable(DT_INST_IRQ_BY_NAME(inst, rx_avail, irq));      \
-	irq_enable(DT_INST_IRQ_BY_NAME(inst, tx_req, irq));        \
-	irq_enable(DT_INST_IRQ_BY_NAME(inst, err_int, irq));))     \
+	(IRQ_CONNECT(DT_INST_IRQN(inst),                                   \
+		DT_INST_IRQ(inst, priority),                               \
+		spi_dw_isr, DEVICE_DT_INST_GET(inst),                      \
+		0);                                                        \
+	irq_enable(DT_INST_IRQN(inst));),                                  \
+	(IRQ_CONNECT(DT_INST_IRQ_BY_NAME(inst, rx_avail, irq),             \
+		DT_INST_IRQ_BY_NAME(inst, rx_avail, priority),             \
+		spi_dw_isr, DEVICE_DT_INST_GET(inst),                      \
+		0);                                                        \
+	IRQ_CONNECT(DT_INST_IRQ_BY_NAME(inst, tx_req, irq),                \
+		DT_INST_IRQ_BY_NAME(inst, tx_req, priority),               \
+		spi_dw_isr, DEVICE_DT_INST_GET(inst),                      \
+		0);                                                        \
+	IRQ_CONNECT(DT_INST_IRQ_BY_NAME(inst, err_int, irq),               \
+		DT_INST_IRQ_BY_NAME(inst, err_int, priority),              \
+		spi_dw_isr, DEVICE_DT_INST_GET(inst),                      \
+		0);                                                        \
+	irq_enable(DT_INST_IRQ_BY_NAME(inst, rx_avail, irq));              \
+	irq_enable(DT_INST_IRQ_BY_NAME(inst, tx_req, irq));                \
+	irq_enable(DT_INST_IRQ_BY_NAME(inst, err_int, irq));))             \
 }
 
-#define SPI_DW_INIT(inst)                                                                   \
-	IF_ENABLED(CONFIG_PINCTRL, (PINCTRL_DT_INST_DEFINE(inst);))                         \
-	SPI_DW_IRQ_HANDLER(inst);                                                           \
-	static struct spi_dw_data spi_dw_data_##inst = {                                    \
-		SPI_CONTEXT_INIT_LOCK(spi_dw_data_##inst, ctx),                             \
-		SPI_CONTEXT_INIT_SYNC(spi_dw_data_##inst, ctx),                             \
-		SPI_CONTEXT_CS_GPIOS_INITIALIZE(DT_DRV_INST(inst), ctx)                     \
-		SPI_UPDATE_DWC_SSI_FLAG(DT_DRV_INST(inst), dwc_ssi)			    \
-	};                                                                                  \
+#define SPI_DW_INIT(inst)                                                   \
+	IF_ENABLED(CONFIG_PINCTRL, (PINCTRL_DT_INST_DEFINE(inst);))         \
+	SPI_DW_IRQ_HANDLER(inst);                                           \
+	static struct spi_dw_data spi_dw_data_##inst = {                    \
+		SPI_CONTEXT_INIT_LOCK(spi_dw_data_##inst, ctx),             \
+		SPI_CONTEXT_INIT_SYNC(spi_dw_data_##inst, ctx),             \
+		SPI_CONTEXT_CS_GPIOS_INITIALIZE(DT_DRV_INST(inst), ctx)     \
+		SPI_UPDATE_DWC_SSI_FLAG(DT_DRV_INST(inst), dwc_ssi)	    \
+	};                                                                  \
 	static const struct spi_dw_config spi_dw_config_##inst = {                          \
 		.regs = DT_INST_REG_ADDR(inst),                                             \
 		.clock_frequency = COND_CODE_1(                                             \
@@ -899,6 +909,8 @@ COND_CODE_1(IS_EQ(DT_NUM_IRQS(DT_DRV_INST(inst)), 1),              \
 		.serial_target = DT_INST_PROP(inst, serial_target),                         \
 		.fifo_depth = DT_INST_PROP(inst, fifo_depth),                               \
 		.max_xfer_size = DT_INST_PROP(inst, max_xfer_size),                         \
+		.rx_delay = DT_INST_PROP(inst, rx_delay),                                   \
+		.slv_slct_toggle = DT_INST_PROP(inst, slv_slct_toggle),                     \
 		IF_ENABLED(CONFIG_PINCTRL, (.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(inst),)) \
 		COND_CODE_1(DT_INST_PROP(inst, aux_reg),                                    \
 			(.read_func = aux_reg_read,                                         \
@@ -911,10 +923,10 @@ COND_CODE_1(IS_EQ(DT_NUM_IRQS(DT_DRV_INST(inst)), 1),              \
 			.set_bit_func = reg_set_bit,                                        \
 			.clear_bit_func = reg_clear_bit,                                    \
 			.test_bit_func = reg_test_bit,))                                    \
-		IF_ENABLED(CONFIG_SPI_DW_USE_DMA,					\
-		    (COND_CODE_1(SPI_DW_INST_DMA_IS_ENABLED(inst),			\
-		    (SPI_DW_DMA_INIT(inst)), ())))					\
-	};                                                                              \
+		IF_ENABLED(CONFIG_SPI_DW_USE_DMA,                                           \
+		    (COND_CODE_1(SPI_DW_INST_DMA_IS_ENABLED(inst),                          \
+		    (SPI_DW_DMA_INIT(inst)), ())))                                          \
+	};                                                                                  \
 	DEVICE_DT_INST_DEFINE(inst,                                                         \
 		spi_dw_init,                                                                \
 		NULL,                                                                       \
