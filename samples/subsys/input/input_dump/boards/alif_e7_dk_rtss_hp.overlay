@@ -8,6 +8,10 @@
 #include <dt-bindings/i2c/i2c.h>
 #include <dt-bindings/gpio/gpio.h>
 
+&gpio9 {
+	pinctrl-0 = < &pinctrl_gpio9 >;
+	pinctrl-names = "default";
+};
 
 &i2c1 {
 	status = "okay";
