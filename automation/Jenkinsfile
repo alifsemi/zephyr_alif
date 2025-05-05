@@ -1,4 +1,5 @@
 def allRecipientEmails = ""
+def rebaseNeeded = "-1"
 pipeline {
     agent any
 
@@ -44,7 +45,7 @@ pipeline {
                 script {
                     catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                         sh '''#!/bin/bash
-                        set -x
+                        set -xe
                         export PATH=$WEST_BIN_PATH:$PATH
                         source "${ZEPHYR_3X_ENV}/environment-setup-x86_64-pokysdk-linux"
                         echo -e "🛠️ $PATH"
@@ -57,6 +58,38 @@ pipeline {
                         '''
                     }
                 }
+
+                script {
+                    rebaseNeeded = sh(
+                        script: '''#!/bin/bash
+                            set -xe
+                            cd ${REPO_NAME}
+                            git fetch origin refs/heads/main:refs/remotes/origin/main
+                            commitCnt=$(git rev-list --count origin/main..HEAD)
+                            commits=$(git log -n ${commitCnt} --pretty=format:"%H")
+
+                            if [[ "$commits" -lt "1" ]] ; then
+                                echo 0
+                                exit 0
+                            fi
+
+                            firstCommit=$(git log -n 1 --pretty=format:"%H")
+                            firstCommit_author_name=$(git show -s --format="%an" "$firstCommit")
+                            firstCommit_author_email=$(git show -s --format="%ae" "$firstCommit")
+                            firstCommit_body=$(git show -s --format="%b" "$firstCommit" | tail -n +1 | awk '!/^[A-Za-z-]+:/ {print}' | sed '/^$/d')
+                            parentCnt=$(git log -n 1 --pretty=format:"%p"  | wc -w)
+
+                            if [[ "$firstCommit_author_name" == "Jenkins" || "$firstCommit_author_email" == "nobody@nowhere" || "$firstCommit_body" == "*Merge commit \'$firstCommit\' into HEAD*" || "$parentCnt" -gt "1" ]] ; then
+                                git reset --soft HEAD~1
+                                echo 1
+                            else
+                                echo 0
+                            fi
+                            ''',
+                        returnStdout: true
+                    ).trim()
+                     echo "🎯 rebase needed: [${rebaseNeeded}]..."
+                }
             }
         }
 
@@ -65,9 +98,8 @@ pipeline {
                 script {
                     allRecipientEmails = sh(
                         script: '''#!/bin/bash
-                            set -x
+                            set -xe
                             cd ${REPO_NAME}
-                            git fetch origin refs/heads/main:refs/remotes/origin/main
                             commitCnt=$(git rev-list --count origin/main..HEAD)
 
                             # Get all author emails for this PR
@@ -91,40 +123,19 @@ pipeline {
                 script {
                     catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                         sh '''#!/bin/bash
-                        set -x
+                        set -xe
                         export PATH=$WEST_BIN_PATH:$PATH
                         source "${ZEPHYR_3X_ENV}/environment-setup-x86_64-pokysdk-linux"
                         echo -e "🛠️ $PATH"
                         cd "${REPO_NAME}"
 
                         echo -e "✅ west initialization started"
-
-                        commitCnt=$(git rev-list --count origin/main..HEAD)
-                        commits=$(git log -n ${commitCnt} --pretty=format:"%H")
-                        for commit in $commits; do
-                            commit_author_name=$(git show -s --format="%an" "$commit")
-                            commit_author_email=$(git show -s --format="%ae" "$commit")
-                            commit_body=$(git show -s --format="%b" "$commit")
-                            commit_subject=$(git show -s --format="%s" "$commit")
-                            commit_complete_msg=$(git show -s --format="%B" "$commit")
-                        done
-
-                        firstCommit=$(git log -n 1 --pretty=format:"%H")
-                        firstCommit_author_name=$(git show -s --format="%an" "$firstCommit")
-                        firstCommit_author_email=$(git show -s --format="%ae" "$firstCommit")
-                        firstCommit_body=$(git show -s --format="%b" "$firstCommit" | tail -n +1 | awk '!/^[A-Za-z-]+:/ {print}' | sed '/^$/d')
-
-                        if [[ "$firstCommit_author_name" == "Jenkins" || "$firstCommit_author_email" == "nobody@nowhere" || "$firstCommit_body" == "*Merge commit \'$firstCommit\' into HEAD*" ]] ; then
-                            rebaseNeeded=1
-                        else
-                            rebaseNeeded=0
-                        fi
-
                         west init -l .
                         echo -e "☑️ west initialization is completed."
                         west update
                         echo -e "☑️ west update is completed."
 
+                        commitCnt=$(git rev-list --count origin/main..HEAD)
                         totalCommitCnt=$(git rev-list --count origin/main)
                         if [[ "$totalCommitCnt" < "$commitCnt" ]] ; then
                             checkGitLog=${commitCnt}
@@ -134,29 +145,55 @@ pipeline {
                         git log -${checkGitLog}
 
                         echo -e "🎯 we have $commitCnt commits in $BRANCH_NAME review"
-                        if [ $rebaseNeeded -eq 0 ] ; then
-                            git format-patch -${commitCnt}
-                            log=$(./scripts/checkpatch.pl --patch *.patch)
-                            echo -e "$log"
-                            result=$(echo "$log" | grep ".patch total:")
-                            echo -e "$result"
-                            check_patch_errors=$(echo "${result}" | sed -n "s/.*: \\([0-9]\\+\\) errors.*/\\1/p")
-                            warnings=$(echo "${result}" | sed -n "s/.*errors, \\([0-9]\\+\\) warnings.*/\\1/p")
-                            echo -e "🎯Check-Patch has Errors=> ${check_patch_errors} Warnings: ${warnings}\n\n"
 
-                            pr_checker_log=$(${VALIDATION_SCRIPT_DIR}/pr_commit_checker.sh  ${commitCnt})
-                            pr_checker_err=$?
-                            echo -e "🎯PR Checker=>\n$pr_checker_log"
+                        git format-patch -${commitCnt}
+                        check_patch_output=$(./scripts/checkpatch.pl --patch *.patch)
+                        echo -e "$check_patch_output"
+                        check_patch_output_summary=$(echo "$check_patch_output" | grep ".patch total:")
+                        echo -e "$check_patch_output_summary"
 
-                            gitlint_log=$(git log -${commitCnt} --pretty=%B | gitlint 2>&1)
-                            if [ -n "$gitlint_log" ] ; then
-                                gitlint_err=1
-                                echo -e "🎯GITLINT log=>\n$gitlint_log"
-                            else
-                               gitlint_err=0
-                            fi
+                        check_patch_errors=0
+                        check_patch_warnings=0
+                        check_patch_lines=0
+
+                        while read -r line; do
+                          # Extract numbers using regex or field parsing
+                          err=$(echo "$line"  | awk '{for(i=1;i<=NF;i++) if($i=="total:") print $(i+1)}')
+                          warn=$(echo "$line" | awk '{for(i=1;i<=NF;i++) if($i=="errors,") print $(i+1)}')
+                          ln=$(echo "$line"   | awk '{for(i=1;i<=NF;i++) if($i=="warnings,") print $(i+1)}')
+
+                          if [[ "$err" =~ ^[0-9]+$ ]]; then
+                            check_patch_errors=$((check_patch_errors + err))
+                          else
+                            echo "Skipping non-numeric error: $err"
+                          fi
+
+                          if [[ "$warn" =~ ^[0-9]+$ ]]; then
+                            check_patch_warnings=$((check_patch_warnings + warn))
+                          else
+                            echo "Skipping non-numeric warning: $warn"
+                          fi
+
+                          if [[ "$ln" =~ ^[0-9]+$ ]]; then
+                            check_patch_lines=$((check_patch_lines + ln))
+                          else
+                            echo "Skipping non-numeric lines: $ln"
+                          fi
+
+                        done <<< "$check_patch_output_summary"
+
+                        echo -e "🎯Check-Patch has=> Errors: ${check_patch_errors} Warnings: ${check_patch_warnings}, Lines: ${check_patch_lines}\n\n"
+
+                        pr_checker_log=$(${VALIDATION_SCRIPT_DIR}/pr_commit_checker.sh  ${commitCnt})
+                        pr_checker_err=$?
+                        echo -e "🎯PR Checker=>\n$pr_checker_log"
+
+                        gitlint_log=$(git log -${commitCnt} --pretty=%B | gitlint 2>&1)
+                        if [ -n "$gitlint_log" ] ; then
+                            gitlint_err=1
+                            echo -e "🎯GITLINT log=>\n$gitlint_log"
                         else
-                            gitlint_err="NA"
+                           gitlint_err=0
                         fi
 
                         mapfile -t all_alif_boards_cfgs < <(west boards | grep "alif" | grep -v "fpga")
@@ -196,16 +233,23 @@ pipeline {
                         done
                         echo -e "✅ All Build is completed."
                         echo -e "\n\n"
-                        echo -e " 🏆Git Rebase Needed  =>  ${rebaseNeeded}"
+
+                        if [[ "$total_buildError" =~ ^[0-9]+$ && "$check_patch_errors" =~ ^[0-9]+$ && "$pr_checker_err" =~ ^[0-9]+$ && "$gitlint_err" =~ ^[0-9]+$ ]]; then
+                            total_jenkins_Error=$((total_buildError + check_patch_errors + pr_checker_err + gitlint_err))
+                        else
+                            echo "Skipping non-numeric total_buildError: $total_buildError, check_patch_errors: $check_patch_errors, pr_checker_err: $pr_checker_err, gitlint_err: $gitlint_err"
+                        fi
+
                         echo -e " 🏆GitLint Result     =>  ${gitlint_err}"
                         echo -e " 🏆PR Checker  Result =>  ${pr_checker_err}"
-                        echo -e " 🏆Check-Patch Result =>  Error: $check_patch_errors, Warnings: $warnings"
+                        echo -e " 🏆Check-Patch Result =>  Error: $check_patch_errors, Warnings: $check_patch_warnings"
                         echo -e " 🏆Success: $((actual_cfg_run_cnt - fail_cfg_run_cnt)), Failed: $fail_cfg_run_cnt, Skipped: $skipped_cfg_run_cnt"
                         echo -e " 🔥Total Run => ($actual_cfg_run_cnt/$total_cfg_run_cnt)"
-                        total_jenkins_Error=$((total_buildError + check_patch_errors + pr_checker_err + gitlint_err))
+
                         exit $total_jenkins_Error
                         '''
                     }
+                    echo  " 🏆Git Rebase Needed  =>  ${rebaseNeeded}"
                 }
             }
         }
