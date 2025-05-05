@@ -22,6 +22,9 @@ LOG_MODULE_REGISTER(dma_pl330);
 
 #define BYTE_WIDTH(burst_size) (1 << (burst_size))
 
+#define DMA_CHANNEL_IS_FREE   0
+#define DMA_CHANNEL_IS_IN_USE 1
+
 static int dma_pl330_submit(const struct device *dev, uint64_t dst,
 			    uint64_t src, uint32_t channel, uint32_t size);
 
@@ -642,13 +645,10 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 	}
 
 	channel_cfg = &dev_data->channels[channel];
-	k_mutex_lock(&channel_cfg->ch_mutex, K_FOREVER);
-	if (channel_cfg->channel_active) {
-		k_mutex_unlock(&channel_cfg->ch_mutex);
+
+	if (atomic_get(&channel_cfg->channel_is_active) != DMA_CHANNEL_IS_FREE) {
 		return -EBUSY;
 	}
-	channel_cfg->channel_active = 1;
-	k_mutex_unlock(&channel_cfg->ch_mutex);
 
 	ch_handle = &channel_cfg->internal;
 	memset(ch_handle, 0, sizeof(*ch_handle));
@@ -718,13 +718,20 @@ static int dma_pl330_transfer_start(const struct device *dev,
 	}
 
 	channel_cfg = &dev_data->channels[channel];
+
+	if (!atomic_cas(&channel_cfg->channel_is_active, DMA_CHANNEL_IS_FREE,
+			DMA_CHANNEL_IS_IN_USE)) {
+		return -EBUSY;
+	}
+
 	ret = dma_pl330_submit(dev, channel_cfg->dst_addr,
 			       channel_cfg->src_addr, channel,
 			       channel_cfg->trans_size);
 
-	k_mutex_lock(&channel_cfg->ch_mutex, K_FOREVER);
-	channel_cfg->channel_active = 0;
-	k_mutex_unlock(&channel_cfg->ch_mutex);
+	if (!channel_cfg->dma_callback || ret) {
+		/* Free the channel if polling was used or en error has happen */
+		atomic_set(&channel_cfg->channel_is_active, DMA_CHANNEL_IS_FREE);
+	}
 
 	return ret;
 }
@@ -732,6 +739,7 @@ static int dma_pl330_transfer_start(const struct device *dev,
 static int dma_pl330_transfer_stop(const struct device *dev, uint32_t channel)
 {
 	const struct dma_pl330_config *const dev_cfg = dev->config;
+	struct dma_pl330_dev_data *const dev_data = dev->data;
 	uint32_t reg_base = dev_cfg->reg_base;
 	uint32_t cs0_reg = reg_base + DMAC_PL330_CS0;
 	unsigned int irq_key;
@@ -748,6 +756,7 @@ static int dma_pl330_transfer_stop(const struct device *dev, uint32_t channel)
 	irq_key = irq_lock();
 
 	ret = dma_pl330_stop_dma_ch(dev, reg_base, channel);
+	atomic_set(&dev_data->channels[channel].channel_is_active, DMA_CHANNEL_IS_FREE);
 
 	irq_unlock(irq_key);
 	return ret;
@@ -783,6 +792,9 @@ static void dma_pl330_isr(const struct device *dev)
 				(void)dma_pl330_stop_dma_ch(dev, reg_base, ch);
 
 				channel_cfg = &dev_data->channels[ch];
+
+				atomic_set(&channel_cfg->channel_is_active, DMA_CHANNEL_IS_FREE);
+
 				if (channel_cfg->dma_callback) {
 					channel_cfg->dma_callback(
 						dev, channel_cfg->user_data, ch, -EIO);
@@ -802,6 +814,9 @@ static void dma_pl330_isr(const struct device *dev)
 				sys_write32((1 << ch), reg_base + DMAC_PL330_INTCLR);
 
 				channel_cfg = &dev_data->channels[ch];
+
+				atomic_set(&channel_cfg->channel_is_active, DMA_CHANNEL_IS_FREE);
+
 				if (channel_cfg->dma_callback) {
 					channel_cfg->dma_callback(
 						dev, channel_cfg->user_data, ch, err);
@@ -822,7 +837,7 @@ static int dma_pl330_initialize(const struct device *dev)
 		channel_cfg = &dev_data->channels[channel];
 		channel_cfg->dma_exec_addr = dev_cfg->mcode_base +
 					(channel * MICROCODE_SIZE_MAX);
-		k_mutex_init(&channel_cfg->ch_mutex);
+		atomic_set(&channel_cfg->channel_is_active, DMA_CHANNEL_IS_FREE);
 	}
 
 	for (event_index = 0; event_index < DMA_MAX_EVENTS; event_index++) {
@@ -839,6 +854,7 @@ static int dma_pl330_initialize(const struct device *dev)
 								& DMA_AXI_DATA_WIDTH_MASK;
 
 	LOG_INF("Device %s initialized", dev->name);
+
 	return 0;
 }
 

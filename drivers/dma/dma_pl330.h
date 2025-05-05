@@ -191,8 +191,7 @@ struct dma_pl330_ch_config {
 	void *user_data;
 	dma_callback_t dma_callback;
 	mem_addr_t dma_exec_addr;
-	struct k_mutex ch_mutex;
-	int channel_active;
+	atomic_t channel_is_active;
 	uint8_t periph_slot;
 
 	/* Channel specific private data */
