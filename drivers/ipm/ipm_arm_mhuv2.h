@@ -168,7 +168,7 @@ struct mhuv2_device_data {
 	DEVICE_MMIO_RAM;
 	uint8_t		max_ch;
 	ipm_callback_t	callback;
-	uint32_t	*user_data;
+	void		*user_data;
 };
 
 #ifdef __cplusplus

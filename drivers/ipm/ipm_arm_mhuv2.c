@@ -97,7 +97,7 @@ static int mhuv2_send(const struct device *dev, int wait, uint32_t ch_id,
  * @brief   Register for MHUV2 data callback
  * @param[in] dev	: pointer to Runtime device structure
  * @param[in] cb	: pointer to callback function
- * @param[in] user_data : pointer to user data
+ * @param[in] user_data : pointer to user private data
  * @return  None
  */
 static void mhuv2_register_cb(const struct device *dev,
@@ -106,7 +106,7 @@ static void mhuv2_register_cb(const struct device *dev,
 	struct mhuv2_device_data *mhuv2_cb_data = DRV_MHUV2_DATA(dev);
 
 	mhuv2_cb_data->callback = cb;
-	mhuv2_cb_data->user_data = (uint32_t *)user_data;
+	mhuv2_cb_data->user_data = user_data;
 }
 
 /**
@@ -262,6 +262,7 @@ static void mhuv2_recv_isr(const struct device *dev)
 	uint8_t offset				= 0;
 	volatile uint32_t recv_ch_status_reg;
 	uint8_t ch_id;
+	uint32_t ch_sts;
 
 	struct MHUV2_REC *RECV = (struct MHUV2_REC *)DEVICE_MMIO_GET(dev);
 
@@ -284,9 +285,9 @@ static void mhuv2_recv_isr(const struct device *dev)
 			recv_ch_status_reg = RECV->CH_INT_ST3;
 		}
 		if ((recv_ch_status_reg) & (0x1 << (ch_id - offset))) {
-			*(drv_data->user_data) = RECV->CHANNEL[ch_id].CH_ST;
+			ch_sts = RECV->CHANNEL[ch_id].CH_ST;
 			if (drv_data->callback)
-				drv_data->callback(dev, drv_data->user_data, ch_id, NULL);
+				drv_data->callback(dev, drv_data->user_data, ch_id, &ch_sts);
 			RECV->CHANNEL[ch_id].CH_CLR = MHU_CLR_COMPLETE_CH;
 		}
 	}
