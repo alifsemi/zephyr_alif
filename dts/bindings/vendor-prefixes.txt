@@ -37,6 +37,7 @@ aesop	AESOP Embedded Forum
 al	Annapurna Labs
 alcatel	Alcatel
 alientek	Alientek
+alif	Alif Semiconductor
 allegro	Allegro DVT
 allo	Allo.com
 allwinner	Allwinner Technology Co., Ltd.
