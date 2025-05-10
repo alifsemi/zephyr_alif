@@ -56,12 +56,19 @@
 #define DMAC_PL330_FTRD		0x38
 #define DMAC_PL330_FTR0		0x40
 #define DMAC_PL330_CS0		0x100
+#define DMAC_PL330_RTCHCFG	0x400
 #define DMAC_PL330_DBGSTATUS	0xd00
 #define DMAC_PL330_DBGCMD	0xd04
 #define DMAC_PL330_DBGINST0	0xd08
 #define DMAC_PL330_DBGINST1	0xd0c
 #define DMAC_PL330_CR0		0xE00
 #define DMAC_PL330_CRD		0xE14
+
+#define DMA_PL330_SARn(ch) (DMAC_PL330_RTCHCFG + 0x20 * (ch))
+#define DMA_PL330_DARn(ch) (0x4 + DMA_PL330_SARn(ch))
+#define DMA_PL330_CCRn(ch) (0x8 + DMA_PL330_SARn(ch))
+#define DMA_PL330_LC0_n(ch) (0xC + DMA_PL330_SARn(ch))
+#define DMA_PL330_LC1_n(ch) (0x10 + DMA_PL330_SARn(ch))
 
 /*
  * TIMEOUT value of 100000us is kept to cover all possible data
@@ -189,6 +196,7 @@ struct dma_pl330_ch_config {
 
 	/* Channel specific private data */
 	struct dma_pl330_ch_internal internal;
+	size_t loop_counter0;
 };
 
 struct dma_pl330_config {
