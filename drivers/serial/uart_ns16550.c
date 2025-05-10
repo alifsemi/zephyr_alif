@@ -99,6 +99,8 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_PCIE), "NS16550(s) in DT need CONFIG_PCIE");
 #define REG_MDC 0x04  /* Modem control reg.             */
 #define REG_LSR 0x05  /* Line status reg.               */
 #define REG_MSR 0x06  /* Modem status reg.              */
+#define REG_TFL 0x20  /* TX FIFO level reg              */
+#define REG_RFL 0x21  /* RX FIFO level reg              */
 #define REG_USR 0x7C  /* UART status reg. (DW8250)      */
 #define REG_DLF 0xC0  /* Divisor Latch Fraction         */
 #define REG_PCP 0x200 /* PRV_CLOCK_PARAMS (Apollo Lake) */
@@ -190,9 +192,15 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_PCIE), "NS16550(s) in DT need CONFIG_PCIE");
 
 /* RCVR FIFO interrupt levels: trigger interrupt with this bytes in FIFO */
 #define FCR_FIFO_1 0x00  /* 1 byte in RCVR FIFO */
-#define FCR_FIFO_4 0x40  /* 4 bytes in RCVR FIFO */
-#define FCR_FIFO_8 0x80  /* 8 bytes in RCVR FIFO */
-#define FCR_FIFO_14 0xC0 /* 14 bytes in RCVR FIFO */
+#define FCR_FIFO_4 0x40  /* RCVR FIFO is 1/4 full */
+#define FCR_FIFO_8 0x80  /* RCVR FIFO is 1/2 full */
+#define FCR_FIFO_14 0xC0 /* RCVR FIFO is 2 characters till full */
+
+/* TX FIFO interrupt levels */
+#define FCR_TX_FIFO_EMPTY 0x00   /* FIFO empty */
+#define FCR_TX_FIFO_2_CHARS 0x10 /* 2 characters in FIFO */
+#define FCR_TX_FIFO_QUARTER 0x20 /* 1/4 full */
+#define FCR_TX_FIFO_HALF 0x30    /* 1/2 full */
 
 /*
  * UART NS16750 supports 64 bytes FIFO, which can be enabled
@@ -257,6 +265,8 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_PCIE), "NS16550(s) in DT need CONFIG_PCIE");
 #define MDC(dev) (get_port(dev) + (REG_MDC * reg_interval(dev)))
 #define LSR(dev) (get_port(dev) + (REG_LSR * reg_interval(dev)))
 #define MSR(dev) (get_port(dev) + (REG_MSR * reg_interval(dev)))
+#define TFL(dev) (get_port(dev) + (REG_TFL * reg_interval(dev)))
+#define RFL(dev) (get_port(dev) + (REG_RFL * reg_interval(dev)))
 #define MDR1(dev) (get_port(dev) + (REG_MDR1 * reg_interval(dev)))
 #define USR(dev) (get_port(dev) + REG_USR)
 #define DLF(dev) (get_port(dev) + REG_DLF)
@@ -293,6 +303,7 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_PCIE), "NS16550(s) in DT need CONFIG_PCIE");
 struct uart_ns16550_rx_dma_params {
 	const struct device *dma_dev;
 	uint8_t dma_channel;
+	bool async_enabled;
 	struct dma_config dma_cfg;
 	struct dma_block_config active_dma_block;
 	uint8_t *buf;
@@ -712,7 +723,8 @@ static int uart_ns16550_configure(const struct device *dev,
 
 	/*
 	 * Program FIFO: enabled, mode 0 (set for compatibility with quark),
-	 * generate the interrupt at 8th byte
+	 * RX generates the interrupt at 8th byte (FIFO is 1/2 full)
+	 * TX generates the interrupt when FIFO is empty
 	 * Clear TX and RX FIFO if system is not resuming
 	 */
 	int fifo_clr_mask = FCR_RCVRCLR | FCR_XMITCLR;
@@ -728,12 +740,11 @@ static int uart_ns16550_configure(const struct device *dev,
 	/* Preserved when memory is kept in retention */
 	resuming = resume_magic;
 #endif
-	ns16550_outbyte(dev_cfg, FCR(dev),
-			FCR_FIFO | FCR_MODE0 | FCR_FIFO_8 | fifo_clr_mask
+	uint32_t fcr_reg = FCR_FIFO | FCR_MODE0 | FCR_FIFO_8 | fifo_clr_mask;
 #ifdef CONFIG_UART_NS16550_VARIANT_NS16750
-			| FCR_FIFO_64
+	fcr_reg |= FCR_FIFO_64;
 #endif
-			);
+	ns16550_outbyte(dev_cfg, FCR(dev), fcr_reg);
 
 	if (!dev_data->fifo_size) {
 		if ((ns16550_inbyte(dev_cfg, IIR(dev)) & IIR_FE) == IIR_FE) {
@@ -742,6 +753,26 @@ static int uart_ns16550_configure(const struct device *dev,
 			dev_data->fifo_size = 1;
 		}
 	}
+
+#if CONFIG_UART_ASYNC_API
+	if (dev_data->async.tx_dma_params.dma_dev != NULL) {
+		/* Calcuate DMA burst length based on used FIFO size.
+		 * DMA burst length must be kept long enough to make sure DMA
+		 * has time keep up with the data being sent.
+		 * TX FIFO watermark level will be configured to 1/4 in case of async usage
+		 * so configure burst size to be the same to avoid any possible overflow.
+		 * This is a bit conservative and can be adjusted later if needed.
+		 */
+		struct dma_config *p_dma_cfg =
+			&dev_data->async.tx_dma_params.dma_cfg;
+		p_dma_cfg->source_burst_length = p_dma_cfg->dest_burst_length =
+			dev_data->fifo_size / 4
+#if CONFIG_DMA_PL330
+			- 1
+#endif
+			;
+	}
+#endif
 
 	if (fifo_clr_mask) {
 		/* clear the port, dont empty if fifo has valid data after wakeup*/
@@ -883,6 +914,12 @@ static int uart_ns16550_init(const struct device *dev)
 			&data->async.rx_dma_params.active_dma_block;
 		data->async.tx_dma_params.dma_cfg.head_block =
 			&data->async.tx_dma_params.active_dma_block;
+#if CONFIG_DMA_PL330
+		data->async.rx_dma_params.active_dma_block.source_addr_adj =
+			DMA_ADDR_ADJ_NO_CHANGE;
+		data->async.tx_dma_params.active_dma_block.dest_addr_adj =
+			DMA_ADDR_ADJ_NO_CHANGE;
+#endif
 #if defined(CONFIG_UART_NS16550_INTEL_LPSS_DMA)
 #if UART_NS16550_IOPORT_ENABLED
 		if (!dev_cfg->io_map)
@@ -1001,7 +1038,9 @@ static int uart_ns16550_fifo_fill(const struct device *dev,
 	int i;
 	k_spinlock_key_t key = k_spin_lock(&data->lock);
 
-	for (i = 0; (i < size) && (i < data->fifo_size); i++) {
+	const size_t fifo_space = data->fifo_size - ns16550_inbyte(dev_cfg, TFL(dev));
+
+	for (i = 0; (i < size) && (i < fifo_space); i++) {
 		ns16550_outbyte(dev_cfg, THR(dev), tx_data[i]);
 	}
 
@@ -1323,10 +1362,12 @@ static void uart_ns16550_isr(const struct device *dev)
 
 #if (IS_ENABLED(CONFIG_UART_ASYNC_API))
 	if (dev_data->async.tx_dma_params.dma_dev != NULL) {
+#if !CONFIG_DMA_PL330
 		const struct uart_ns16550_dev_config * const config = dev->config;
-		uint8_t IIR_status = ns16550_inbyte(config, IIR(dev));
+		const uint8_t IIR_status = ns16550_inbyte(config, IIR(dev));
+#endif
 #if (IS_ENABLED(CONFIG_UART_NS16550_INTEL_LPSS_DMA))
-		uint32_t dma_status = ns16550_inword(config, SRC_TRAN(dev));
+		const uint32_t dma_status = ns16550_inword(config, SRC_TRAN(dev));
 
 		if (dma_status & BIT(dev_data->async.rx_dma_params.dma_channel)) {
 			async_timer_start(&dev_data->async.rx_dma_params.timeout_work,
@@ -1337,11 +1378,19 @@ static void uart_ns16550_isr(const struct device *dev)
 		}
 		dma_intel_lpss_isr(dev_data->async.rx_dma_params.dma_dev);
 #endif
+#if CONFIG_DMA_PL330
+		if (dev_data->async.rx_dma_params.async_enabled) {
+			async_timer_start(&dev_data->async.rx_dma_params.timeout_work,
+					  dev_data->async.rx_dma_params.timeout_us);
+			return;
+		}
+#else
 		if (IIR_status & IIR_RBRF) {
 			async_timer_start(&dev_data->async.rx_dma_params.timeout_work,
 					  dev_data->async.rx_dma_params.timeout_us);
 			return;
 		}
+#endif
 	}
 #endif
 
@@ -1567,6 +1616,8 @@ static int uart_ns16550_rx_disable(const struct device *dev)
 		goto out;
 	}
 
+	dma_params->async_enabled = false;
+
 	(void)k_work_cancel_delayable(&data->async.rx_dma_params.timeout_work);
 
 	if (dma_params->buf && (dma_params->buf_len > 0)) {
@@ -1632,8 +1683,7 @@ static void dma_callback(const struct device *dev, void *user_data, uint32_t cha
 		data->async.next_rx_buffer = NULL;
 		data->async.next_rx_buffer_len = 0U;
 
-		if (rx_params->buf != NULL &&
-		    rx_params->buf_len > 0) {
+		if (rx_params->buf != NULL && rx_params->buf_len > 0) {
 			dma_reload(dev, rx_params->dma_channel, data->phys_addr,
 				   (uintptr_t)rx_params->buf, rx_params->buf_len);
 			dma_start(dev, rx_params->dma_channel);
@@ -1745,6 +1795,7 @@ static int uart_ns16550_rx_enable(const struct device *dev, uint8_t *buf, const 
 		goto out;
 	}
 
+	rx_dma_params->async_enabled = true;
 	rx_dma_params->timeout_us = timeout_us;
 	rx_dma_params->buf = buf;
 	rx_dma_params->buf_len = len;
@@ -1752,9 +1803,26 @@ static int uart_ns16550_rx_enable(const struct device *dev, uint8_t *buf, const 
 #if defined(CONFIG_UART_NS16550_INTEL_LPSS_DMA)
 	ns16550_outword(config, MST(dev), UNMASK_LPSS_INT(rx_dma_params->dma_channel));
 #else
-	ns16550_outbyte(config, IER(dev),
-			(ns16550_inbyte(config, IER(dev)) | IER_RXRDY));
-	ns16550_outbyte(config, FCR(dev), FCR_FIFO);
+	if ((timeout_us != SYS_FOREVER_US) && (timeout_us != 0)) {
+		/* IRQ is needed to make character timeout working */
+		ns16550_outbyte(config, IER(dev),
+				(ns16550_inbyte(config, IER(dev)) | IER_RXRDY));
+		irq_enable(data->irq);
+	}
+	uint32_t fcr_reg = FCR_FIFO;
+#if CONFIG_DMA_PL330
+	/*
+	 * Program FIFO: enabled
+	 *   RX generates the interrupt when 1 byte in FIFO
+	 *   TX generates the interrupt when FIFO is 1/4 full
+	 *   Clear TX and RX FIFO if system is not resuming
+	 */
+	fcr_reg |= FCR_TX_FIFO_QUARTER | FCR_FIFO_1 | FCR_RCVRCLR | FCR_XMITCLR;
+#ifdef CONFIG_UART_NS16550_VARIANT_NS16750
+	fcr_reg |= FCR_FIFO_64;
+#endif
+#endif
+	ns16550_outbyte(config, FCR(dev), fcr_reg);
 #endif
 	prepare_rx_dma_block_config(dev);
 	dma_config(rx_dma_params->dma_dev,
@@ -1917,6 +1985,16 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 
 #ifdef CONFIG_UART_ASYNC_API
+#if CONFIG_DMA_PL330
+#define DMA_BURST_LEN 0 /* Real len will be value + 1 */
+#define DMA_BURST_SIZE 0 /* Burst size is a shifter: 0x1 << DMA_BURST_SIZE bytes  */
+#define DMA_SLOT_GET(n, d) DT_INST_DMAS_CELL_BY_NAME(n, d, periph)
+#else
+#define DMA_BURST_LEN 1
+#define DMA_BURST_SIZE 1
+#define DMA_SLOT_GET(n, d) DT_INST_DMAS_CELL_BY_NAME(n, d, channel)
+#endif
+
 #define DMA_PARAMS(n)								\
 	.async.tx_dma_params = {						\
 		.dma_dev =							\
@@ -1924,15 +2002,15 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 		.dma_channel =							\
 			DT_INST_DMAS_CELL_BY_NAME(n, tx, channel),		\
 		.dma_cfg = {							\
-			.source_burst_length = 1,				\
-			.dest_burst_length = 1,					\
-			.source_data_size = 1,					\
-			.dest_data_size = 1,					\
+			.source_burst_length = DMA_BURST_LEN,			\
+			.dest_burst_length = DMA_BURST_LEN,			\
+			.source_data_size = DMA_BURST_SIZE,			\
+			.dest_data_size = DMA_BURST_SIZE,			\
 			.complete_callback_en = 0,				\
 			.error_callback_dis = 1,				\
 			.block_count = 1,					\
 			.channel_direction = MEMORY_TO_PERIPHERAL,		\
-			.dma_slot = DT_INST_DMAS_CELL_BY_NAME(n, tx, channel),	\
+			.dma_slot = DMA_SLOT_GET(n, tx),			\
 			.dma_callback = dma_callback,				\
 			.user_data = (void *)DEVICE_DT_INST_GET(n)		\
 		},								\
@@ -1943,15 +2021,15 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 		.dma_channel =							\
 			DT_INST_DMAS_CELL_BY_NAME(n, rx, channel),		\
 		.dma_cfg = {							\
-			.source_burst_length = 1,				\
-			.dest_burst_length = 1,					\
-			.source_data_size = 1,					\
-			.dest_data_size = 1,					\
+			.source_burst_length = DMA_BURST_LEN,			\
+			.dest_burst_length = DMA_BURST_LEN,			\
+			.source_data_size = DMA_BURST_SIZE,			\
+			.dest_data_size = DMA_BURST_SIZE,			\
 			.complete_callback_en = 0,				\
 			.error_callback_dis = 1,				\
 			.block_count = 1,					\
 			.channel_direction = PERIPHERAL_TO_MEMORY,		\
-			.dma_slot = DT_INST_DMAS_CELL_BY_NAME(n, rx, channel),	\
+			.dma_slot = DMA_SLOT_GET(n, rx),			\
 			.dma_callback = dma_callback,				\
 			.user_data = (void *)DEVICE_DT_INST_GET(n)		\
 		},								\

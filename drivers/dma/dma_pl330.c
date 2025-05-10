@@ -342,6 +342,8 @@ static int dma_pl330_setup_ch(const struct device *dev,
 	sys_write8(OP_DMA_END, dma_exec_addr + offset + 2);
 	sys_write8(OP_DMA_END, dma_exec_addr + offset + 3);
 
+	channel_cfg->loop_counter0 = loop_counter0;
+
 	return 0;
 }
 
@@ -840,10 +842,64 @@ static int dma_pl330_initialize(const struct device *dev)
 	return 0;
 }
 
+static int dma_pl330_get_status(const struct device *dev, uint32_t channel,
+				struct dma_status *stat)
+{
+	const struct dma_pl330_config *const dev_cfg = dev->config;
+	struct dma_pl330_dev_data *const dev_data = dev->data;
+	struct dma_pl330_ch_config *channel_cfg = &dev_data->channels[channel];
+	const uint32_t reg_base = dev_cfg->reg_base;
+
+	if (!stat || channel >= dev_cfg->max_dma_channels) {
+		return -EINVAL;
+	}
+
+	stat->busy = atomic_get(&channel_cfg->channel_is_active) != DMA_CHANNEL_IS_FREE;
+	stat->dir = channel_cfg->direction;
+	/* Pending length is calculated based on the loop counters.
+	 * Two possible loops LC0 and LC1 are used.
+	 */
+	stat->pending_length =
+		sys_read32(reg_base + DMA_PL330_LC1_n(channel)) * (channel_cfg->loop_counter0 + 1) +
+		sys_read32(reg_base + DMA_PL330_LC0_n(channel)) + 1;
+	/* TODO: add rest when needed... */
+	stat->free = 0;
+	stat->write_position = 0;
+	stat->read_position = 0;
+	stat->total_copied = 0;
+
+	return 0;
+}
+
+static int dma_pl330_dma_reload(const struct device *dev, uint32_t const channel,
+				uint32_t const src, uint32_t const dst,
+				size_t const size)
+{
+	const struct dma_pl330_config *const dev_cfg = dev->config;
+	struct dma_pl330_dev_data *const dev_data = dev->data;
+	struct dma_pl330_ch_config *channel_cfg = &dev_data->channels[channel];
+
+	if (channel >= dev_cfg->max_dma_channels) {
+		return -EINVAL;
+	}
+
+	if (atomic_get(&channel_cfg->channel_is_active) != DMA_CHANNEL_IS_FREE) {
+		return -EBUSY;
+	}
+
+	channel_cfg->src_addr = local_to_global(UINT_TO_POINTER(src));
+	channel_cfg->dst_addr = local_to_global(UINT_TO_POINTER(dst));
+	channel_cfg->trans_size = size;
+
+	return 0;
+}
+
 static DEVICE_API(dma, pl330_driver_api) = {
 	.config = dma_pl330_configure,
+	.reload = dma_pl330_dma_reload,
 	.start = dma_pl330_transfer_start,
 	.stop = dma_pl330_transfer_stop,
+	.get_status = dma_pl330_get_status,
 };
 
 #define IRQ_CONFIGURE(n, inst)                                                                 \
