@@ -61,6 +61,15 @@ config UART_NS16550_VARIANT_NS16950
 	  This enables support for 128-bytes FIFO and automatic hardware flow control.
 endchoice
 
+config UART_NS16550_FIFO_SIZE
+	int
+	default 64 if UART_NS16550_VARIANT_NS16750
+	default 128 if UART_NS16550_VARIANT_NS16950
+	default 16
+	help
+		Size of UART FIFO buffer.
+
+
 config UART_NS16550_ACCESS_WORD_ONLY
 	bool "NS16550 only allows word access"
 	help
