@@ -8,10 +8,9 @@
 #include <zephyr/drivers/video.h>
 
 #if defined(CONFIG_SOC_FAMILY_ENSEMBLE) && !defined(CONFIG_SOC_SERIES_ENSEMBLE_E1C)
-#define FB_MEM_BASE 0x08000000 /* CONFIG_SOC_FAMILY_ENSEMBLE */
-#elif (defined(CONFIG_SOC_FAMILY_ENSEMBLE) && defined(CONFIG_SOC_SERIES_ENSEMBLE_E1C)) ||          \
-	defined(CONFIG_SOC_SERIES_BALLETTO_B1)
-#define FB_MEM_BASE 0x200a0000 /* CONFIG_SOC_SERIES_ENSEMBLE_E1C */
+#define VIDEO_HEAP_SIZE (CONFIG_VIDEO_BUFFER_POOL_SZ_MAX * CONFIG_VIDEO_BUFFER_POOL_NUM_MAX)
+static struct k_heap video_buffer_pool;
+static uint8_t video_buff[VIDEO_HEAP_SIZE] __aligned(8) __attribute__((section(".video_buffer")));
 #else
 K_HEAP_DEFINE(video_buffer_pool, CONFIG_VIDEO_BUFFER_POOL_SZ_MAX *
 		CONFIG_VIDEO_BUFFER_POOL_NUM_MAX);
@@ -31,15 +30,6 @@ struct video_buffer *video_buffer_alloc(size_t size)
 	struct mem_block *block;
 	int i;
 
-#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_SERIES_ENSEMBLE_E1C) ||              \
-	defined(CONFIG_SOC_SERIES_BALLETTO_B1)
-	/*
-	 * TODO:  Allocate everything from the available memory space for
-	 * testing.
-	 */
-	static uint32_t base_addr = FB_MEM_BASE;
-#endif /* CONFIG_SOC_FAMILY_ENSEMBLE */
-
 	/* find available video buffer */
 	for (i = 0; i < ARRAY_SIZE(video_buf); i++) {
 		if (video_buf[i].buffer == NULL) {
@@ -54,15 +44,7 @@ struct video_buffer *video_buffer_alloc(size_t size)
 	}
 
 	/* Alloc buffer memory */
-#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_SERIES_ENSEMBLE_E1C) ||              \
-	defined(CONFIG_SOC_SERIES_BALLETTO_B1)
-	/* TODO: HACK - Increment base_address as new allocations come. */
-	block->data = (void *)base_addr;
-	base_addr = base_addr + size;
-#else
 	block->data = k_heap_alloc(&video_buffer_pool, size, K_FOREVER);
-#endif /* CONFIG_SOC_FAMILY_ENSEMBLE */
-
 	if (block->data == NULL) {
 		return NULL;
 	}
@@ -90,8 +72,16 @@ void video_buffer_release(struct video_buffer *vbuf)
 	vbuf->buffer = NULL;
 
 	if (block) {
-#if !defined(CONFIG_SOC_FAMILY_ENSEMBLE) && !defined(CONFIG_SOC_SERIES_BALLETTO_B1)
 		k_heap_free(&video_buffer_pool, block->data);
-#endif /* CONFIG_SOC_FAMILY_ENSEMBLE */
 	}
 }
+
+#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) && !defined(CONFIG_SOC_SERIES_ENSEMBLE_E1C)
+static int heap_initialize(void)
+{
+	k_heap_init(&video_buffer_pool, video_buff, sizeof(video_buff));
+	return 0;
+}
+
+SYS_INIT(heap_initialize, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+#endif

@@ -8,6 +8,8 @@ GROUP_START(SRAM0)
 	{
 			KEEP(*(.alif_sram0))
 			KEEP(*(".alif_sram0.*"))
+			KEEP(*(.video_buffer))
+			KEEP(*(".video_buffer.*"))
 	} GROUP_LINK_IN(SRAM0)
 
 GROUP_END(SRAM0)
