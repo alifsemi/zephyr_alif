@@ -1,0 +1,10 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config PINCTRL_ALIF
+	bool "Alif SoC pin controller driver"
+	depends on SOC_FAMILY_ENSEMBLE
+	default y
+	help
+	  Enable pin controller for Alif Ensemble DevKits.
