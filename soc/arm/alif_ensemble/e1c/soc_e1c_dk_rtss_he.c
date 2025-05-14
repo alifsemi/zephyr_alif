@@ -14,11 +14,6 @@
 #endif
 #include <zephyr/cache.h>
 
-#ifdef CONFIG_ARM_SECURE_FIRMWARE
-#include "partition_M55_HE.h"
-#include "tgu_M55.h"
-#endif
-
 /**
  * @brief Perform basic hardware initialization at boot.
  *
@@ -140,11 +135,6 @@ static int ensemble_e1c_dk_rtss_he_init(void)
 	}
 #endif /* DT_NODE_HAS_STATUS(DT_NODELABEL(timer1), okay) */
 #endif /* DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers) */
-
-#ifdef CONFIG_ARM_SECURE_FIRMWARE
-	alif_tz_sau_setup();
-	alif_tgu_setup();
-#endif
 
 	/* Enable DMA */
 #if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay)
