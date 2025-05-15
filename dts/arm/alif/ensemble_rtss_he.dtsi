@@ -62,6 +62,12 @@
 			power-state-name = "soft-off";
 			min-residency-us = < 300000000 >;
 		};
+		suspend: suspend {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-ram";
+			min-residency-us = < 5000000 >;
+			status = "okay";
+		};
 	};
 	cpus {
 		#address-cells = <1>;
@@ -72,7 +78,7 @@
 			d-cache-line-size = <32>;
 			i-cache-line-size = <32>;
 			reg = <0>;
-			cpu-power-states = <&off>;
+			cpu-power-states = <&off &suspend>;
 		};
 	};
 };
