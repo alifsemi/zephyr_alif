@@ -10,7 +10,9 @@
 #include <zephyr/linker/sections.h>
 
 #include <zephyr/arch/common/pm_s2ram.h>
-
+#if defined (CONFIG_SOC_FAMILY_ENSEMBLE) || defined (CONFIG_SOC_FAMILY_BALLETTO)
+#include "sau_tcm_ns_setup.h"
+#endif
 #include <cmsis_core.h>
 #include <string.h>
 
