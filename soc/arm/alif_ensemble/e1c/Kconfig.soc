@@ -18,7 +18,6 @@ config SOC_E1C_DK_RTSS_HE
 	select ARMV8_1_M_MVEF
 	select BUILD_NO_GAP_FILL
 	select CPU_HAS_ARM_SAU
-	select ARM_SECURE_FIRMWARE if DISPLAY
 endchoice
 
 config SOC_SERIES_ENSEMBLE
