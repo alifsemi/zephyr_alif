@@ -1,0 +1,21 @@
+/*
+ * Copyright (c) 2025 Alif Semiconductor.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+&i3c0 {
+	status = "okay";
+
+    icm42670: icm42670@680000023500000000 {
+        compatible = "invensense,icm42670";
+        reg = < 0x68 0x0235 0x00000000 >;
+        /* Dynamic Address To Be Assigned To The Device */
+        assigned-address = <0x9>;
+        int-gpios = <&gpio8 5 GPIO_ACTIVE_HIGH>;
+        accel-hz = <800>;
+        accel-fs = <16>;
+        gyro-hz = <800>;
+        gyro-fs = <2000>;
+        status = "okay";
+    };
+};
