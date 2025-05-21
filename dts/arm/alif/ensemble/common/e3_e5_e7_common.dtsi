@@ -1,0 +1,113 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <zephyr/dt-bindings/clock/alif_ensemble_clocks.h>
+#include "ex_common.dtsi"
+
+&{/soc} {
+	clock: clock-controller@4903f000 {
+		compatible = "alif,clk";
+		reg = <0x4903F000 0xB0
+				0x4902F000 0xBC
+				0x1A604000 0x44
+				0x1A609000 0x14
+				0x43007000 0x2C
+				0x400F0000 0x14>;
+		reg-names = "master_clkctrl",
+				"slave_clkctrl",
+				"aon_clkctrl",
+				"vbat_clkctrl",
+				"m55he_clkctrl",
+				"m55hp_clkctrl";
+		#clock-cells = <1>;
+		status = "okay";
+	};
+
+	sram1: sram@8000000 {
+		compatible = "zephyr,memory-region","mmio-sram";
+		zephyr,memory-region = "SRAM1";
+	};
+
+	uart6: uart@4901e000 {
+		compatible = "ns16550";
+		reg = <0x4901e000 0x100>;
+		clocks = <&clock ALIF_UART6_SYST_PCLK>;
+		interrupts = <130 0>;
+		reg-shift = <2>;
+		current-speed = <115200>;
+		pinctrl-0 = < &pinctrl_uart6 >;
+		pinctrl-names = "default";
+		fifo-size = <32>;
+		status = "disabled";
+	};
+	uart7: uart@4901f000 {
+		compatible = "ns16550";
+		reg = <0x4901f000 0x100>;
+		clocks = <&clock ALIF_UART7_SYST_PCLK>;
+		interrupts = <131 0>;
+		reg-shift = <2>;
+		current-speed = <115200>;
+		pinctrl-0 = < &pinctrl_uart7 >;
+		pinctrl-names = "default";
+		fifo-size = <32>;
+		status = "disabled";
+	};
+
+	gpio10: gpio@4900a000 {
+		compatible = "snps,designware-gpio";
+		reg = <0x4900A000 0x1000>;
+		ngpios = <8>;
+		interrupts = <259 0>, <260 0>,
+			     <261 0>, <262 0>,
+			     <263 0>, <264 0>,
+			     <265 0>, <266 0>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+	gpio11: gpio@4900b000 {
+		compatible = "snps,designware-gpio";
+		reg = <0x4900B000 0x1000>;
+		ngpios = <8>;
+		interrupts = <267 0>, <268 0>,
+			     <269 0>, <270 0>,
+			     <271 0>, <272 0>,
+			     <273 0>, <274 0>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+	gpio12: gpio@4900c000 {
+		compatible = "snps,designware-gpio";
+		reg = <0x4900C000 0x1000>;
+		ngpios = <8>;
+		interrupts = <275 0>, <276 0>,
+			     <277 0>, <278 0>,
+			     <279 0>, <280 0>,
+			     <281 0>, <282 0>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+	gpio13: gpio@4900d000 {
+		compatible = "snps,designware-gpio";
+		reg = <0x4900D000 0x1000>;
+		ngpios = <8>;
+		interrupts = <283 0>, <284 0>,
+			     <285 0>, <286 0>,
+			     <287 0>, <288 0>,
+			     <289 0>, <290 0>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+	gpio14: gpio@4900e000 {
+		compatible = "snps,designware-gpio";
+		reg = <0x4900E000 0x1000>;
+		ngpios = <8>;
+		interrupts = <291 0>, <292 0>,
+			     <293 0>, <294 0>,
+			     <295 0>, <296 0>,
+			     <297 0>, <298 0>;
+		gpio-controller;
+		#gpio-cells = <2>;
+	};
+};
