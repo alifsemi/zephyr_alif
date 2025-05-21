@@ -61,7 +61,6 @@ config SD_CMD_TIMEOUT
 
 config SD_DATA_TIMEOUT
 	int "Timeout for SD data transfer (in ms)"
-	default 14 if SOC_FAMILY_ENSEMBLE || SOC_FAMILY_BALLETO
 	default 10000
 	help
 	  Default timeout in milliseconds for SD data transfer commands

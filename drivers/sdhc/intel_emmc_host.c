@@ -558,7 +558,7 @@ static int emmc_init_xfr(const struct device *dev, struct sdhc_data *data, bool 
 	}
 
 	/* Set data timeout time */
-	regs->timeout_ctrl = data->timeout_ms;
+	regs->timeout_ctrl = EMMC_HOST_MS_TO_TOUT(data->timeout_ms);
 
 	return 0;
 }
@@ -959,6 +959,7 @@ static int emmc_send_cmd_data(const struct device *dev, uint32_t cmd_idx,
 
 	if (IS_ENABLED(CONFIG_INTEL_EMMC_HOST_DMA)) {
 		ret = wait_xfr_complete(dev, data->timeout_ms);
+
 	} else {
 		if (read) {
 			ret = read_data_port(dev, data);
@@ -1005,6 +1006,7 @@ static int emmc_xfr(const struct device *dev, struct sdhc_command *cmd, struct s
 
 	if (IS_ENABLED(CONFIG_INTEL_EMMC_HOST_DMA)) {
 		ret = wait_xfr_complete(dev, data->timeout_ms);
+
 	} else {
 		if (read) {
 			ret = read_data_port(dev, data);
@@ -1016,6 +1018,7 @@ static int emmc_xfr(const struct device *dev, struct sdhc_command *cmd, struct s
 	if (!IS_ENABLED(CONFIG_INTEL_EMMC_HOST_AUTO_STOP)) {
 		emmc_stop_transfer(dev);
 	}
+
 	return ret;
 }
 
