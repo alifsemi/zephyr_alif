@@ -49,9 +49,11 @@
 		};
 
 		ns: ns@2002a000 {
-			compatible = "zephyr,memory-region", "mmio-region";
+			compatible = "zephyr,memory-region";
+			/* TGU Block Size(128KB) Aligned always */
 			reg = <0x2002a000 DT_SIZE_K(384)>;
-			zephyr,memory-region = "NS";
+			zephyr,memory-region = "NON_SECURE0";
+			status = "disabled";
 		};
 
 		peripheral@40000000 {

@@ -5,6 +5,7 @@
 add_subdirectory(${SOC_SERIES})
 zephyr_include_directories(common)
 
+zephyr_sources(common/soc_balletto_common.S)
 zephyr_sources_ifdef(CONFIG_PM_RTSS
   common/power_rtss.c
   )
