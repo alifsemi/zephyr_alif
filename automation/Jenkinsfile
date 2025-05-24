@@ -1,10 +1,79 @@
+def rebaseNeeded       = "-1"
 def allRecipientEmails = ""
-def rebaseNeeded = "-1"
+def alif_board_list    = ""
+def num_of_board       = ""
+
+def testApps = ['samples/hello_world',       'samples/basic/blinky',           'samples/drivers/watchdog',
+                'tests/drivers/entropy/api', 'samples/subsys/input/input_dump','samples/basic/blinky_pwm',
+                'samples/basic/fade_led',    'samples/drivers/uart/echo_bot',  'samples/drivers/can/counter',
+                'samples/sensor/icm42670',   'samples/drivers/counter/alarm',  'samples/drivers/i2s/echo',
+                '../alif/samples/drivers/video',            '../alif/samples/drivers/display',
+                '../alif/samples/drivers/audio/dmic_alif',  '../alif/samples/sensor/bme680',
+                '../alif/samples/drivers/i2c_dw',           '../alif/samples/drivers/spi_dw',
+                '../alif/samples/drivers/lpi2c',            '../alif/samples/drivers/crc',
+                '../alif/samples/drivers/can/loopback',     '../alif/samples/drivers/adc',
+                '../alif/samples/drivers/spi_flash',        '../alif/samples/drivers/dac',
+                '../alif/samples/drivers/cmp',              '../alif/samples/drivers/ipm/ipm_alif_hwsem',
+                '../alif/samples/modules/tflite-micro/tflm_ethosu']
+
+def generateTestAppParallelStages(appList, allBoardList) {
+    def stages = [:]
+
+    for (appName in appList) {
+        //This creates a new local variable inside the loop avoid Groovy variable binding issue
+        def app = appName
+        stages[app] = {
+            echo "✅ Building  ${app}"
+            catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                sh """#!/bin/bash
+                set -x
+                echo "🛠 PATH=> \$PATH"
+                cd "\${ZEPHYR_SDK_FOLDER_NAME}"
+                source "\${ZEPHYR_3X_ENV}/environment-setup-x86_64-pokysdk-linux"
+                all_boards=(${allBoardList})
+                overall_status=0
+                totalCnt=0
+                runCnt=0
+                skipCnt=0
+                failCnt=0
+                totalCnt=\${#all_boards[@]}
+
+                for boardName in "\${all_boards[@]}"; do
+                    build_dir="build_\${boardName}_\$(basename \"${app}\")"
+                    echo "🚩 Compiling for board: \$boardName, sample: ${app} (dir: \$build_dir)"
+
+                    west build -b "\$boardName" "${app}" --build-dir "\$build_dir"
+                    build_result=\$?
+
+                    if [[ \$build_result -eq 0 ]]; then
+                        echo "📌 ✅ Compilation succeeded for board: \$boardName, sample: ${app}"
+                        runCnt=\$((runCnt + 1))
+                    else
+                        echo "❌🚫 Build failed (code: \$build_result) for board: \$boardName, sample: ${app}"
+                        overall_status=1
+                        failCnt=\$((failCnt + 1))
+                    fi
+                done
+
+                echo "ℹ️ Run => Pass: \$runCnt/\$totalCnt, Fail: \$failCnt/\$totalCnt"
+                exit \$overall_status
+                """
+            }
+        }
+    }
+    return stages
+}
+
 pipeline {
     agent any
 
     environment {
-        REPO_NAME='zephyr'
+        ALIF_SDK_FOLDER_NAME='alif'
+        ALIF_SDK_REPO_URL='https://github.com/alifsemi/sdk-alif.git'
+        ZEPHYR_SDK_FOLDER_NAME='zephyr'
+        ZEPHYR_SDK_REPO_PATH='alifsemi/zephyr_alif'
+        PATH="${env.WEST_BIN_PATH}:${env.PATH}"
+        GITHUB_TOKEN = credentials('rajranjan_github_token')
     }
 
     options {
@@ -36,9 +105,10 @@ pipeline {
         stage('checkout') {
             steps {
                 cleanWs()
-                echo "⏳ Checking out '${REPO_NAME}' repo..."
 
-                dir("${REPO_NAME}") {
+                echo "⏳ Checking out 📂 ${ZEPHYR_SDK_FOLDER_NAME}_alif repo..."
+
+                dir("${ZEPHYR_SDK_FOLDER_NAME}") {
                     checkout scm
                 }
 
@@ -49,12 +119,13 @@ pipeline {
                         export PATH=$WEST_BIN_PATH:$PATH
                         source "${ZEPHYR_3X_ENV}/environment-setup-x86_64-pokysdk-linux"
                         echo -e "🛠️ $PATH"
-                        echo -e "✅ Checkout is completed "${REPO_NAME}"."
+                        echo -e "✅ Checkout ${ZEPHYR_SDK_FOLDER_NAME} completed..."
 
-                        if [ ! -d "${REPO_NAME}" ] ; then
-                            echo -e "🚫 ${REPO_NAME} directory didn't found."
+                        if [ ! -d "${ZEPHYR_SDK_FOLDER_NAME}" ] ; then
+                            echo -e "🚫 ${ZEPHYR_SDK_FOLDER_NAME} directory didn't found."
                             exit -1
                         fi
+
                         '''
                     }
                 }
@@ -63,12 +134,12 @@ pipeline {
                     rebaseNeeded = sh(
                         script: '''#!/bin/bash
                             set -xe
-                            cd ${REPO_NAME}
+                            cd ${ZEPHYR_SDK_FOLDER_NAME}
                             git fetch origin refs/heads/main:refs/remotes/origin/main
                             commitCnt=$(git rev-list --count origin/main..HEAD)
                             commits=$(git log -n ${commitCnt} --pretty=format:"%H")
 
-                            if [[ "$commits" -lt "1" ]] ; then
+                            if [[ "$commitCnt" -lt "1" ]] ; then
                                 echo 0
                                 exit 0
                             fi
@@ -93,13 +164,13 @@ pipeline {
             }
         }
 
-        stage('Get PR Authors') {
+        stage('Get PR Message/Authors') {
             steps {
                 script {
                     allRecipientEmails = sh(
                         script: '''#!/bin/bash
                             set -xe
-                            cd ${REPO_NAME}
+                            cd ${ZEPHYR_SDK_FOLDER_NAME}
                             commitCnt=$(git rev-list --count origin/main..HEAD)
 
                             # Get all author emails for this PR
@@ -115,25 +186,51 @@ pipeline {
                     ).trim()
                     echo "📤 Mail will be sent to: [${allRecipientEmails}]..."
                 }
+
+                script {
+                    withCredentials([string(credentialsId: 'rajranjan-alifsemi', variable: 'GITHUB_TOKEN')]) {
+                        def response = sh(
+                            script: 'curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${ZEPHYR_SDK_REPO_PATH}/pulls/${CHANGE_ID}"',
+                            returnStdout: true
+                        ).trim()
+                        def prJson = readJSON text: response
+
+                        def prTitle    = prJson.title
+                        def prBody     = prJson.body
+                        def pr_SHA_ID  = prJson.head.sha
+
+                        echo "PR Title: ${prTitle}"
+                        echo "PR Body: ${prBody}"
+                        echo "The updated SHA is: ${pr_SHA_ID}"
+                    }
+                }
             }
         }
 
-        stage('west init-update and build') {
+        stage('west init-update-getBoardNames') {
             steps {
                 script {
                     catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                         sh '''#!/bin/bash
                         set -xe
-                        export PATH=$WEST_BIN_PATH:$PATH
-                        source "${ZEPHYR_3X_ENV}/environment-setup-x86_64-pokysdk-linux"
-                        echo -e "🛠️ $PATH"
-                        cd "${REPO_NAME}"
+                        RE="[[:space:]]*"
+                        cd ${ZEPHYR_SDK_FOLDER_NAME}
+                        commitSHA=$(git log -n 1 --pretty=format:"%H")
+                        cd ..
 
-                        echo -e "✅ west initialization started"
-                        west init -l .
+                        echo -e "☑️ west initialization started"
+                        west init -m ${ALIF_SDK_REPO_URL} --mr main
                         echo -e "☑️ west initialization is completed."
+                        west config manifest.project-filter -- +tflite-micro
+                        if [ -f ${ALIF_SDK_FOLDER_NAME}/west.yml ]; then
+                            sed -i "/^${RE}-${RE}name${RE}:${RE}${ZEPHYR_SDK_FOLDER_NAME}/,/^${RE}revision${RE}:${RE}/s/^\\(${RE}revision${RE}: ${RE}\\).*/\\1${commitSHA}/" ${ALIF_SDK_FOLDER_NAME}/west.yml
+                        else
+                            echo "❌ west.yml does not exist or is not a regular file"
+                        fi
+
                         west update
                         echo -e "☑️ west update is completed."
+                        cd ${ZEPHYR_SDK_FOLDER_NAME}
 
                         commitCnt=$(git rev-list --count origin/main..HEAD)
                         totalCommitCnt=$(git rev-list --count origin/main)
@@ -201,61 +298,47 @@ pipeline {
                             pr_checker_err=0
                             check_patch_errors=0
                         fi
-
-                        mapfile -t all_alif_boards_cfgs < <(west boards | grep "alif" | grep -v "fpga")
-                        supported_compilers=("gcc")
-                        test_apps=("samples/hello_world")
-                        total_buildError=0
-                        total_cfg_run_cnt=0
-                        skipped_cfg_run_cnt=0
-                        actual_cfg_run_cnt=0
-                        fail_cfg_run_cnt=0
-                        success_cfg_run_cnt=0
-
-                        for currCompiler in ${!supported_compilers[@]}
-                        do
-                            for testApp in ${!test_apps[@]}
-                            do
-                                for boardName in ${!all_alif_boards_cfgs[@]}
-                                do
-                                   total_cfg_run_cnt=$((total_cfg_run_cnt + 1))
-                                   echo -e "🚩 Building for Board: ${all_alif_boards_cfgs[boardName]} AND test-app: ${test_apps[testApp]}"
-                                   if [ -d build ] ; then
-                                      rm -rf build
-                                      echo -e "❌ Deleting Build folder..."
-                                   fi
-
-                                   actual_cfg_run_cnt=$((actual_cfg_run_cnt + 1))
-                                   west build -b ${all_alif_boards_cfgs[boardName]} ${test_apps[testApp]}
-                                   tmp=$?
-                                   echo -e "\n\n"
-                                   total_buildError=$((total_buildError + tmp))
-                                   echo -e "🚫 Error Status total_buildError: $total_buildError and tmp: $tmp"
-                                   if [ "$tmp" -ne 0 ] ; then
-                                       fail_cfg_run_cnt=$((fail_cfg_run_cnt + 1))
-                                   fi
-                                done
-                            done
-                        done
-                        echo -e "✅ All Build is completed."
-                        echo -e "\n\n"
-
-                        if [[ "$total_buildError" =~ ^[0-9]+$ && "$check_patch_errors" =~ ^[0-9]+$ && "$pr_checker_err" =~ ^[0-9]+$ && "$gitlint_err" =~ ^[0-9]+$ ]]; then
-                            total_jenkins_Error=$((total_buildError + check_patch_errors + pr_checker_err + gitlint_err))
-                        else
-                            echo "Skipping non-numeric total_buildError: $total_buildError, check_patch_errors: $check_patch_errors, pr_checker_err: $pr_checker_err, gitlint_err: $gitlint_err"
-                        fi
-
                         echo -e " 🏆GitLint Result     =>  ${gitlint_err}"
                         echo -e " 🏆PR Checker  Result =>  ${pr_checker_err}"
                         echo -e " 🏆Check-Patch Result =>  Error: $check_patch_errors, Warnings: $check_patch_warnings"
-                        echo -e " 🏆Success: $((actual_cfg_run_cnt - fail_cfg_run_cnt)), Failed: $fail_cfg_run_cnt, Skipped: $skipped_cfg_run_cnt"
-                        echo -e " 🔥Total Run => ($actual_cfg_run_cnt/$total_cfg_run_cnt)"
-
-                        exit $total_jenkins_Error
                         '''
                     }
                     echo  " 🏆Git Rebase Needed  =>  ${rebaseNeeded}"
+                }
+
+                script {
+                    alif_board_list = sh(
+                        script: '''#!/bin/bash
+                            set -xe
+                            cd "${ZEPHYR_SDK_FOLDER_NAME}"
+                            mapfile -t all_alif_boards_cfgs < <(west boards | grep "alif" | grep -v "fpga")
+                            echo "${all_alif_boards_cfgs[@]}"
+                        ''',
+                        returnStdout: true
+                    ).trim()
+                    echo "⚙️ Selected Boards: [${alif_board_list}]..."
+
+                    def gAllBoards = alif_board_list.tokenize(' ')
+                    num_of_board   = gAllBoards.size()
+                    echo "ℹ️ Total test apps: ${testApps.size()}"
+                    echo "ℹ️ Total boards: ${num_of_board}"
+                }
+            }
+        }
+
+        stage('gcc') {
+            steps {
+                script {
+                    try {
+                        def testAppStages = generateTestAppParallelStages(testApps, alif_board_list)
+                        parallel testAppStages
+                        if (!testAppStages || testAppStages.isEmpty()) {
+                            error "❌ generateTestAppParallelStages returned empty or null stages!"
+                        }
+                        echo "✅ Generated ${testAppStages.size()} test app stages."
+                    } catch (err) {
+                        error "❌ Failed to generate test app stages: ${err}"
+                    }
                 }
             }
         }
@@ -272,14 +355,18 @@ pipeline {
                        <p>Build Number: <b>${env.BUILD_NUMBER}</b></p>
                        <p>View details: <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
                     """,
-                    to: "${allRecipientEmails}",
+                    to: "raj.ranjan@alifsemi.com",
                     mimeType: 'text/html'
                 )
             }
+            recordIssues sourceCodeRetention: 'LAST_BUILD', tools: [gcc()]
+            mail bcc: 'raj.ranjan@alifsemi.com', body: 'rajranjansinghKidhar ho', cc: 'rupesh@alifsemi.com', from: 'sudhir@alifsemi.com', replyTo: 'prakash@alifsemi.com', subject: 'Data', to: 'lokesh@alifsemi.com'
         }
 
         success {
             echo 'Build succeeded.'
+            recordIssues sourceCodeRetention: 'LAST_BUILD', tools: [gcc()]
+            mail bcc: 'raj.ranjan@alifsemi.com', body: 'rajranjansinghKidhar ho', cc: 'rupesh@alifsemi.com', from: 'sudhir@alifsemi.com', replyTo: 'prakash@alifsemi.com', subject: 'Data', to: 'lokesh@alifsemi.com'
         }
 
         cleanup {
