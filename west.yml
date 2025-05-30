@@ -23,6 +23,8 @@ manifest:
       url-base: https://github.com/zephyrproject-rtos
     - name: babblesim
       url-base: https://github.com/BabbleSim
+    - name: alif
+      url-base: https://github.com/alifsemi
 
   group-filter: [-babblesim, -optional]
 
@@ -144,6 +146,12 @@ manifest:
     - name: hal_adi
       revision: 633fcecf3717aaa22079cf6121627a879f24df51
       path: modules/hal/adi
+      groups:
+        - hal
+    - name: hal_alif
+      revision: eda1ffed574f7e0decb3e201bf3e2b3c01aeb826
+      path: modules/hal/alif
+      remote: alif
       groups:
         - hal
     - name: hal_altera
