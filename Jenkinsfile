@@ -1,205 +1,444 @@
+def rebaseNeeded       = "-1"
+def allRecipientEmails = ""
+def alif_board_list    = ""
+def num_of_board       = ""
+def prTitle            = ""
+def prBody             = ""
+def prSHA_ID           = ""  // Zephyr SHA
+def projectName        = ""
+def alif_pull_req      = ""
+def hal_pull_req       = ""
 
+def testApps = [ ['samples/hello_world', 'data' ],
+                 ['samples/basic/blinky'],
+                 ['samples/drivers/watchdog'],
+                 ['tests/drivers/entropy/api'],
+                 ['samples/subsys/input/input_dump'],
+                 //['samples/basic/blinky_pwm'],
+                 //['samples/basic/fade_led'],
+                 ['samples/drivers/uart/echo_bot'],
+                 ['samples/drivers/can/counter'],
+                 ['samples/sensor/icm42670'],
+                 //['samples/drivers/counter/alarm'],
+                 ['samples/drivers/i2s/echo'],
+                 ['../alif/samples/drivers/i2c_dw'],
+                 ['../alif/samples/drivers/crc'],
+                 ['../alif/samples/drivers/can/loopback'],
+                 ['../alif/samples/drivers/adc'],
+                 ['../alif/samples/drivers/dac'],
+                 ['../alif/samples/drivers/cmp'],
+                 ['../alif/samples/modules/tflite-micro/tflm_ethosu']
+               ]
 
-def common_funcs
+def generateTestAppParallelStages(appList, allBoardList) {
+    def stages = [:]
 
-def samples1 = ['beacon', 'broadcast_audio_sink', 'broadcast_audio_source', 'broadcaster', 'broadcaster_multiple', 'central',
-               'central_gatt_write', 'central_hr', 'central_ht', 'central_iso', 'central_multilink']
-// , 'central_otc' //Requires 4 buttons to work
+    for (appName in appList) {
+        //This creates a new local variable inside the loop avoid Groovy variable binding issue
+        def app = appName[0]
+        def extraArg = appName[1]
 
-def samples2 = ['central_past', 'direct_adv', 'direction_finding_central', 'direction_finding_connectionless_rx', 'direction_finding_connectionless_tx', 'direction_finding_peripheral',
-               'eddystone', 'handsfree', 'hap_ha', 'hci_pwr_ctrl']
-// , 'hci_spi' //error: '__device_dts_ord___BUS_ORD' undeclared here (not in a function); did you mean '__device_dts_ord_16'?
+        stages[app] = {
+            echo "✅ Building  ${app}"
+            catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                sh """#!/bin/bash
+                set -x
+                echo "🛠 PATH=> \$PATH"
+                cd "\${ZEPHYR_SDK_FOLDER_NAME}"
+                source "\${ZEPHYR_3X_ENV}/environment-setup-x86_64-pokysdk-linux"
+                all_boards=(${allBoardList})
+                overall_status=0
+                totalCnt=0
+                runCnt=0
+                skipCnt=0
+                failCnt=0
+                totalCnt=\${#all_boards[@]}
 
-def samples3 = ['ibeacon', 'ipsp', 'iso_broadcast',
-               'iso_broadcast_benchmark', 'iso_connected_benchmark', 'iso_receive', 'mesh', 'mesh_demo', 'mesh_provisioner']
-// 'hci_uart', //error: '__device_dts_ord_DT_CHOSEN_zephyr_bt_c2h_uart_ORD' undeclared here (not in a function)
-// 'hci_usb_h4', //Multiple compilation errors
-// 'hci_usb',  //Multiple compilation errors
+                for boardName in "\${all_boards[@]}"; do
+                    build_dir="build_\${boardName}_\$(basename \"${app}\")"
+                    echo "🚩 Compiling for board: \$boardName, sample: ${app} (dir: \$build_dir)"
 
-def samples4 = ['observer', 'periodic_adv', 'periodic_sync', 'peripheral', 'peripheral_accept_list',
-               'peripheral_csc', 'peripheral_dis', 'peripheral_esp', 'peripheral_gatt_write', 'peripheral_hids', 'peripheral_hr']
-// 'mtu_update', //ERROR: samples/bluetooth/mtu_update doesn't contain a CMakeLists.txt
+                    west build -b "\$boardName" "${app}" --build-dir "\$build_dir"
+                    build_result=\$?
 
-def samples5 = ['peripheral_ht', 'peripheral_identity', 'peripheral_iso', 'peripheral_ots', 'peripheral_past',
-               'peripheral_sc_only', 'scan_adv', 'unicast_audio_client', 'unicast_audio_server']
-// , 'st_ble_sensor' //error: '__device_dts_ord_DT_N_ALIAS_sw0_P_gpios_IDX_0_PH_ORD' undeclared here (not in a function)
+                    if [[ \$build_result -eq 0 ]]; then
+                        echo "📌 ✅ Compilation succeeded for board: \$boardName, sample: ${app}"
+                        runCnt=\$((runCnt + 1))
+                    else
+                        echo "❌🚫 Build failed (code: \$build_result) for board: \$boardName, sample: ${app}"
+                        overall_status=1
+                        failCnt=\$((failCnt + 1))
+                    fi
+                done
 
-def bleStagesMap1 = samples1.collectEntries {
-    ["${it}" : generate_ble_stage(it)]
-}
-
-def bleStagesMap2 = samples2.collectEntries {
-    ["${it}" : generate_ble_stage(it)]
-}
-
-def bleStagesMap3 = samples3.collectEntries {
-    ["${it}" : generate_ble_stage(it)]
-}
-
-def bleStagesMap4 = samples4.collectEntries {
-    ["${it}" : generate_ble_stage(it)]
-}
-
-def bleStagesMap5 = samples5.collectEntries {
-    ["${it}" : generate_ble_stage(it)]
-}
-
-def generate_ble_stage(sample) {
-    return {
-        stage("Build ${sample} sample") {
-            script {
-                common_funcs = load 'test_samples.groovy'
-                common_funcs.build_zephyr("samples/bluetooth/${sample}", "build-b1-${sample}", "alif_b1_fpga_rtss_he_ble");
+                echo "ℹ️ Run => Pass: \$runCnt/\$totalCnt, Fail: \$failCnt/\$totalCnt"
+                exit \$overall_status
+                """
             }
         }
     }
+    return stages
 }
 
 pipeline {
-    agent none
-    parameters {
-        booleanParam(name: "FORCE_CLEAN_CACHE", defaultValue: false, description: "Clean cached Zephyr base package")
+    agent any
+
+    environment {
+        ALIF_SDK_FOLDER_NAME='alif'
+        ALIF_SDK_REPO_URL='https://github.com/alifsemi/sdk-alif.git'
+        ZEPHYR_SDK_FOLDER_NAME='zephyr'
+        ZEPHYR_SDK_REPO_PATH='alifsemi/zephyr_alif'
+        PATH="${env.WEST_BIN_PATH}:${env.PATH}"
+        GITHUB_TOKEN = credentials('rajranjan_github_token')
     }
+
     options {
-    	// Timeout for the whole build
-        timeout(time: 2, unit: 'HOURS')
-        timestamps()
+        skipDefaultCheckout(true)
     }
+
     stages {
-        stage('Clean cache') {
-            when {
-                anyOf {
-                    expression { return params.FORCE_CLEAN_CACHE }
-                }
-            }
-            agent { label 'git-ssh' }
+        stage('Install Dependencies') {
             steps {
                 script {
-                    common_funcs = load 'test_samples.groovy'
-                    common_funcs.clean_zephyr_cache();
+                    sh """#!/bin/bash -xe
+                    echo -e "✔️ None."
+                    """
                 }
             }
         }
-        stage('Init') {
-            agent { label 'git-ssh' }
+
+        stage('Display Environment Variables') {
             steps {
                 script {
-                    common_funcs = load 'test_samples.groovy'
-                }
-                script {
-                    common_funcs.zephyr_init();
+                    sh """#!/bin/bash -xe
+                        printenv
+                        echo -e "✔️ Displayed all environment setting."
+                    """
                 }
             }
         }
-        stage('Build') {
-            stages {
-                stage('Verify checkpatch') {
-                    agent { label 'git-ssh' }
-                    options { skipDefaultCheckout() }
-                    steps {
-                        script {
-                            common_funcs = load 'test_samples.groovy'
-                            common_funcs.verify_checkpatch();
-                        }
+
+        stage('checkout') {
+            steps {
+                cleanWs()
+
+                echo "⏳ Checking out 📂 ${ZEPHYR_SDK_FOLDER_NAME}_alif repo..."
+
+                dir("${ZEPHYR_SDK_FOLDER_NAME}") {
+                    checkout scm
+                }
+
+                script {
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        sh '''#!/bin/bash
+                        set -xe
+                        export PATH=$WEST_BIN_PATH:$PATH
+                        source "${ZEPHYR_3X_ENV}/environment-setup-x86_64-pokysdk-linux"
+                        echo -e "🛠️ $PATH"
+                        echo -e "✅ Checkout ${ZEPHYR_SDK_FOLDER_NAME} completed..."
+
+                        if [ ! -d "${ZEPHYR_SDK_FOLDER_NAME}" ] ; then
+                            echo -e "🚫 ${ZEPHYR_SDK_FOLDER_NAME} directory didn't found."
+                            exit -1
+                        fi
+
+                        '''
                     }
                 }
-                stage('Build helloworld sample') {
-                    agent { label 'git-ssh' }
-                    options { skipDefaultCheckout() }
-                    steps {
-                        script {
-                            common_funcs.build_zephyr("samples/hello_world", "build-e7-hello-world", "alif_e7_dk_rtss_he");
-                            common_funcs.build_zephyr("samples/hello_world", "build-e3-hello-world", "alif_e3_dk_rtss_hp");
-                            common_funcs.build_zephyr("samples/hello_world", "build-b1-hello-world", "alif_b1_fpga_rtss_he_ble");
-                        }
-                    }
-                    post {
-                        success {
-                            archiveArtifacts allowEmptyArchive: true, artifacts: 'zephyrproject/zephyr/build-e7-hello-world/zephyr/**', followSymlinks: false, onlyIfSuccessful: true
-                            archiveArtifacts allowEmptyArchive: true, artifacts: 'zephyrproject/zephyr/build-e3-hello-world/zephyr/**', followSymlinks: false, onlyIfSuccessful: true
-                            archiveArtifacts allowEmptyArchive: true, artifacts: 'zephyrproject/zephyr/build-b1-hello-world/zephyr/**', followSymlinks: false, onlyIfSuccessful: true
-                            // stash name: "hello-world" , includes: "spark/zephyrproject/zephyr/build-e7-hello-world/zephyr/**"
-                        }
-                    }
+
+                script {
+                    rebaseNeeded = sh(
+                        script: '''#!/bin/bash
+                            set -xe
+                            cd ${ZEPHYR_SDK_FOLDER_NAME}
+                            git fetch origin refs/heads/main:refs/remotes/origin/main
+                            commitCnt=$(git rev-list --count origin/main..HEAD)
+                            commits=$(git log -n ${commitCnt} --pretty=format:"%H")
+
+                            if [[ "$commitCnt" -lt "1" ]] ; then
+                                echo 0
+                                exit 0
+                            fi
+
+                            firstCommit=$(git log -n 1 --pretty=format:"%H")
+                            firstCommit_author_name=$(git show -s --format="%an" "$firstCommit")
+                            firstCommit_author_email=$(git show -s --format="%ae" "$firstCommit")
+                            firstCommit_body=$(git show -s --format="%b" "$firstCommit" | tail -n +1 | awk '!/^[A-Za-z-]+:/ {print}' | sed '/^$/d')
+                            parentCnt=$(git log -n 1 --pretty=format:"%p"  | wc -w)
+
+                            if [[ "$firstCommit_author_name" == "Jenkins" || "$firstCommit_author_email" == "nobody@nowhere" || "$firstCommit_body" == "*Merge commit \'$firstCommit\' into HEAD*" || "$parentCnt" -gt "1" ]] ; then
+                                git reset --soft HEAD~1
+                                echo 1
+                            else
+                                echo 0
+                            fi
+                            ''',
+                        returnStdout: true
+                    ).trim()
+                     echo "🎯 rebase needed: [${rebaseNeeded}]..."
                 }
-                stage('BLE samples stage 1') {
-                    agent { label 'git-ssh' }
-                    options { skipDefaultCheckout() }
-                    steps {
-                        script {
-                            parallel bleStagesMap1
-                        }
-                    }
-                    post {
-                        success {
-                            archiveArtifacts allowEmptyArchive: true, artifacts: 'zephyrproject/zephyr/build-b1-*/zephyr/**', followSymlinks: false, onlyIfSuccessful: true
-                        }
-                    }
+            }
+        }
+
+        stage('Get PR Message/Authors') {
+            steps {
+                script {
+                    allRecipientEmails = sh(
+                        script: '''#!/bin/bash
+                            set -xe
+                            cd ${ZEPHYR_SDK_FOLDER_NAME}
+                            commitCnt=$(git rev-list --count origin/main..HEAD)
+
+                            # Get all author emails for this PR
+                            culpritEmails=$(git log -n $commitCnt --pretty=format:'%ae' | sort | uniq | paste -sd";" -)
+
+                            # Replace all commas with semicolons
+                            defaultEmails=$(echo "$DEFAULT_OWNER_EMAILS" | tr ',' ';')
+
+                            all_emails="$culpritEmails;$defaultEmails"
+                            echo "$all_emails" | tr ';' '\n' | grep -v '^$' | sort -u | paste -sd ";" -
+                        ''',
+                        returnStdout: true
+                    ).trim()
+                    echo "📤 Mail will be sent to: [${allRecipientEmails}]..."
                 }
-                stage('BLE samples stage 2') {
-                    agent { label 'git-ssh' }
-                    options { skipDefaultCheckout() }
-                    steps {
-                        script {
-                            parallel bleStagesMap2
-                        }
-                    }
-                    post {
-                        success {
-                            archiveArtifacts allowEmptyArchive: true, artifacts: 'zephyrproject/zephyr/build-b1-*/zephyr/**', followSymlinks: false, onlyIfSuccessful: true
-                        }
-                    }
-                }
-                stage('BLE samples stage 3') {
-                    agent { label 'git-ssh' }
-                    options { skipDefaultCheckout() }
-                    steps {
-                        script {
-                            parallel bleStagesMap3
-                        }
-                    }
-                    post {
-                        success {
-                            archiveArtifacts allowEmptyArchive: true, artifacts: 'zephyrproject/zephyr/build-b1-*/zephyr/**', followSymlinks: false, onlyIfSuccessful: true
-                        }
-                    }
-                }
-                stage('BLE samples stage 4') {
-                    agent { label 'git-ssh' }
-                    options { skipDefaultCheckout() }
-                    steps {
-                        script {
-                            parallel bleStagesMap4
-                        }
-                    }
-                    post {
-                        success {
-                            archiveArtifacts allowEmptyArchive: true, artifacts: 'zephyrproject/zephyr/build-b1-*/zephyr/**', followSymlinks: false, onlyIfSuccessful: true
-                        }
-                    }
-                }
-                stage('BLE samples stage 5') {
-                    agent { label 'git-ssh' }
-                    options { skipDefaultCheckout() }
-                    steps {
-                        script {
-                            parallel bleStagesMap5
-                        }
-                    }
-                    post {
-                        success {
-                            archiveArtifacts allowEmptyArchive: true, artifacts: 'zephyrproject/zephyr/build-b1-*/zephyr/**', followSymlinks: false, onlyIfSuccessful: true
-                        }
-                    }
-                }
-                stage('Cleanup stage') {
-                    agent { label 'git-ssh' }
-                    options { skipDefaultCheckout() }
-                    steps {
-                        cleanWs()
+
+                script {
+                    withCredentials([string(credentialsId: 'rajranjan-alifsemi', variable: 'GITHUB_TOKEN')]) {
+                        def response = sh(
+                            script: 'curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/${ZEPHYR_SDK_REPO_PATH}/pulls/${CHANGE_ID}"',
+                            returnStdout: true
+                        ).trim()
+                        def prJson = readJSON text: response
+
+                        prTitle    = prJson.title
+                        pr_SHA_ID  = prJson.head.sha
+                        prBody     = prJson.body
+
+                        alif_pull_req = sh(
+                            script: """#!/bin/bash
+                                set -xe
+                                echo "$prBody" | sed -n 's/.*\\*\\*alif-sdk :\\*\\* \\([0-9][0-9]*\\).*/\\1/p'
+                                """,
+                                returnStdout: true
+                            ).trim()
+
+                        hal_pull_req = sh(
+                                script: """#!/bin/bash
+                                    set -xe
+                                    echo "$prBody" | sed -n 's/.*\\*\\*hal_alif :\\*\\* \\([0-9][0-9]*\\).*/\\1/p'
+                                """,
+                                returnStdout: true
+                            ).trim()
+
+                        echo "alif_pull_req: ${alif_pull_req}"
+                        echo "hal_pull_req: ${hal_pull_req}"
+                        echo "The updated SHA is: ${pr_SHA_ID}"
+                        echo "PR Title:\n ${prTitle}"
+                        echo "PR Body:\n ${prBody}"
                     }
                 }
             }
+        }
+
+        stage('west init-update-getBoardNames') {
+            steps {
+                script {
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        sh """#!/bin/bash
+                        set -xe
+
+                        echo -e "☑️ west initialization started"
+                        west init -m ${ALIF_SDK_REPO_URL} --mr main
+                        echo -e "☑️ west initialization is completed."
+                        west config manifest.project-filter -- +tflite-micro
+                        if [[ -n "$alif_pull_req" && "$alif_pull_req" -ne 0 ]] ; then
+                            cd \${ALIF_SDK_FOLDER_NAME}
+                            git fetch origin pull/$alif_pull_req/head:pr-$alif_pull_req
+                            git checkout pr-$alif_pull_req
+                            cd ..
+                        fi
+                        """
+                        }
+                    }
+
+                script {
+                    def RE = "[[:space:]]*"
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        sh """#!/bin/bash
+                        set -xe
+                        prj="\${ZEPHYR_SDK_FOLDER_NAME}"
+                        file="\${ALIF_SDK_FOLDER_NAME}/west.yml"
+
+                        if [ -f \${file} ]; then
+                            sed -i "/^${RE}-${RE}name${RE}:${RE}\${prj}/,/^${RE}revision${RE}:${RE}/s/^\\(${RE}revision${RE}:${RE}\\).*/\\1${pr_SHA_ID}/" "\${file}"
+                        else
+                            echo "❌ \${file} does not exist or is not a regular file"
+                        fi
+
+                        if [[ -n "$hal_pull_req" && "$hal_pull_req" -ne 0 ]] ; then
+                            cd \${ZEPHYR_SDK_FOLDER_NAME}
+                            prj="hal_alif"
+                            file="west.yml"
+                            if [ -f \${file} ]; then
+                                sed -i "/^${RE}-${RE}name${RE}:${RE}\${prj}/,/^${RE}revision${RE}:${RE}/s/^\\(${RE}revision${RE}:${RE}\\).*/\\1${pr_SHA_ID}/" "\${file}"
+                            else
+                                echo "❌ \${file} does not exist or is not a regular file"
+                            fi
+                            cd ..
+                        fi
+
+                        west update
+                        echo -e "☑️ west update is completed."
+                        """
+                    }
+                }
+
+                script {
+                    alif_board_list = sh(
+                        script: '''#!/bin/bash
+                            set -xe
+                            cd "${ZEPHYR_SDK_FOLDER_NAME}"
+                            mapfile -t all_alif_boards_cfgs < <(west boards | grep "alif" | grep -v "fpga")
+                            echo "${all_alif_boards_cfgs[@]}"
+                        ''',
+                        returnStdout: true
+                    ).trim()
+                    echo "⚙️ Selected Boards: [${alif_board_list}]..."
+
+                    def gAllBoards = alif_board_list.tokenize(' ')
+                    num_of_board   = gAllBoards.size()
+                    echo "ℹ️ Total test apps: ${testApps.size()}"
+                    echo "ℹ️ Total boards: ${num_of_board}"
+                }
+            }
+        }
+
+        stage('CheckPatch and Commit Message Validation') {
+            steps {
+                script {
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        sh """#!/bin/bash
+                        set -xe
+                        cd \${ZEPHYR_SDK_FOLDER_NAME}
+
+                        commitCnt=\$(git rev-list --count origin/main..HEAD)
+                        totalCommitCnt=\$(git rev-list --count origin/main)
+
+                        if [[ "\$totalCommitCnt" -lt "\$commitCnt" ]] ; then
+                            checkGitLog=\${commitCnt}
+                        else
+                            checkGitLog=6
+                        fi
+                        git log -\${checkGitLog}
+
+                        if [[ "\${commitCnt}" =~ ^[0-9]+\$ && "\${commitCnt}" -gt "0" ]] ; then
+                            git format-patch -\${commitCnt}
+                            check_patch_output=\$(./scripts/checkpatch.pl --patch *.patch)
+                            echo -e "\$check_patch_output"
+                            check_patch_output_summary=\$(echo "\$check_patch_output" | grep ".patch total:")
+                            echo -e "\$check_patch_output_summary"
+
+                            check_patch_errors=0
+                            check_patch_warnings=0
+                            check_patch_lines=0
+
+                            while read -r line; do
+                              # Extract numbers using regex or field parsing
+                              err=\$(echo "\$line"  | awk '{for(i=1;i<=NF;i++) if(\$i=="total:") print \$(i+1)}')
+                              warn=\$(echo "\$line" | awk '{for(i=1;i<=NF;i++) if(\$i=="errors,") print \$(i+1)}')
+                              ln=\$(echo "\$line"   | awk '{for(i=1;i<=NF;i++) if(\$i=="warnings,") print \$(i+1)}')
+
+                              if [[ "\$err" =~ ^[0-9]+\$ ]]; then
+                                check_patch_errors=\$((check_patch_errors + err))
+                              else
+                                echo "Skipping non-numeric error: \$err"
+                              fi
+
+                              if [[ "\$warn" =~ ^[0-9]+\$ ]]; then
+                                check_patch_warnings=\$((check_patch_warnings + warn))
+                              else
+                                echo "Skipping non-numeric warning: \$warn"
+                              fi
+
+                              if [[ "\$ln" =~ ^[0-9]+\$ ]]; then
+                                check_patch_lines=\$((check_patch_lines + ln))
+                              else
+                                echo "Skipping non-numeric lines: \$ln"
+                              fi
+
+                            done <<< "\$check_patch_output_summary"
+
+                            echo -e "🎯Check-Patch has=> Errors: \${check_patch_errors} Warnings: \${check_patch_warnings}, Lines: \${check_patch_lines}\n\n"
+
+                            pr_checker_log=\$(${VALIDATION_SCRIPT_DIR}/pr_commit_checker.sh  \${commitCnt})
+                            pr_checker_err=\$?
+                            echo -e "🎯PR Checker=>\n\$pr_checker_log"
+
+                            gitlint_log=\$(git log -\${commitCnt} --pretty=%B | gitlint 2>&1)
+                            if [ -n "\$gitlint_log" ] ; then
+                                gitlint_err=1
+                                echo -e "🎯GITLINT log=>\n\$gitlint_log"
+                            else
+                               gitlint_err=0
+                            fi
+                        else
+                            gitlint_err=0
+                            pr_checker_err=0
+                            check_patch_errors=0
+                        fi
+                        echo -e " 🏆Git Rebase Needed  =>  ${rebaseNeeded}"
+                        echo -e " 🏆GitLint Result     =>  \${gitlint_err}"
+                        echo -e " 🏆PR Checker  Result =>  \${pr_checker_err}"
+                        echo -e " 🏆Check-Patch Result =>  Error: \$check_patch_errors, Warnings: \$check_patch_warnings"
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('gcc') {
+            steps {
+                script {
+                    try {
+                        def testAppStages = generateTestAppParallelStages(testApps, alif_board_list)
+                        parallel testAppStages
+                        if (!testAppStages || testAppStages.isEmpty()) {
+                            error "❌ generateTestAppParallelStages returned empty or null stages!"
+                        }
+                        echo "✅ Generated ${testAppStages.size()} test app stages."
+                    } catch (err) {
+                        error "❌ Failed to generate test app stages: ${err}"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo "🚫 Build failed. Sending email..."
+            script {
+                emailext (
+                    subject: "🚨 Jenkins Job Failed: ${env.JOB_NAME} [${env.BUILD_NUMBER}]",
+                    body: """
+                       <p>Build failed for job: <b>${env.CHANGE_URL}</b></p>
+                       <p>Build Number: <b>${env.BUILD_NUMBER}</b></p>
+                       <p>View details: <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                    """,
+                    to: "raj.ranjan@alifsemi.com",
+                    mimeType: 'text/html'
+                )
+            }
+        }
+
+        success {
+            echo ' 🟢 Build succeeded...🟢'
+        }
+
+        cleanup {
+            echo "Cleaning up workspace..."
+            deleteDir()
         }
     }
 }
