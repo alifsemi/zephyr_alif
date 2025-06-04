@@ -6,14 +6,15 @@
 #include <zephyr/init.h>
 
 /**
- * @brief Perform alif ensemble common SoC configuration at boot.
+ * @brief Perform common SoC initialization at boot
+ *        for ensemble family.
  *        This will run after soc_early_init_hook.
  *
  * @return 0
  */
-static int alif_ensemble_common_soc_config(void)
+static int soc_init(void)
 {
 	return 0;
 }
 
-SYS_INIT(alif_ensemble_common_soc_config, PRE_KERNEL_1, 1);
+SYS_INIT(soc_init, PRE_KERNEL_1, 1);

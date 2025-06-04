@@ -4,6 +4,5 @@
 
 add_subdirectory(${SOC_SERIES})
 zephyr_include_directories(common)
-zephyr_sources(common/soc_ensemble_common.S)
-
+zephyr_sources(common/startup.S)
 zephyr_sources(common/soc_common.c)

@@ -10,7 +10,7 @@
 
 #define __MPU_PRESENT             1U        /* MPU regions present */
 #define __SAUREGION_PRESENT       1U        /* SAU regions present */
-#define __FPU_PRESENT             CONFIG_CPU_HAS_FPU
+#define __FPU_PRESENT             1U        /* FPU present */
 #define __DSP_PRESENT             1U        /* DSP extension present */
 #define __MVE_PRESENT             1U        /* MVE extensions present */
 #define __MVE_FP                  1U        /* MVE floating point present */
