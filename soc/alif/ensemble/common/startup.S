@@ -26,13 +26,15 @@ SECTION_FUNC(TEXT, soc_reset_hook)
 	movs.n r0, #0
 	msr CONTROL, r0
 	isb
-#if defined(CONFIG_CPU_CORTEX_M_HAS_SPLIM)
+
 	/* Clear SPLIM registers */
 	movs.n r0, #0
 	msr MSPLIM, r0
 	msr PSPLIM, r0
-#endif /* CONFIG_CPU_CORTEX_M_HAS_SPLIM */
 
+	/* Load the MSP value from the vector table
+	 * and jump to SystemInit
+	 */
 	ldr r0, =_vector_table
 	ldr r1, [r0, 0]
 	msr msp, r1
