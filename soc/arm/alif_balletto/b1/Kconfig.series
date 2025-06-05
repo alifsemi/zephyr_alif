@@ -10,6 +10,7 @@ config SOC_SERIES_BALLETTO_B1
 	select INIT_ARCH_HW_AT_BOOT
 	select CPU_HAS_CUSTOM_FIXED_SOC_MPU_REGIONS
 	select HAS_PM
+	select PLATFORM_SPECIFIC_INIT
 	select HAS_POWEROFF
 	help
 	  Enable support for Alif Balletto MCU series
