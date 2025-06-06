@@ -102,13 +102,14 @@ static int pwm_alif_utimer_set_cycles(const struct device *dev, uint32_t channel
 
 	value = utimer_get_driver_config(cfg->counterdirection, flags);
 
-	/* disable driver output if period is zero */
-	if (period_cycles == 0U) {
+	/* disable driver output if period or pulse is zero */
+	if (period_cycles == 0U || pulse_cycles == 0U) {
 		alif_utimer_disable_driver(timer_base, channel);
-		alif_utimer_set_driver_disable_val_low(timer_base, channel);
 		if (flags == PWM_POLARITY_INVERTED) {
 			/* make driver disable state as high */
 			alif_utimer_set_driver_disable_val_high(timer_base, channel);
+		} else {
+			alif_utimer_set_driver_disable_val_low(timer_base, channel);
 		}
 
 		data->prev_period = 0;
