@@ -32,7 +32,6 @@ if(CONFIG_OSPI1_XIP_REGION)
 endif()
 else()
   zephyr_linker_sources(SECTIONS common/alif_ns.ld)
-  zephyr_linker_sources(SECTIONS common/alif_sram.ld)
   zephyr_linker_sources(SECTIONS common/alif_ospi.ld)
 endif()
 
