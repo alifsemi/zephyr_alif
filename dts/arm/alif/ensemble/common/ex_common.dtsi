@@ -235,6 +235,14 @@
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
+    usb0: usb@48200000 {
+        compatible = "alif,xhci";
+        reg = <0x48200000 0x100000>;
+        interrupts = <101 0>;  /* USB IRQ */
+        clocks = <&usb_clk>;
+        status = "okay";
+        label = "USB_0";
+    };	
 };
 
 &{/} {
@@ -279,6 +287,11 @@
 			clock-frequency = <160000000>;
 			#clock-cells = <0>;
 		};
+		usb_clk: usb-clk {
+           compatible = "fixed-clock";
+           clock-frequency = <60000000>; /* 60 MHz typical USB clock */
+           #clock-cells = <0>;
+    	};  		
 	};
 
 	chosen {
