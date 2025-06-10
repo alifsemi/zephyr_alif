@@ -102,6 +102,7 @@ SECTIONS
     {
 
 #include <zephyr/linker/rel-sections.ld>
+#include "alif_sram.ld"
 
     /*
      * .plt and .iplt are here according to 'arm-zephyr-elf-ld --verbose',
