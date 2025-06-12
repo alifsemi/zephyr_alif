@@ -37,7 +37,27 @@ static int balletto_b1_dk_rtss_he_init(void)
 
 	/* enable all UART[5-0] modules */
 	/* select UART[5-0]_SCLK as SYST_PCLK clock. */
-	sys_write32(0xFFFF, 0x4902F008);
+	uint32_t uart_clk_mask = 0;
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart0), okay)
+	uart_clk_mask |= BIT(0) | BIT(8);
+#endif
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart1), okay)
+	uart_clk_mask |= BIT(1) | BIT(9);
+#endif
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart2), okay)
+	uart_clk_mask |= BIT(2) | BIT(10);
+#endif
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart3), okay)
+	uart_clk_mask |= BIT(3) | BIT(11);
+#endif
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart4), okay)
+	uart_clk_mask |= BIT(4) | BIT(12);
+#endif
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart5), okay)
+	uart_clk_mask |= BIT(5) | BIT(13);
+#endif
+	sys_write32(uart_clk_mask, 0x4902F008);
 
 	/* Enable LPPDM clock */
 	if (IS_ENABLED(CONFIG_ALIF_PDM)) {
@@ -45,14 +65,20 @@ static int balletto_b1_dk_rtss_he_init(void)
 	}
 
 	/* LPUART settings */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart), okay)
 	if (IS_ENABLED(CONFIG_SERIAL)) {
 		/* Enable clock supply for LPUART */
 		sys_write32(0x1, AON_RTSS_HE_LPUART_CKEN);
 	}
+#endif
 
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart_ahi), okay)
 	/* Enable AHI Tracing */
 	sys_write32(0x00000004, 0x1a605008);
+#endif
 
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart_ahi), okay) ||                                            \
+	DT_NODE_HAS_STATUS(DT_NODELABEL(uart_hci), okay)
 	/* Set AHI and HCI break condition.
 	 * Makes link layer deep sleep possible if one, or the other, is not used and its driver
 	 * isn't loaded
@@ -62,24 +88,23 @@ static int balletto_b1_dk_rtss_he_init(void)
 
 	sys_write8(lcr_reg1 | 0x40, 0x4300A00c);
 	sys_write8(lcr_reg2 | 0x40, 0x4300B00c);
+#endif
 
 	/* lptimer settings */
 #if DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers)
 	/* LPTIMER 0 settings */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(timer0), okay)
-	if (IS_ENABLED(CONFIG_LPTIMER0_OUTPUT_TOGGLE) ||
-			(CONFIG_LPTIMER0_EXT_CLK_FREQ > 0U)) {
+	if (IS_ENABLED(CONFIG_LPTIMER0_OUTPUT_TOGGLE) || (CONFIG_LPTIMER0_EXT_CLK_FREQ > 0U)) {
 		/*
 		 * enable of LPTIMER0 pin by config lpgpio
 		 * pin 0 as Hardware control
 		 */
 		sys_set_bit(LPGPIO_BASE, 0);
 	}
-#endif /* DT_NODE_HAS_STATUS(DT_NODELABEL(timer0), okay) */
+#endif  /* DT_NODE_HAS_STATUS(DT_NODELABEL(timer0), okay) */
 	/* LPTIMER 1 settings */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(timer1), okay)
-	if (IS_ENABLED(CONFIG_LPTIMER1_OUTPUT_TOGGLE) ||
-			(CONFIG_LPTIMER1_EXT_CLK_FREQ > 0U)) {
+	if (IS_ENABLED(CONFIG_LPTIMER1_OUTPUT_TOGGLE) || (CONFIG_LPTIMER1_EXT_CLK_FREQ > 0U)) {
 		/*
 		 * enable of LPTIMER1 pin by config lpgpio
 		 * pin 1 as Hardware control
@@ -175,16 +200,14 @@ static int balletto_b1_dk_rtss_he_init(void)
 
 	if (IS_ENABLED(CONFIG_MIPI_DSI)) {
 		/* Enable TX-DPHY and D-PLL Power and Disable Isolation.*/
-		sys_clear_bits(VBAT_PWR_CTRL, BIT(0) | BIT(1) | BIT(8) |
-				BIT(9) | BIT(12));
+		sys_clear_bits(VBAT_PWR_CTRL, BIT(0) | BIT(1) | BIT(8) | BIT(9) | BIT(12));
 
 		/* Enable HFOSC (38.4 MHz) and CFG (100 MHz) clock.*/
 		sys_set_bits(CGU_CLK_ENA, BIT(21) | BIT(23));
 	}
 
 	/* CAN settings */
-#if (DT_NODE_HAS_STATUS(DT_NODELABEL(can0), okay) || \
-		DT_NODE_HAS_STATUS(DT_NODELABEL(can1), okay))
+#if (DT_NODE_HAS_STATUS(DT_NODELABEL(can0), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(can1), okay))
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(can1), okay)
 	/*I3C Flex GPIO */
 	sys_write32(0x1, VBAT_BASE);
