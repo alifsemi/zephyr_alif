@@ -274,4 +274,10 @@
 /* UTIMER clocks */
 #define ALIF_UTIMER_CLK     ALIF_CLK(1U)
 
+/* Enable USB_CLK AND 10M_CLK */
+#define ALIF_100M_CLK               \
+	ALIF_CLK_CFG(CGU, CLK_ENA, 21U, 1U, 0U, 0U, 0U)
+#define ALIF_38P4M_CLK               \
+	ALIF_CLK_CFG(CGU, CLK_ENA, 23U, 1U, 0U, 0U, 0U)
+
 #endif /* ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_ALIF_CLOCK_CONTROL_H_ */

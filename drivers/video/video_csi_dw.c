@@ -318,7 +318,9 @@ static int csi2_dw_validate_data(const struct device *dev)
 	const struct csi2_dw_config *config = dev->config;
 	struct csi2_dw_data *data = dev->data;
 	float pixclock;
+	uint32_t temp;
 	uint32_t bpp;
+	int ret;
 
 	bpp = data->csi_cpi_settings->bits_per_pixel;
 	/*
@@ -341,6 +343,14 @@ static int csi2_dw_validate_data(const struct device *dev)
 	 * balanced pixel clock = pix_clk * 1.2
 	 */
 	pixclock = ((data->phy.pll_fin << 1) * data->phy.num_lanes * CSI2_BANDWIDTH_SCALER) / bpp;
+	temp = (uint32_t)pixclock;
+
+	ret = clock_control_set_rate(config->clk_dev, config->pix_cid,
+			(clock_control_subsys_rate_t)temp);
+	if (ret) {
+		LOG_ERR("Pixel clock set-rate failed! ret - %d", ret);
+		return ret;
+	}
 
 	LOG_DBG("pll_fin - %d, Check pixclock = %d (CSI_PIXCLK_CTRL)", data->phy.pll_fin,
 		(uint32_t)pixclock);
@@ -506,12 +516,80 @@ static const struct video_driver_api csi2_dw_driver_api = {
 	.set_ctrl = csi2_dw_set_ctrl,
 };
 
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
+static int csi2_dw_enable_clocks(const struct device *dev)
+{
+	const struct csi2_dw_config *config = dev->config;
+	int ret;
+
+	/* Enable CSI clock. */
+	ret = clock_control_on(config->clk_dev, config->csi_cid);
+	if (ret) {
+		LOG_ERR("Enable CSI clock source for APB interface failed! ret - %d", ret);
+		return ret;
+	}
+
+	/* Enable RX-DPHY clock. */
+	ret = clock_control_on(config->clk_dev, config->rxdphy_cid);
+	if (ret) {
+		LOG_ERR("Enable RX-DPHY clock source failed! ret - %d", ret);
+		return ret;
+	}
+
+	/* Enable Enable CFG clock - 25 MHz clock (child clock of 100 MHz clock). */
+	ret = clock_control_on(config->clk_dev, config->cfg_cid);
+	if (ret) {
+		LOG_ERR("Enable RX-DPHY clock source failed! ret - %d", ret);
+		return ret;
+	}
+
+	/*
+	 * Initially configure Pixel clock to maximum frequency. We will
+	 * re-configure the pixel clock to a more appropriate frequency later.
+	 */
+	ret = clock_control_configure(config->clk_dev, config->pix_cid, NULL);
+	if (ret) {
+		LOG_ERR("Pixel-CLK source configuration failed! ret - %d", ret);
+		return ret;
+	}
+
+	/* Set maximum rate for IPI interface of CSI and CPI. This is
+	 * reconfigured during configuration time of CSI and D-PHY.
+	 */
+	ret = clock_control_set_rate(config->clk_dev, config->pix_cid,
+			(clock_control_subsys_rate_t) MHZ(200));
+	if (ret) {
+		LOG_ERR("Pixel-CLK set frequency failed! ret - %d", ret);
+		return ret;
+	}
+
+	/* Enable Pixel clock*/
+	ret = clock_control_on(config->clk_dev, config->pix_cid);
+	if (ret) {
+		LOG_ERR("Enable Pixel-CLK failed! ret - %d", ret);
+		return ret;
+	}
+
+	return 0;
+
+}
+#endif /* DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks) */
+
 static int csi2_dw_init(const struct device *dev)
 {
 	const struct csi2_dw_config *config = dev->config;
 	struct csi2_dw_data *data = dev->data;
+	int ret;
 
 	DEVICE_MMIO_MAP(dev, K_MEM_CACHE_NONE);
+
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
+	ret = csi2_dw_enable_clocks(dev);
+	if (ret) {
+		LOG_ERR("CSI-2 clock enable failed! Exiting! ret - %d", ret);
+		return ret;
+	}
+#endif /* DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks) */
 
 	config->irq_config_func(dev);
 
@@ -521,10 +599,24 @@ static int csi2_dw_init(const struct device *dev)
 	return 0;
 }
 
+#define MIPI_CSI_GET_CLK(i)                                                                     \
+	IF_ENABLED(DT_INST_NODE_HAS_PROP(i, clocks),                                            \
+		(.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(i)),                              \
+		 .pix_cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,              \
+			 pixel_clk, clkid),                                                     \
+		 .csi_cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,              \
+			 csi_clk_en, clkid),                                                    \
+		 .cfg_cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,              \
+			 cfg_clk_en, clkid),                                                    \
+		 .rxdphy_cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,           \
+			 rx_dphy_clk, clkid),))
+
 #define ALIF_MIPI_CSI_DEVICE(i)                                                                    \
 	static void csi2_dw_config_func_##i(const struct device *dev);                             \
 	static const struct csi2_dw_config config_##i = {                                          \
 		DEVICE_MMIO_ROM_INIT(DT_DRV_INST(i)),                                              \
+                                                                                                   \
+		MIPI_CSI_GET_CLK(i)                                                                \
 		.rx_dphy = DEVICE_DT_GET_OR_NULL(DT_INST_PHANDLE(i, phy_if)),                      \
                                                                                                    \
 		.irq = DT_INST_IRQN(i),                                                            \
