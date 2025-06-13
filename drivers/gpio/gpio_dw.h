@@ -11,6 +11,10 @@
 #include <zephyr/drivers/gpio.h>
 #include "gpio_dw_registers.h"
 
+#ifdef CONFIG_PINCTRL
+#include <zephyr/drivers/pinctrl.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -23,6 +27,9 @@ struct gpio_dw_config {
 	uint32_t ngpios;
 	uint32_t irq_num; /* set to 0 if GPIO port cannot interrupt */
 	gpio_config_irq_t config_func;
+#ifdef CONFIG_PINCTRL
+	const struct pinctrl_dev_config *pcfg;
+#endif
 };
 
 struct gpio_dw_runtime {

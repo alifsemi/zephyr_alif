@@ -202,12 +202,6 @@ static int gpio_dw_pin_interrupt_configure(const struct device *port,
 		}
 	}
 
-	/* Does not support both edges */
-	if ((mode == GPIO_INT_MODE_EDGE) &&
-	    (trig == GPIO_INT_TRIG_BOTH)) {
-		return -ENOTSUP;
-	}
-
 	/* Clear interrupt enable */
 	dw_set_bit(base_addr, INTEN, pin, false);
 
@@ -216,13 +210,19 @@ static int gpio_dw_pin_interrupt_configure(const struct device *port,
 	dw_write(base_addr, PORTA_EOI, BIT(pin));
 
 	if (mode != GPIO_INT_MODE_DISABLED) {
-		/* level (0) or edge (1) */
-		dw_set_bit(base_addr, INTTYPE_LEVEL, pin,
-			   (mode == GPIO_INT_MODE_EDGE));
+		if ((mode == GPIO_INT_MODE_EDGE) &&
+		    (trig == GPIO_INT_TRIG_BOTH)) {
+			/* enable interrupt for both edge. */
+			dw_set_bit(base_addr, INT_BOTHEDGE, pin, 1);
+		} else {
+			/* level (0) or edge (1) */
+			dw_set_bit(base_addr, INTTYPE_LEVEL, pin,
+				   (mode == GPIO_INT_MODE_EDGE));
 
-		/* Active low/high */
-		dw_set_bit(base_addr, INT_POLARITY, pin,
-			   (trig == GPIO_INT_TRIG_HIGH));
+			/* Active low/high */
+			dw_set_bit(base_addr, INT_POLARITY, pin,
+				   (trig == GPIO_INT_TRIG_HIGH));
+		}
 
 		/* Finally enabling interrupt */
 		dw_set_bit(base_addr, INTEN, pin, true);
@@ -415,6 +415,7 @@ static int gpio_dw_initialize(const struct device *port)
 	struct gpio_dw_runtime *context = port->data;
 	const struct gpio_dw_config *config = port->config;
 	uint32_t base_addr;
+	int err = 0;
 
 	if (dw_interrupt_support(config)) {
 
@@ -431,7 +432,13 @@ static int gpio_dw_initialize(const struct device *port)
 		config->config_func(port);
 	}
 
-	return 0;
+#if defined(CONFIG_PINCTRL)
+	if (config->pcfg != NULL) {
+		err = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+	}
+#endif
+
+	return err;
 }
 
 /* Bindings to the platform */
@@ -440,7 +447,7 @@ static int gpio_dw_initialize(const struct device *port)
 
 #define GPIO_CFG_IRQ(idx, n)									\
 		IRQ_CONNECT(DT_INST_IRQN_BY_IDX(n, idx),					\
-			    DT_INST_IRQ(n, priority), gpio_dw_isr,				\
+			    DT_INST_IRQ_BY_IDX(n, idx, priority), gpio_dw_isr,			\
 			    DEVICE_DT_INST_GET(n), INST_IRQ_FLAGS(n));				\
 		irq_enable(DT_INST_IRQN_BY_IDX(n, idx));					\
 
@@ -451,6 +458,9 @@ static int gpio_dw_initialize(const struct device *port)
 		LISTIFY(DT_NUM_IRQS(DT_DRV_INST(n)), GPIO_CFG_IRQ, (), n)                       \
 	}											\
 												\
+	IF_ENABLED(DT_INST_NODE_HAS_PROP(n, pinctrl_0),						\
+			(PINCTRL_DT_INST_DEFINE(n)));						\
+												\
 	static const struct gpio_dw_config gpio_dw_config_##n = {				\
 		.common = {									\
 			.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(n),			\
@@ -458,6 +468,8 @@ static int gpio_dw_initialize(const struct device *port)
 		.irq_num = COND_CODE_1(DT_INST_IRQ_HAS_IDX(n, 0), (DT_INST_IRQN(n)), (0)),	\
 		.ngpios = DT_INST_PROP(n, ngpios),						\
 		.config_func = gpio_config_##n##_irq,						\
+		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, pinctrl_0),					\
+		(.pcfg = PINCTRL_DT_DEV_CONFIG_GET(DT_DRV_INST(n)),))				\
 	};											\
 												\
 	static struct gpio_dw_runtime gpio_##n##_runtime = {					\

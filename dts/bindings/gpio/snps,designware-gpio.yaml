@@ -5,7 +5,7 @@ description: Synopsys DesignWare GPIO node
 
 compatible: "snps,designware-gpio"
 
-include: [gpio-controller.yaml, base.yaml]
+include: [gpio-controller.yaml, pinctrl-device.yaml, base.yaml]
 
 properties:
   reg:
