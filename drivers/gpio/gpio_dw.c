@@ -447,7 +447,7 @@ static int gpio_dw_initialize(const struct device *port)
 
 #define GPIO_CFG_IRQ(idx, n)									\
 		IRQ_CONNECT(DT_INST_IRQN_BY_IDX(n, idx),					\
-			    DT_INST_IRQ(n, priority), gpio_dw_isr,				\
+			    DT_INST_IRQ_BY_IDX(n, idx, priority), gpio_dw_isr,			\
 			    DEVICE_DT_INST_GET(n), INST_IRQ_FLAGS(n));				\
 		irq_enable(DT_INST_IRQN_BY_IDX(n, idx));					\
 
