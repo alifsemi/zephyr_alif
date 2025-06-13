@@ -44,9 +44,6 @@ static int ensemble_e3_dk_rtss_he_init(void)
 	data |= 1U << 17;
 	sys_write32(data, CGU_CLK_ENA);
 
-	/* Switch HOSTUARTCLK Source to CGU_UART_CLK */
-	sys_write32(2, 0x1A010850);
-
 	/* enable pdm in expansion master */
 	sys_set_bits(EXPSLV_EXPMST0_CTRL, BIT(8));
 
