@@ -360,6 +360,7 @@
 			current-speed = <3000000>;
 			dlf = <5>;
 			hw-flow-control;
+			fifo-preserve;
 			status = "okay";
 		};
 
@@ -372,6 +373,7 @@
 			current-speed = <3000000>;
 			dlf = <5>;
 			hw-flow-control;
+			fifo-preserve;
 			status = "okay";
 		};
 
