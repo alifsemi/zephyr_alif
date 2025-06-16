@@ -6,3 +6,6 @@ add_subdirectory(${SOC_SERIES})
 zephyr_include_directories(common)
 
 zephyr_sources(common/soc_common.c)
+
+# buffers for USB device in RAM section
+zephyr_linker_sources(SECTIONS usb_buf_section.ld)
