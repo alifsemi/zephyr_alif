@@ -33,6 +33,7 @@
 			compatible = "zephyr,memory-region", "mmio-region";
 			reg = <0x2002a000 DT_SIZE_K(384)>;
 			zephyr,memory-region = "NS";
+			status = "disabled";
 		};
 
 		peripheral@40000000 {
