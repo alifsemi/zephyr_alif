@@ -1,0 +1,9 @@
+family:
+- name: ensemble
+  series:
+  - name: e7
+    socs:
+    - name: ae722f80f55d5xx
+      cpuclusters:
+      - name: rtss_he
+      - name: rtss_hp
