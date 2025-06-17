@@ -232,7 +232,7 @@
 	};
 	pinctrl_spi3: pinctrl_spi3 {
 		group0 {
-			pinmux = < PIN_P10_5__SPI3_MISO_B >,
+			pinmux = < PIN_P12_4__SPI3_MISO_A >,
 				 < PIN_P12_5__SPI3_MOSI_A >,
 				 < PIN_P12_6__SPI3_SCLK_A >,
 				 < PIN_P12_7__SPI3_SS0_A >;
@@ -312,7 +312,6 @@
 	pinctrl_ospi1:pinctrl_ospi1 {
 		group0 {
 			pinmux = < PIN_P5_5__OSPI1_SCLK_C >,
-				 < PIN_P5_6__OSPI1_RXDS_C >,
 				 < PIN_P5_7__OSPI1_SS0_C >,
 				 < PIN_P9_5__OSPI1_D0_C >,
 				 < PIN_P9_6__OSPI1_D1_C >,
@@ -321,7 +320,8 @@
 				 < PIN_P10_1__OSPI1_D4_C >,
 				 < PIN_P10_2__OSPI1_D5_C >,
 				 < PIN_P10_3__OSPI1_D6_C >,
-				 < PIN_P10_4__OSPI1_D7_C >;
+				 < PIN_P10_4__OSPI1_D7_C >,
+				 < PIN_P10_7__OSPI1_RXDS0_C >;
 			read_enable = <0x1>;
 			drive_strength = <12>;
 			slew_rate = <0x1>;
