@@ -18,13 +18,15 @@
 				0x1A604000 0x44
 				0x1A609000 0x14
 				0x43007000 0x2C
-				0x400F0000 0x14>;
+				0x400F0000 0x14
+				0x1A602000 0x24>;
 		reg-names = "master_clkctrl",
 				"slave_clkctrl",
 				"aon_clkctrl",
 				"vbat_clkctrl",
 				"m55he_clkctrl",
-				"m55hp_clkctrl";
+				"m55hp_clkctrl",
+				"cgu_clkctrl";
 		#clock-cells = <1>;
 		status = "okay";
 	};
@@ -1396,6 +1398,10 @@
 		data-lanes = <2>;
 		ipi-mode = "Camera";
 		phy-if = <&dphy>;
+
+		clocks = <&clock ALIF_CSI_CLK>, <&clock ALIF_CSI_PIX_SYST_ACLK>,
+			<&clock ALIF_MIPI_RXDPHY_CLK>, <&clock ALIF_100M_CLK>;
+		clock-names = "csi-clk-en", "pixel-clk", "rx-dphy-clk", "cfg-clk-en";
 
 		csi-hsa = <5>;
 		csi-hbp = <10>;
