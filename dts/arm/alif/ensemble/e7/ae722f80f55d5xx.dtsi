@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "alif/ensemble/common/e3_e5_e7_common.dtsi"
+#include "alif/ensemble/common/e3_e5_e7.dtsi"
 
 &sram0 {
 	reg = <0x02000000 DT_SIZE_K(4096)>;

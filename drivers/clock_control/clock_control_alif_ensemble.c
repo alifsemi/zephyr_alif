@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define DT_DRV_COMPAT alif_clk
+#define DT_DRV_COMPAT alif_clockctrl
 
 #include <zephyr/device.h>
 #include <zephyr/drivers/clock_control.h>
@@ -15,31 +15,37 @@
 LOG_MODULE_REGISTER(alif_clock_control, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 
 struct clock_control_alif_config {
-	uint32_t master_clkctrl_base;
-	uint32_t slave_clkctrl_base;
-	uint32_t aon_clkctrl_base;
-	uint32_t vbat_clkctrl_base;
-	uint32_t m55he_clkctrl_base;
-	uint32_t m55hp_clkctrl_base;
+	uint32_t clkctl_per_mst_base;
+	uint32_t clkctl_per_slv_base;
+	uint32_t aon_base;
+	uint32_t vbat_base;
+	uint32_t m55he_cfg_base;
+	uint32_t m55hp_cfg_base;
 };
 
-#define OSC_CLOCK_SRC_FREQ(clk)      DT_PROP(DT_PATH(clocks, clk), clock_frequency)
-#define PLL_CLOCK1_SRC_FREQ          DT_PROP(DT_PATH(clocks, pll), pll_clk1_frequency)
-#define PLL_CLOCK3_SRC_FREQ          DT_PROP(DT_PATH(clocks, pll), pll_clk3_frequency)
+#define OSC_CLOCK_SRC_FREQ(node)     DT_PROP(DT_PATH(clocks, node), clock_frequency)
+#define PLL_CLOCK1_SRC_FREQ          DT_PROP(DT_PATH(clocks, pll_clk1), clock_frequency)
+#define AXI_CLOCK_SRC_FREQ           DT_PROP(DT_PATH(clocks, axi_clk), clock_frequency)
 
 #define ALIF_CLOCK_SYST_CORE_FREQ    CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC
-#define ALIF_CLOCK_SYST_ACLK_FREQ    (PLL_CLOCK1_SRC_FREQ / 2U)
-#define ALIF_CLOCK_SYST_HCLK_FREQ    (PLL_CLOCK1_SRC_FREQ / 4U)
-#define ALIF_CLOCK_SYST_PCLK_FREQ    (PLL_CLOCK1_SRC_FREQ / 8U)
-#define ALIF_CLOCK_REFCLK_FREQ       (PLL_CLOCK1_SRC_FREQ / 8U)
-#define ALIF_CLOCK_PLL_CLK3_FREQ     PLL_CLOCK3_SRC_FREQ
-#define ALIF_CLOCK_USB_CLK_FREQ      (PLL_CLOCK3_SRC_FREQ / 24U)
-#define ALIF_CLOCK_160M_CLK_FREQ     (PLL_CLOCK3_SRC_FREQ / 3U)
-#define ALIF_CLOCK_10M_CLK_FREQ      (PLL_CLOCK3_SRC_FREQ / 48U)
+#define ALIF_CLOCK_SYST_ACLK_FREQ    (AXI_CLOCK_SRC_FREQ)
+#define ALIF_CLOCK_SYST_HCLK_FREQ    (AXI_CLOCK_SRC_FREQ / 2U)
+#define ALIF_CLOCK_SYST_PCLK_FREQ    (AXI_CLOCK_SRC_FREQ / 4U)
+#define ALIF_CLOCK_REFCLK_FREQ       (AXI_CLOCK_SRC_FREQ / 4U)
+
+#define ALIF_CLOCK_USB_CLK_FREQ      (PLL_CLOCK1_SRC_FREQ / 40U)
+#define ALIF_CLOCK_160M_CLK_FREQ     (PLL_CLOCK1_SRC_FREQ / 5U)
+#define ALIF_CLOCK_10M_CLK_FREQ      (PLL_CLOCK1_SRC_FREQ / 80U)
+
 #define ALIF_CLOCK_HFOSC_CLK_FREQ    OSC_CLOCK_SRC_FREQ(hfxo)
 #define ALIF_CLOCK_76M8_CLK_FREQ     (OSC_CLOCK_SRC_FREQ(hfxo) * 2U)
 #define ALIF_CLOCK_128K_CLK_FREQ     (OSC_CLOCK_SRC_FREQ(lfrc) * 4U)
-#define ALIF_CLOCK_S32K_CLK_FREQ     OSC_CLOCK_SRC_FREQ(lfxo)
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lfxo), okay)
+#define ALIF_CLOCK_S32K_CLK_FREQ OSC_CLOCK_SRC_FREQ(lfxo)
+#else
+#define ALIF_CLOCK_S32K_CLK_FREQ OSC_CLOCK_SRC_FREQ(lfrc)
+#endif
 
 
 /** register offset (from clkid cell) */
@@ -68,10 +74,6 @@ static uint32_t alif_get_input_clock(uint32_t clock_name)
 	case ALIF_CSI_PIX_SYST_ACLK:
 	case ALIF_UTIMER_CLK:
 		return ALIF_CLOCK_SYST_ACLK_FREQ;
-	case ALIF_CAMERA_PIX_PLL_CLK3:
-	case ALIF_CDC200_PIX_PLL_CLK3:
-	case ALIF_CSI_PIX_PLL_CLK3:
-		return ALIF_CLOCK_PLL_CLK3_FREQ;
 	case ALIF_CANFD0_HFOSC_CLK:
 		return ALIF_CLOCK_HFOSC_CLK_FREQ;
 	case ALIF_CANFD0_160M_CLK:
@@ -141,17 +143,14 @@ void alif_get_div_reg_info(uint32_t clock_name, uint32_t *mask,
 {
 	switch (clock_name) {
 	case ALIF_CAMERA_PIX_SYST_ACLK:
-	case ALIF_CAMERA_PIX_PLL_CLK3:
 		*mask = ALIF_CAMERA_PIX_CLK_DIV_MASK;
 		*pos = ALIF_CAMERA_PIX_CLK_DIV_POS;
 		break;
 	case ALIF_CDC200_PIX_SYST_ACLK:
-	case ALIF_CDC200_PIX_PLL_CLK3:
 		*mask = ALIF_CDC200_PIX_CLK_DIV_MASK;
 		*pos = ALIF_CDC200_PIX_CLK_DIV_POS;
 		break;
 	case ALIF_CSI_PIX_SYST_ACLK:
-	case ALIF_CSI_PIX_PLL_CLK3:
 		*mask = ALIF_CSI_PIX_CLK_DIV_MASK;
 		*pos = ALIF_CSI_PIX_CLK_DIV_POS;
 		break;
@@ -199,25 +198,25 @@ static int32_t alif_get_module_base(const struct device *dev, uint32_t module, u
 	const struct clock_control_alif_config *config = dev->config;
 
 	switch (module) {
-	case ALIF_DUMMY_CLKCTL_MODULE:
+	case ALIF_DUMMY_MODULE:
 		break;
-	case ALIF_PER_MST_CLKCTL_MODULE:
-		*base = config->master_clkctrl_base;
+	case ALIF_CLKCTL_PER_MST_MODULE:
+		*base = config->clkctl_per_mst_base;
 		break;
-	case ALIF_PER_SLV_CLKCTL_MODULE:
-		*base = config->slave_clkctrl_base;
+	case ALIF_CLKCTL_PER_SLV_MODULE:
+		*base = config->clkctl_per_slv_base;
 		break;
-	case ALIF_AON_CLKCTL_MODULE:
-		*base = config->aon_clkctrl_base;
+	case ALIF_AON_MODULE:
+		*base = config->aon_base;
 		break;
-	case ALIF_VBAT_CLKCTL_MODULE:
-		*base = config->vbat_clkctrl_base;
+	case ALIF_VBAT_MODULE:
+		*base = config->vbat_base;
 		break;
-	case ALIF_M55HE_CLKCTL_MODULE:
-		*base = config->m55he_clkctrl_base;
+	case ALIF_M55HE_CFG_MODULE:
+		*base = config->m55he_cfg_base;
 		break;
-	case ALIF_M55HP_CLKCTL_MODULE:
-		*base = config->m55hp_clkctrl_base;
+	case ALIF_M55HP_CFG_MODULE:
+		*base = config->m55hp_cfg_base;
 		break;
 	default:
 		LOG_ERR("ERROR: Un-supported clock module\n");
@@ -284,6 +283,7 @@ static int alif_clock_control_set_rate(const struct device *dev,
 	uint32_t div_mask, freq_div, div_pos;
 	uint32_t frequency = (uint32_t) rate;
 	int32_t ret;
+
 
 	clk_freq = alif_get_input_clock(clk_id);
 	if (!clk_freq) {
@@ -401,7 +401,7 @@ static inline int alif_clock_control_configure(const struct device *dev,
 	return 0;
 }
 
-static const struct clock_control_driver_api alif_clock_control_driver_api = {
+static DEVICE_API(clock_control, alif_clock_control_driver_api) = {
 	.on = alif_clock_control_on,
 	.off = alif_clock_control_off,
 	.set_rate = alif_clock_control_set_rate,
@@ -411,14 +411,14 @@ static const struct clock_control_driver_api alif_clock_control_driver_api = {
 };
 
 static const struct clock_control_alif_config config = {
-	.master_clkctrl_base = DT_INST_REG_ADDR_BY_NAME(0, master_clkctrl),
-	.slave_clkctrl_base = DT_INST_REG_ADDR_BY_NAME(0, slave_clkctrl),
-	.aon_clkctrl_base = DT_INST_REG_ADDR_BY_NAME(0, aon_clkctrl),
-	.vbat_clkctrl_base = DT_INST_REG_ADDR_BY_NAME(0, vbat_clkctrl),
-	.m55he_clkctrl_base = DT_INST_REG_ADDR_BY_NAME(0, m55he_clkctrl),
-	.m55hp_clkctrl_base = DT_INST_REG_ADDR_BY_NAME(0, m55hp_clkctrl)
+	.clkctl_per_mst_base = DT_INST_REG_ADDR_BY_NAME(0, clkctl_per_mst),
+	.clkctl_per_slv_base = DT_INST_REG_ADDR_BY_NAME(0, clkctl_per_slv),
+	.aon_base = DT_INST_REG_ADDR_BY_NAME(0, aon),
+	.vbat_base = DT_INST_REG_ADDR_BY_NAME(0, vbat),
+	.m55he_cfg_base = DT_INST_REG_ADDR_BY_NAME(0, m55he_cfg),
+	.m55hp_cfg_base = DT_INST_REG_ADDR_BY_NAME(0, m55hp_cfg)
 };
 
-DEVICE_DT_INST_DEFINE(0, NULL, NULL, NULL, &config, PRE_KERNEL_1,
+DEVICE_DT_DEFINE(DT_NODELABEL(clockctrl), NULL, NULL, NULL, &config, PRE_KERNEL_1,
 				CONFIG_CLOCK_CONTROL_INIT_PRIORITY,
 				&alif_clock_control_driver_api);

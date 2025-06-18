@@ -5,5 +5,5 @@ family:
         socs:
           - name: ae722f80f55d5xx
             cpuclusters:
-              - name: m55_he
-              - name: m55_hp
+              - name: rtss_he
+              - name: rtss_hp

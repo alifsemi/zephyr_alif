@@ -7,9 +7,7 @@
 
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/pinctrl.h>
-#include <soc.h>
 #include <zephyr/sys/util.h>
-#include <zephyr/dt-bindings/pinctrl/ensemble-pinctrl.h>
 
 /* Pinmux settings:
  * syntax : U  U  U  U  U  U  P  P  P  P  P  P  P  F  F  F

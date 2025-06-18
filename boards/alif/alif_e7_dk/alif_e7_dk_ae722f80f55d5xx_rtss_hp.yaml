@@ -1,18 +1,10 @@
 # Copyright (c) 2025 Alif Semiconductor
 # SPDX-License-Identifier: Apache-2.0
 
-identifier: alif_e7_dk_ae722f80f55d5xx_m55_hp
+identifier: alif_e7_dk_ae722f80f55d5xx_rtss_hp
 name: Alif DevKit Ensemble E7 AE722f80f55d5XX RTSS-HP MCU
 type: mcu
 arch: arm
 vendor: alif
 toolchain:
-  - gnuarmemb
   - zephyr
-  - xtools
-testing:
-  ignore_tags:
-    - drivers
-    - bluetooth
-    - net
-    - timer

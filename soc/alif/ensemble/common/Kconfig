@@ -12,11 +12,11 @@ config RTSS_HP
 	help
 	  Enable RTSS_HP core.
 
-config FLASH_SIZE
-	default $(dt_node_reg_size_int,$(dt_nodelabel_path,itcm),0,K)  if !XIP
-
-config FLASH_BASE_ADDRESS
-	default $(dt_node_reg_addr_hex,$(dt_nodelabel_path,itcm))      if !XIP
+#config FLASH_SIZE
+#	default $(dt_node_reg_size_int,$(dt_nodelabel_path,itcm),0,K)  if !XIP
+#
+#config FLASH_BASE_ADDRESS
+#	default $(dt_node_reg_addr_hex,$(dt_nodelabel_path,itcm))      if !XIP
 
 if RTSS_HP && !USE_DT_CODE_PARTITION
 config FLASH_LOAD_OFFSET

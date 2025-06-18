@@ -1,0 +1,15 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+    ALIF Semiconductor generic clock provider
+
+compatible: "alif,clock"
+
+include: [base.yaml]
+
+properties:
+  clock-frequency:
+    type: int
+    description: clock frequency Hz

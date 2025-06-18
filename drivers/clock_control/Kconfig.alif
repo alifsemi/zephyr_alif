@@ -5,6 +5,6 @@
 config CLOCK_CONTROL_ALIF
 	bool "Alif clock control driver"
 	default y
-	depends on DT_HAS_ALIF_CLK_ENABLED
+	depends on DT_HAS_ALIF_CLOCKCTRL_ENABLED
 	help
 	  Enable Alif clock control driver.

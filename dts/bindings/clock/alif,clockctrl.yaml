@@ -18,7 +18,7 @@ description: |
   Predefined clock control cells are available in
   include/zephyr/dts-bindings/clock/alif_clock_control.h header files.
 
-compatible: "alif,clk"
+compatible: "alif,clockctrl"
 
 include: [base.yaml, clock-controller.yaml]
 

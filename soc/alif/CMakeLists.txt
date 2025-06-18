@@ -2,6 +2,4 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-if SOC_FAMILY_ENSEMBLE
-rsource "*/Kconfig.defconfig"
-endif # SOC_FAMILY_ENSEMBLE
+add_subdirectory(common)

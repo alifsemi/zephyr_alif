@@ -5,11 +5,12 @@
 
 /dts-v1/;
 
-#include <alif/ensemble/e7/ae722f80f55d5xx_m55_hp.dtsi>
+#include <alif/ensemble/e7/ae722f80f55d5xx.dtsi>
+#include <alif/ensemble/common/ensemble_rtss_hp.dtsi>
 #include "../common/ensemble-pinctrl.dtsi"
 
 / {
-	compatible = "arm,alif-e7-dk-ae722f80f55d5xx-m55-hp";
+	compatible = "arm,alif-e7-dk-ae722f80f55d5xx-rtss-hp";
 	#address-cells = <1>;
 	#size-cells = <1>;
 
@@ -17,8 +18,8 @@
 		zephyr,flash = &mram_storage;
 		zephyr,code-partition = &slot0_partition;
 		zephyr,sram = &dtcm;
-		zephyr,console = &uart4;
-		zephyr,shell-uart = &uart4;
+		zephyr,console = &uart2;
+		zephyr,shell-uart = &uart2;
 	};
 
 	aliases {
@@ -42,7 +43,15 @@
 	};
 };
 
-&uart4 {
+&gpio6 {
+	status = "okay";
+};
+
+&lpgpio {
+	status = "okay";
+};
+
+&uart2 {
 	status = "okay";
 };
 

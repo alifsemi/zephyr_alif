@@ -2,8 +2,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-config SOC_AE722F80F55D5XX_M55_HE
+config SOC_AE722F80F55D5XX_RTSS_HE
 	select RTSS_HE
 
-config SOC_AE722F80F55D5XX_M55_HP
+config SOC_AE722F80F55D5XX_RTSS_HP
 	select RTSS_HP

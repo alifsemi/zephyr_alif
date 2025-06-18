@@ -41,7 +41,7 @@
  * @param src_bit  clock source bit position
  */
 #define ALIF_CLK_CFG(module, reg, en_bit, en_mask, src, src_mask, src_bit)    \
-	((((ALIF_##module##_CLKCTL_MODULE) & ALIF_CLOCK_MODULE_MASK) <<       \
+	((((ALIF_##module##_MODULE) & ALIF_CLOCK_MODULE_MASK) <<       \
 			ALIF_CLOCK_MODULE_SHIFT) |                            \
 	(((ALIF_##reg##_REG) & ALIF_CLOCK_REG_MASK) << ALIF_CLOCK_REG_SHIFT) | \
 	(((en_bit) & ALIF_CLOCK_EN_BIT_POS_MASK) <<                           \
@@ -60,7 +60,7 @@
  * passed as parameter which will differ for each macros.
  *
  */
-#define ALIF_DUMMY_CLKCTL_MODULE       0x0U
+#define ALIF_DUMMY_MODULE	       0x0U
 #define ALIF_DUMMY_REG                 0xFFU
 /**
  * @brief Macro for dummy clocks (clock configuration absent)
@@ -70,12 +70,12 @@
 #define ALIF_CLK(value)  ALIF_CLK_CFG(DUMMY, DUMMY, value, 0U, 0U, 0U, 0U)
 
 /* Clock modules */
-#define ALIF_PER_MST_CLKCTL_MODULE     0x1U
-#define ALIF_PER_SLV_CLKCTL_MODULE     0x2U
-#define ALIF_AON_CLKCTL_MODULE         0x3U
-#define ALIF_VBAT_CLKCTL_MODULE        0x4U
-#define ALIF_M55HE_CLKCTL_MODULE       0x5U
-#define ALIF_M55HP_CLKCTL_MODULE       0x6U
+#define ALIF_CLKCTL_PER_MST_MODULE	0x1U
+#define ALIF_CLKCTL_PER_SLV_MODULE	0x2U
+#define ALIF_AON_MODULE			0x3U
+#define ALIF_VBAT_MODULE		0x4U
+#define ALIF_M55HE_CFG_MODULE		0x5U
+#define ALIF_M55HP_CFG_MODULE		0x6U
 
 /* register offset for PER_MST_CLKCTL module */
 #define ALIF_CAMERA_PIXCLK_CTRL_REG    0x0U

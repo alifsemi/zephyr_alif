@@ -5,11 +5,12 @@
 
 /dts-v1/;
 
-#include <alif/ensemble/e7/ae722f80f55d5xx_m55_he.dtsi>
+#include <alif/ensemble/e7/ae722f80f55d5xx.dtsi>
+#include <alif/ensemble/common/ensemble_rtss_he.dtsi>
 #include "../common/ensemble-pinctrl.dtsi"
 
 / {
-	compatible = "arm,alif-e7-dk-ae722f80f55d5xx-m55-he";
+	compatible = "arm,alif-e7-dk-ae722f80f55d5xx-rtss-he";
 	#address-cells = <1>;
 	#size-cells = <1>;
 
@@ -41,6 +42,14 @@
 			label = "SW0";
 		};
 	};
+};
+
+&gpio6 {
+	status = "okay";
+};
+
+&lpgpio {
+	status = "okay";
 };
 
 &uart2 {
