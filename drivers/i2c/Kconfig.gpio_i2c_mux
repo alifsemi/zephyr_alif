@@ -1,0 +1,9 @@
+# Copyright (C) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config GPIO_I2C_MUX
+	bool "GPIO controlled SPDT switch based I2C Muliplexer"
+	default y
+	depends on I2C && DT_HAS_GPIO_I2C_MUX_ENABLED
+	help
+	  Enable GPIO controlled SPDT switch based I2C mux.
