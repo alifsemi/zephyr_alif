@@ -75,6 +75,7 @@ zephyr_library_sources_ifdef(CONFIG_I2C_XEC		i2c_mchp_xec.c)
 zephyr_library_sources_ifdef(CONFIG_I2C_XEC_V2		i2c_mchp_xec_v2.c)
 zephyr_library_sources_ifdef(CONFIG_I2C_XILINX_AXI	i2c_xilinx_axi.c)
 zephyr_library_sources_ifdef(CONFIG_LPI2C_ALIF		lpi2c_alif.c)
+zephyr_library_sources_ifdef(CONFIG_GPIO_I2C_MUX	gpio_i2c_mux.c)
 # zephyr-keep-sorted-stop
 
 if(CONFIG_I2C_RTIO)
