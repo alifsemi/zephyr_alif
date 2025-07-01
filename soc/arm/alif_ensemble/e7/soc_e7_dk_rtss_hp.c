@@ -41,10 +41,6 @@ static int ensemble_e7_dk_rtss_hp_init(void)
 	data |= 1U << 17;
 	sys_write32(data, 0x1A602014);
 
-	/* Switch HOSTUARTCLK Source to CGU_UART_CLK */
-	sys_write32(2, 0x1A010850);
-
-
 	/* Setting expansion master0 control register value */
 	/* for enabling clock */
 	data |= 0xc0000000;
