@@ -991,6 +991,7 @@
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
+
 	spi0: spi@48103000 {
 		dwc-ssi;
 		compatible = "snps,designware-spi";
@@ -1001,7 +1002,6 @@
 		reg = <0x48103000 0x1000>;
 		interrupt-parent = <&nvic>;
 		interrupts = <137 0>;
-		cs-gpios = <&gpio1 3 0>;
 		clocks = <&syst_hclk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
@@ -1018,7 +1018,6 @@
 		reg = <0x48104000 0x1000>;
 		interrupt-parent = <&nvic>;
 		interrupts = <138 0>;
-		cs-gpios = <&gpio2 7 1>;
 		clocks = <&syst_hclk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
@@ -1035,7 +1034,6 @@
 		reg = <0x48105000 0x1000>;
 		interrupt-parent = <&nvic>;
 		interrupts = <139 0>;
-		cs-gpios = <&gpio4 5 0>;
 		clocks = <&syst_hclk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
@@ -1052,7 +1050,6 @@
 		reg = <0x48106000 0x1000>;
 		interrupt-parent = <&nvic>;
 		interrupts = <140 0>;
-		cs-gpios = <&gpio12 7 0>;
 		clocks = <&syst_hclk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
@@ -1068,7 +1065,6 @@
 		reg = <0x43000000 0x1000>;
 		interrupt-parent = <&nvic>;
 		interrupts = <46 0>;
-		cs-gpios = <&gpio7 7 0>;
 		clocks = <&syst_pclk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
