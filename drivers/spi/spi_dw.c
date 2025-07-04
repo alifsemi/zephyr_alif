@@ -636,9 +636,17 @@ static int transceive(const struct device *dev,
 
 	/* Updating SSTE */
 	if (spi->dwc_ssi) {
-		reg_data |= (info->slv_slct_toggle) ? DWC_SSI_CTRLR0_SSTE : ~DWC_SSI_CTRLR0_SSTE;
+		if (info->slv_slct_toggle) {
+			reg_data |= DWC_SSI_CTRLR0_SSTE;
+		} else {
+			reg_data &= ~DWC_SSI_CTRLR0_SSTE;
+		}
 	} else {
-		reg_data |= (info->slv_slct_toggle) ? DW_SPI_CTRLR0_SSTE : ~DW_SPI_CTRLR0_SSTE;
+		if (info->slv_slct_toggle) {
+			reg_data |= DW_SPI_CTRLR0_SSTE;
+		} else {
+			reg_data &= ~DW_SPI_CTRLR0_SSTE;
+		}
 	}
 
 	write_ctrlr0(info, reg_data);
