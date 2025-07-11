@@ -37,6 +37,7 @@ choice ALIF_BLE_ROM_IMAGE_VERSION
 
 	config ALIF_BLE_ROM_IMAGE_V1_0
 		bool "ROM code version 1.0"
+		select ALIF_BLE_HOST_PATCHING
 	config ALIF_BLE_ROM_IMAGE_V1_2
 		bool "ROM code version 1.2"
 endchoice
