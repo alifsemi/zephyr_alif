@@ -49,10 +49,6 @@
 	status = "okay";
 };
 
-&lpgpio {
-	status = "okay";
-};
-
 &uart2 {
 	status = "okay";
 };

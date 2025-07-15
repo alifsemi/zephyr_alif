@@ -18,8 +18,8 @@
 		zephyr,flash = &mram_storage;
 		zephyr,code-partition = &slot0_partition;
 		zephyr,sram = &dtcm;
-		zephyr,console = &uart2;
-		zephyr,shell-uart = &uart2;
+		zephyr,console = &uart4;
+		zephyr,shell-uart = &uart4;
 	};
 
 	aliases {
@@ -48,11 +48,7 @@
 	status = "okay";
 };
 
-&lpgpio {
-	status = "okay";
-};
-
-&uart2 {
+&uart4 {
 	status = "okay";
 };
 

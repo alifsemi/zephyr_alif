@@ -7,9 +7,6 @@
 #include <zephyr/arch/arm/mpu/arm_mpu.h>
 #include <zephyr/devicetree.h>
 
-#define ALIF_HOST_PERIPHERAL_BASE	0x1A000000
-#define ALIF_HOST_PERIPHERAL_SIZE	MB(16)
-
 static const struct arm_mpu_region mpu_regions[] = {
 	/* Region 0 */
 	MPU_REGION_ENTRY("FLASH_0", CONFIG_FLASH_BASE_ADDRESS,
