@@ -13,6 +13,9 @@ zephyr_include_directories(
 )
 
 zephyr_library_sources(
+  d1/src/dave_base.c
+  d1/src/dave_irq.c
+  d1/src/dave_memory.c
   d2/src/dave_64bitoperation.c
   d2/src/dave_blit.c
   d2/src/dave_box.c
