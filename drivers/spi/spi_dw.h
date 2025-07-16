@@ -44,6 +44,8 @@ struct spi_dw_config {
 	bool serial_target;
 	uint8_t fifo_depth;
 	uint8_t max_xfer_size;
+	uint8_t rx_delay;
+	bool slv_slct_toggle;
 #ifdef CONFIG_PINCTRL
 	const struct pinctrl_dev_config *pcfg;
 #endif
@@ -230,6 +232,11 @@ static int reg_test_bit(uint8_t bit, mm_reg_t addr, uint32_t off)
 #define DWC_SSI_SPI_CTRLR0_SRL		BIT(DWC_SSI_SPI_CTRLR0_SRL_BIT)
 #define DWC_SSI_SPI_CTRLR0_SLV_OE	BIT(DWC_SSI_SPI_CTRLR0_SLV_OE_BIT)
 
+#define DW_SPI_CTRLR0_SSTE_BIT		(24)
+#define DW_SPI_CTRLR0_SSTE		BIT(DW_SPI_CTRLR0_SSTE_BIT)
+
+#define DWC_SSI_CTRLR0_SSTE_BIT		(14)
+#define DWC_SSI_CTRLR0_SSTE		BIT(DWC_SSI_CTRLR0_SSTE_BIT)
 #define DW_SPI_CTRLR0_TMOD_TX_RX	(0)
 #define DW_SPI_CTRLR0_TMOD_TX		(1 << DW_SPI_CTRLR0_TMOD_SHIFT)
 #define DW_SPI_CTRLR0_TMOD_RX		(2 << DW_SPI_CTRLR0_TMOD_SHIFT)
@@ -341,6 +348,8 @@ static int reg_test_bit(uint8_t bit, mm_reg_t addr, uint32_t off)
 
 DEFINE_MM_REG_READ(txflr, DW_SPI_REG_TXFLR, 32)
 DEFINE_MM_REG_READ(rxflr, DW_SPI_REG_RXFLR, 32)
+
+DEFINE_MM_REG_WRITE(rxdly, DW_SPI_REG_RX_SAMPLE_DLY, 32)
 
 #ifdef CONFIG_SPI_DW_ACCESS_WORD_ONLY
 DEFINE_MM_REG_WRITE(baudr, DW_SPI_REG_BAUDR, 32)

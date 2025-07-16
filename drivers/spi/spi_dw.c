@@ -641,6 +641,21 @@ static int transceive(const struct device *dev,
 	reg_data &= (spi->dwc_ssi) ? ~DWC_SSI_SPI_CTRLR0_TMOD_RESET : ~DW_SPI_CTRLR0_TMOD_RESET;
 	reg_data |= tmod;
 
+	/* Updating SSTE */
+	if (spi->dwc_ssi) {
+		if (info->slv_slct_toggle) {
+			reg_data |= DWC_SSI_CTRLR0_SSTE;
+		} else {
+			reg_data &= ~DWC_SSI_CTRLR0_SSTE;
+		}
+	} else {
+		if (info->slv_slct_toggle) {
+			reg_data |= DW_SPI_CTRLR0_SSTE;
+		} else {
+			reg_data &= ~DW_SPI_CTRLR0_SSTE;
+		}
+	}
+
 	write_ctrlr0(dev, reg_data);
 
 	/* Set buffers info */
@@ -822,6 +837,9 @@ int spi_dw_init(const struct device *dev)
 
 	info->config_func();
 
+	/* update rx sample delay */
+	write_rxdly(dev, info->rx_delay);
+
 	/* Masking interrupt and making sure controller is disabled */
 	write_imr(dev, DW_SPI_IMR_MASK);
 	clear_bit_ssienr(dev);
@@ -949,6 +967,8 @@ COND_CODE_1(IS_EQ(DT_NUM_IRQS(DT_DRV_INST(inst)), 1),              \
 		.serial_target = DT_INST_PROP(inst, serial_target),                         \
 		.fifo_depth = DT_INST_PROP(inst, fifo_depth),                               \
 		.max_xfer_size = DT_INST_PROP(inst, max_xfer_size),                         \
+		.rx_delay = DT_INST_PROP(inst, rx_delay),                                   \
+		.slv_slct_toggle = DT_INST_PROP(inst, slv_slct_toggle),                     \
 		IF_ENABLED(CONFIG_PINCTRL, (.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(inst),)) \
 		COND_CODE_1(DT_INST_PROP(inst, aux_reg),                                    \
 			(.read_func = aux_reg_read,                                         \
