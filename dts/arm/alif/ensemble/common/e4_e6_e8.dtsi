@@ -1,0 +1,39 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include "e3_e5_e7.dtsi"
+
+/* sram1 is 4MB */
+&sram1 {
+	reg = <0x08000000 DT_SIZE_K(4096)>;
+};
+
+&{/soc} {
+
+	gpio16: gpio@4300a000 {
+		compatible = "snps,designware-gpio";
+		reg = <0x4300A000 0x1000>;
+		ngpios = <8>;
+		interrupts = <476 0>;
+		pinctrl-0 = < &pinctrl_gpio16 >;
+		pinctrl-names = "default";
+		gpio-controller;
+		#gpio-cells = <2>;
+		status = "disabled";
+	};
+
+	gpio17: gpio@4300b000 {
+		compatible = "snps,designware-gpio";
+		reg = <0x4300B000 0x1000>;
+		ngpios = <8>;
+		interrupts = <477 0>;
+		pinctrl-0 = < &pinctrl_gpio17 >;
+		pinctrl-names = "default";
+		gpio-controller;
+		#gpio-cells = <2>;
+		status = "disabled";
+	};
+
+};
