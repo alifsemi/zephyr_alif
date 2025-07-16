@@ -25,3 +25,13 @@ properties:
     type: int
     default: 4
     description: Size of the completion queue for blocking requests
+  tx_threshold:
+    type: int
+    description: |
+      Transmit FIFO Threshold
+      Valid range: 0 - 31
+  rx_threshold:
+    type: int
+    description: |
+      Receive FIFO Threshold
+      Valid range: 0 - 31

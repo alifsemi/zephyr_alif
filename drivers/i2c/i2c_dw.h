@@ -9,6 +9,7 @@
 #define ZEPHYR_DRIVERS_I2C_I2C_DW_H_
 
 #include <zephyr/drivers/i2c.h>
+#include <zephyr/drivers/clock_control.h>
 #include <stdbool.h>
 
 #define DT_DRV_COMPAT snps_designware_i2c
@@ -84,8 +85,17 @@ struct i2c_dw_rom_config {
 	DEVICE_MMIO_ROM;
 	i2c_isr_cb_t config_func;
 	uint32_t bitrate;
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
+	/* clock controller dev instance */
+	const struct device *clk_dev;
+	/* Clock ID for I2C */
+	clock_control_subsys_t clk_id;
+#endif
 	int16_t lcnt_offset;
 	int16_t hcnt_offset;
+
+	uint8_t	tx_tl;
+	uint8_t	rx_tl;
 
 #if defined(CONFIG_PINCTRL)
 	const struct pinctrl_dev_config *pcfg;
@@ -125,6 +135,13 @@ struct i2c_dw_dev_config {
 	uintptr_t base_addr;
 	/* For dma transfer */
 	bool xfr_status;
+#endif
+
+#ifdef CONFIG_I2C_TARGET_BUFFER_MODE
+	uint8_t			data_read_buf[CONFIG_I2C_TAR_DATA_BUF_MAX_LEN];
+	uint8_t			*data_write_buf;
+	uint32_t		bytes_to_write;
+	uint32_t		buf_byte_idx;
 #endif
 
 	struct i2c_target_config *slave_cfg;

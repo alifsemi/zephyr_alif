@@ -6,6 +6,7 @@
 #include <arm/armv8.1-m.dtsi>
 #include <mem.h>
 #include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/i2c/i2c.h>
 
 &{/soc} {
 	clockctrl: clock-controller@4903f000 {
@@ -303,6 +304,49 @@
 		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
+		status = "disabled";
+	};
+
+	i2c0: i2c0@49010000 {
+		compatible = "snps,designware-i2c";
+		clock-frequency = <I2C_BITRATE_STANDARD>;
+		/*
+		 * For Standard  speed LCNT=0 and HCNT=0
+		 * For Fast      speed LCNT=50 and HCNT=30
+		 * For Fast Plus speed LCNT=35 and HCNT=5
+		 */
+		hcnt-offset = <0>;
+		lcnt-offset = <0>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x49010000 0x1000>;
+		pinctrl-0 = < &pinctrl_i2c0 >;
+		pinctrl-names = "default";
+		interrupt-parent = <&nvic>;
+		interrupts = <132 3>;
+		tx_threshold = <16>;
+		rx_threshold = <0>;
+		status = "disabled";
+	};
+	i2c1: i2c1@49011000 {
+		compatible = "snps,designware-i2c";
+		clock-frequency = <I2C_BITRATE_STANDARD>;
+		/*
+		 * For Standard  speed LCNT=0 and HCNT=0
+		 * For Fast      speed LCNT=50 and HCNT=30
+		 * For Fast Plus speed LCNT=35 and HCNT=5
+		 */
+		hcnt-offset = <0>;
+		lcnt-offset = <0>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x49011000 0x1000>;
+		pinctrl-0 = < &pinctrl_i2c1 >;
+		pinctrl-names = "default";
+		interrupt-parent = <&nvic>;
+		interrupts = <133 3>;
+		tx_threshold = <16>;
+		rx_threshold = <0>;
 		status = "disabled";
 	};
 };
