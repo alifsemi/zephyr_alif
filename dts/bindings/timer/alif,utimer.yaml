@@ -1,0 +1,33 @@
+# Copyright (c) 2024 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+description: Alif Universal Timer
+
+compatible: "alif,utimer"
+
+include: [base.yaml]
+
+properties:
+  reg:
+    required: true
+
+  reg-names:
+    required: true
+
+  timer-id:
+    type: int
+    description: |
+      Channel number for each channel
+
+  counter-direction:
+    type: int
+    required: true
+    description: |
+      Sets timer counter direction.
+
+      Use constants defined in dt-bindings/timer/alif-utimer.h.
+
+      * ALIF_UTIMER_COUNTER_DIRECTION_UP           - used as up counter.
+      * ALIF_UTIMER_COUNTER_DIRECTION_DOWN         - used as down counter.
+      * ALIF_UTIMER_COUNTER_DIRECTION_TRIANGLE     - used as triangle counter.
