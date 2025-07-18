@@ -16,6 +16,13 @@
 		global_base = <0x58800000>;
 		zephyr,memory-region = "DTCM";
 	};
+
+	wdog0: wdog0@40100000{
+	       compatible = "arm,cmsdk-watchdog";
+	       reg = <0x40100000 0x1000>;
+	       clocks = <&rtss_he_clk>;
+	       status = "disabled";
+	};
 };
 
 &{/} {
