@@ -151,6 +151,85 @@
 		status = "disabled";
 	};
 
+	spi0: spi@48103000 {
+		dwc-ssi;
+		compatible = "snps,designware-spi";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-0 = < &pinctrl_spi0 >;
+		pinctrl-names = "default";
+		reg = <0x48103000 0x1000>;
+		interrupt-parent = <&nvic>;
+		interrupts = <137 0>;
+		clocks = <&syst_hclk>;
+		fifo-depth = <16>;
+		max-xfer-size = <32>;
+		rx-delay = <4>;
+		status = "disabled";
+	};
+	spi1: spi@48104000 {
+		dwc-ssi;
+		compatible = "snps,designware-spi";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-0 = < &pinctrl_spi1 >;
+		pinctrl-names = "default";
+		reg = <0x48104000 0x1000>;
+		interrupt-parent = <&nvic>;
+		interrupts = <138 0>;
+		clocks = <&syst_hclk>;
+		fifo-depth = <16>;
+		max-xfer-size = <32>;
+		rx-delay = <4>;
+		status = "disabled";
+	};
+	spi2: spi@48105000 {
+		dwc-ssi;
+		compatible = "snps,designware-spi";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-0 = < &pinctrl_spi2 >;
+		pinctrl-names = "default";
+		reg = <0x48105000 0x1000>;
+		interrupt-parent = <&nvic>;
+		interrupts = <139 0>;
+		clocks = <&syst_hclk>;
+		fifo-depth = <16>;
+		max-xfer-size = <32>;
+		rx-delay = <4>;
+		status = "disabled";
+	};
+	spi3: spi@48106000 {
+		dwc-ssi;
+		compatible = "snps,designware-spi";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-0 = < &pinctrl_spi3 >;
+		pinctrl-names = "default";
+		reg = <0x48106000 0x1000>;
+		interrupt-parent = <&nvic>;
+		interrupts = <140 0>;
+		clocks = <&syst_hclk>;
+		fifo-depth = <16>;
+		max-xfer-size = <32>;
+		rx-delay = <4>;
+		status = "disabled";
+	};
+
+	dma0: dma0@49080000 {
+		compatible = "arm,dma-pl330";
+		reg = <0x49080000 0x1000>;
+		reg-names = "pl330_regs";
+		dma-channels = <4>;
+		#dma-cells = <2>;
+		interrupt-parent = <&nvic>;
+		interrupts = <299 0>, <300 0>, <301 0>, <302 0>, <331 0>;
+		interrupt-names = "channel0", "channel1",
+						  "channel2", "channel3",
+						  "abort";
+		status = "disabled";
+	};
+
 	gpio0: gpio@49000000 {
 		compatible = "snps,designware-gpio";
 		reg = <0x49000000 0x1000>;
@@ -397,6 +476,12 @@
 		syst_aclk: axi_clk {
 			compatible = "alif,clock";
 			clock-frequency = <400000000>;
+			status = "okay";
+			#clock-cells = <0>;
+		};
+		syst_hclk: ahb_clk {
+			compatible = "alif,clock";
+			clock-frequency = <200000000>;
 			status = "okay";
 			#clock-cells = <0>;
 		};

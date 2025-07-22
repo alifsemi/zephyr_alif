@@ -17,6 +17,36 @@
 		zephyr,memory-region = "DTCM";
 	};
 
+	spi4: lpspi@43000000 {
+		compatible = "snps,designware-spi";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-0 = < &pinctrl_lpspi >;
+		pinctrl-names = "default";
+		reg = <0x43000000 0x1000>;
+		interrupt-parent = <&nvic>;
+		interrupts = <46 0>;
+		clocks = <&rtss_he_clk>;
+		fifo-depth = <16>;
+		max-xfer-size = <32>;
+		rx-delay = <4>;
+		status = "disabled";
+	};
+
+	dma2: dma2@400c0000 {
+		compatible = "arm,dma-pl330";
+		reg = <0x400C0000 0x1000>;
+		reg-names = "pl330_regs";
+		dma-channels = <4>;
+		#dma-cells = <2>;
+		interrupt-parent = <&nvic>;
+		interrupts = <0 3>, <1 3>, <2 3>, <3 3>, <32 3>;
+		interrupt-names = "channel0", "channel1",
+						  "channel2", "channel3",
+						  "abort";
+		status = "disabled";
+	};
+
 	wdog0: wdog0@40100000{
 	       compatible = "arm,cmsdk-watchdog";
 	       reg = <0x40100000 0x1000>;
