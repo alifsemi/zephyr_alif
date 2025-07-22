@@ -12,6 +12,14 @@ config RTSS_HP
 	help
 	  Enable RTSS_HP core.
 
+config SPI_DW_ENABLE
+	bool "SPI DW"
+	default y
+	depends on SPI
+	help
+	  Enable Designware SPI driver.
+	select SPI_DW
+
 if RTSS_HP && !USE_DT_CODE_PARTITION
 config FLASH_LOAD_OFFSET
 	default 0x200000
