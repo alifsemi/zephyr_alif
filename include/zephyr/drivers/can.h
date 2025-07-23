@@ -8,7 +8,8 @@
 
 /**
  * @file
- * @brief Controller Area Network (CAN) driver API.
+ * @brief Header file for Controller Area Network (CAN) controller driver API.
+ * @ingroup can_controller
  */
 
 #ifndef ZEPHYR_INCLUDE_DRIVERS_CAN_H_
