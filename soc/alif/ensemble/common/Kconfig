@@ -11,7 +11,14 @@ config RTSS_HP
 	bool "RTSS_HP core"
 	help
 	  Enable RTSS_HP core.
-	  
+
+config ALIF_HWSEM_INIT_PRIORITY
+	int "HWSEM Init priority"
+	depends on ALIF_HWSEM
+	default 50
+	help
+	  Hardware Semaphore driver initialization priority.
+
 config SOC_SUPPORT_ARM_MHUV2
 	bool "SoC support communication through Arm MHUv2"
 	depends on SOC_FAMILY_ENSEMBLE

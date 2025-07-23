@@ -1,0 +1,8 @@
+# Copyright (c) 2024 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+config ALIF_HWSEM
+	bool "Hardware Semaphore driver on Alif SoCs"
+	depends on SOC_FAMILY_ENSEMBLE
+	help
+	  Enable Hardware Semaphore (HWSEM) driver on Alif SoCs.
