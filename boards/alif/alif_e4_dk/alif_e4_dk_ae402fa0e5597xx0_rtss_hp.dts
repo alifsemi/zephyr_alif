@@ -26,6 +26,7 @@
 		led0 = &aled0;
 		pwm-led0 = &pwm_led0_green;
 		sw0 = &button0;
+		watchdog0 = &wdog0;
 	};
 
 	leds {
