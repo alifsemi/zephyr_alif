@@ -572,6 +572,52 @@ static void set_baud_rate(const struct device *dev, uint32_t baud_rate, uint32_t
 	}
 }
 
+#if defined(CONFIG_SOC_FAMILY_BALLETTO)
+/* Event router configuration for UART DMA */
+#define EVTRTR2_DMA_CTRL_ENA        (1U << 4)
+#define EVTRTR2_DMA_CTRL_ACK_PERIPH (0x0 << 16)
+#define EVTRTR2_DMA_CTRL_ACK_ROUTER (0x1 << 16)
+
+/* UART DMA request numbers from board-specific overlay */
+#define DMA_UART_TX_GROUP   0  /* DMA group for UART TX */
+#define DMA_UART_RX_GROUP   0  /* DMA group for UART RX */
+
+/**
+ * @brief Configure DMA event router for UART
+ *
+ * This function configures the event router to connect UART peripheral
+ * to the PL330 DMA controller.
+ *
+ * @param dma_group DMA group (0-3)
+ * @param dma_request DMA request number (0-31)
+ *
+ * @return 0 on success, negative errno on failure
+ */
+static int configure_dma_event_router(const uint32_t dma_group, const uint32_t dma_request)
+{
+	uint32_t regdata;
+
+	if (dma_group > 3) {
+		return -EINVAL;
+	}
+
+	if (dma_request > 31) {
+		return -EINVAL;
+	}
+
+	/* Enable event router channel */
+	regdata = EVTRTR2_DMA_CTRL_ENA | EVTRTR2_DMA_CTRL_ACK_PERIPH | dma_group;
+	sys_write32(regdata, EVTRTRLOCAL_DMA_CTRL0 + (dma_request * 0x4));
+
+	/* DMA Handshake enable */
+	regdata = sys_read32(EVTRTRLOCAL_DMA_ACK_TYPE0 + (dma_group * 0x4));
+	regdata |= (0x1 << dma_request);
+	sys_write32(regdata, EVTRTRLOCAL_DMA_ACK_TYPE0 + (dma_group * 0x4));
+
+	return 0;
+}
+#endif /* CONFIG_SOC_FAMILY_BALLETTO */
+
 static int uart_ns16550_configure(const struct device *dev,
 				  const struct uart_config *cfg)
 {
@@ -750,6 +796,19 @@ static int uart_ns16550_configure(const struct device *dev,
 #endif
 			;
 	}
+
+#if defined(CONFIG_SOC_FAMILY_BALLETTO)
+	if (dev_data->async.rx_dma_params.dma_dev != NULL) {
+		/* Configure event router for UART RX DMA */
+		configure_dma_event_router(DMA_UART_RX_GROUP, dev_data->async.rx_dma_params.dma_cfg.dma_slot);
+	}
+
+	if (dev_data->async.tx_dma_params.dma_dev != NULL) {
+		/* Configure event router for UART RX DMA */
+		configure_dma_event_router(DMA_UART_TX_GROUP, dev_data->async.tx_dma_params.dma_cfg.dma_slot);
+	}
+#endif
+
 #endif
 
 	if (fifo_clr_mask) {
@@ -1489,7 +1548,7 @@ static int uart_ns16550_drv_cmd(const struct device *dev, uint32_t cmd,
 
 #endif /* CONFIG_UART_NS16550_DRV_CMD */
 
-#if (IS_ENABLED(CONFIG_UART_ASYNC_API))
+#if CONFIG_UART_ASYNC_API
 static void async_user_callback(const struct device *dev, struct uart_event *evt)
 {
 	const struct uart_ns16550_dev_data *data = dev->data;
@@ -1801,6 +1860,7 @@ static int uart_ns16550_rx_enable(const struct device *dev, uint8_t *buf, const 
 	ns16550_outbyte(config, FCR(dev), fcr_reg);
 #endif
 	prepare_rx_dma_block_config(dev);
+
 	dma_config(rx_dma_params->dma_dev,
 		   rx_dma_params->dma_channel,
 		   (struct dma_config *)&rx_dma_params->dma_cfg);
