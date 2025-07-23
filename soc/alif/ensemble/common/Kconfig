@@ -12,6 +12,12 @@ config RTSS_HP
 	help
 	  Enable RTSS_HP core.
 
+config USE_ALIF_HAL_UTIMER
+	bool "UTIMER ll driver access"
+	default n
+	help
+	  Enables UTIMER LL driver on Alif SoCs.
+
 config SPI_DW_ENABLE
 	bool "SPI DW"
 	default y

@@ -24,6 +24,7 @@
 
 	aliases {
 		led0 = &aled0;
+		pwm-led0 = &pwm_led1_red;
 		sw0 = &button0;
 		watchdog0 = &wdog0;
 	};
@@ -35,7 +36,13 @@
 			label = "LED1_G";
 		};
 	};
-
+	pwmleds {
+		compatible = "pwm-leds";
+		pwm_led1_red: pwm_led_1 {
+			pwms = <&pwm5 0 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+			label = "RED PWM LED 1";
+		};
+	};
 	buttons {
 		compatible = "gpio-keys";
 		button0: button_0 {
@@ -51,6 +58,16 @@
 
 &uart2 {
 	status = "okay";
+};
+
+&utimer5 {
+	status = "okay";
+
+	pwm5: pwm {
+		pinctrl-0 = < &pinctrl_ut5 >;
+		pinctrl-names = "default";
+		status = "okay";
+	};
 };
 
 &mram_storage {
