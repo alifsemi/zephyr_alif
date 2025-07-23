@@ -1,0 +1,21 @@
+# Copyright (c) 2024 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+description: Entropy random number driver for Alif SoCs
+
+compatible: "alif,secure-enclave-trng"
+
+properties:
+  status:
+    type: string
+    description: indicates the operational status of a device
+    enum:
+      - "ok" # Deprecated form
+      - "okay"
+      - "disabled"
+      - "reserved"
+      - "fail"
+  compatible:
+    type: string-array
+    required: true
+    description: compatible strings

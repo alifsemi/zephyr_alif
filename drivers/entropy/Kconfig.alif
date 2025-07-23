@@ -1,0 +1,13 @@
+# Copyright (c) 2024 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config ENTROPY_ALIF_RNG
+	bool "Gets entropy number through MHUv2 in Alif SoCs"
+	depends on ARM_MHUV2 && DT_HAS_ALIF_SECURE_ENCLAVE_TRNG_ENABLED
+	default y
+	select ENTROPY_HAS_DRIVER
+	help
+	  This option enables entropy driver which fetches
+	  random number through MHUv2 service call from the
+	  Secure Enclaue SubSystem (SESS).

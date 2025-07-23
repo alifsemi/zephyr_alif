@@ -938,6 +938,10 @@
 		status = "okay";
 	};
 
+	rng: rng {
+		status = "okay";
+		compatible = "alif,secure-enclave-trng";
+	};
 	clocks {
 		lfrc: lfrc {
 			compatible = "fixed-clock";
@@ -984,6 +988,7 @@
 	};
 
 	chosen {
+		zephyr,entropy = &rng;
 		zephyr,flash-controller = &mram_flash;
 	};
 };
