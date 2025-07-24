@@ -8,9 +8,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/logging/log.h>
-
 #include <zephyr/dt-bindings/clock/alif_ensemble_clocks.h>
-#include "alif_clock_control.h"
 
 LOG_MODULE_REGISTER(alif_clock_control, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 
@@ -22,6 +20,25 @@ struct clock_control_alif_config {
 	uint32_t m55he_cfg_base;
 	uint32_t m55hp_cfg_base;
 };
+
+#define ALIF_CAMERA_PIX_CLK_DIV_MASK     BIT_MASK(9U)
+#define ALIF_CAMERA_PIX_CLK_DIV_POS      16U
+#define ALIF_CDC200_PIX_CLK_DIV_MASK     BIT_MASK(9U)
+#define ALIF_CDC200_PIX_CLK_DIV_POS      16U
+#define ALIF_CSI_PIX_CLK_DIV_MASK        BIT_MASK(9U)
+#define ALIF_CSI_PIX_CLK_DIV_POS         16U
+#define ALIF_CANFD0_CLK_DIV_MASK         BIT_MASK(8U)
+#define ALIF_CANFD0_CLK_DIV_POS          0U
+#define ALIF_CANFD1_CLK_DIV_MASK         BIT_MASK(8U)
+#define ALIF_CANFD1_CLK_DIV_POS          16U
+#define ALIF_I2S_CLK_DIV_MASK            BIT_MASK(10U)
+#define ALIF_I2S_CLK_DIV_POS             0U
+#define ALIF_GPIO_DB_CLK_DIV_MASK        BIT_MASK(10U)
+#define ALIF_GPIO_DB_CLK_DIV_POS         0U
+#define ALIF_LPI2S_CLK_DIV_MASK          BIT_MASK(10U)
+#define ALIF_LPI2S_CLK_DIV_POS           0U
+#define ALIF_LPCPI_PIX_CLK_DIV_MASK      BIT_MASK(9U)
+#define ALIF_LPCPI_PIX_CLK_DIV_POS       16U
 
 #define OSC_CLOCK_SRC_FREQ(node)     DT_PROP(DT_PATH(clocks, node), clock_frequency)
 #define PLL_CLOCK1_SRC_FREQ          DT_PROP(DT_PATH(clocks, pll_clk1), clock_frequency)
@@ -226,6 +243,28 @@ static int32_t alif_get_module_base(const struct device *dev, uint32_t module, u
 	return 0;
 }
 
+static void alif_set_clock_divisor(mem_addr_t reg_addr, uint32_t mask,
+			uint32_t pos, uint32_t value)
+{
+	uint32_t reg_value;
+
+	reg_value = sys_read32(reg_addr);
+	reg_value &= ~(mask << pos);
+	reg_value |= (value << pos);
+	sys_write32(reg_value, reg_addr);
+}
+
+static uint32_t alif_get_clock_divisor(mem_addr_t reg_addr, uint32_t mask,
+				uint32_t pos)
+{
+	uint32_t freq_div, reg_val;
+
+	reg_val = sys_read32(reg_addr);
+	freq_div = ((reg_val & (mask << pos)) >> pos);
+
+	return freq_div;
+}
+
 static int alif_clock_control_on(const struct device *dev,
 			clock_control_subsys_t sub_system)
 {
@@ -310,7 +349,7 @@ static int alif_clock_control_set_rate(const struct device *dev,
 		return -EINVAL;
 	}
 
-	alif_set_clock_divisor((uint32_t *) reg_addr, div_mask, div_pos, freq_div);
+	alif_set_clock_divisor((mem_addr_t) reg_addr, div_mask, div_pos, freq_div);
 
 	return 0;
 }
@@ -339,7 +378,7 @@ static int alif_clock_control_get_rate(const struct device *dev,
 	alif_get_div_reg_info(clk_id, &div_mask, &div_pos);
 
 	if (div_mask) {
-		freq_div = alif_get_clock_divisor((uint32_t *) reg_addr, div_mask, div_pos);
+		freq_div = alif_get_clock_divisor((mem_addr_t) reg_addr, div_mask, div_pos);
 		*rate = (clk_freq / freq_div);
 	} else {
 		*rate = clk_freq;
