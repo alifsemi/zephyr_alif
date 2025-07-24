@@ -8,6 +8,7 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/arch/cpu.h>
 
 /* Pinmux settings:
  * syntax : U  U  U  U  U  U  P  P  P  P  P  P  P  F  F  F
@@ -42,7 +43,12 @@
  * bits 8:31 are unused
  */
 #define PIN_FUNC_SHIFT 3
+#if defined(CONFIG_SOC_SERIES_ENSEMBLE_E8) || defined(CONFIG_SOC_SERIES_ENSEMBLE_E4)
+/* bits 3:10 [PPPPPPPP] denote port values */
+#define PIN_NUM_MASK 0xFF
+#else
 #define PIN_NUM_MASK 0x7F
+#endif
 #define PIN_NUM_CLR_MASK 0x3F8
 
 #define PORT_P15             120
@@ -60,34 +66,35 @@
 
 #define GET_PINMUX_PORT(value) ((value >> PIN_FUNC_SHIFT) & PIN_NUM_MASK)
 
-#define PINMUX_ADDR(value) (uint32_t *)(PINCTRL_BASE + \
+#define PINMUX_ADDR(value) (PINCTRL_BASE + \
 		(((value >> PIN_FUNC_SHIFT) & PIN_NUM_MASK) * 4))
 
-#define LPGPIO_PINMUX_ADDR(value) (uint32_t *)(LPGPIO_PINCTRL_BASE + \
+#define LPGPIO_PINMUX_ADDR(value) (LPGPIO_PINCTRL_BASE + \
 		((value & LPGPIO_PIN_NUM_MASK) * 4))
 
 int pinctrl_configure_pin(const pinctrl_soc_pin_t *pin)
 {
 	uint32_t pinmux_value = *(uint32_t *)pin;
-	uint32_t *pinctrl_addr;
+	mem_addr_t pinctrl_addr;
+	uint32_t pinctrl_data;
 
 	/* is port LPGPIO? */
 	if (LPGPIO_PINCTRL_BASE && (GET_PINMUX_PORT(pinmux_value) == LPGPIO_PORT)) {
-
 		/* get the address of the LPGPIO pin using port value */
-		pinctrl_addr = LPGPIO_PINMUX_ADDR(pinmux_value);
+		pinctrl_addr = (mem_addr_t)LPGPIO_PINMUX_ADDR(pinmux_value);
 
-		/* set LPGPIO port pin-pad value. */
-		*pinctrl_addr = ((pinmux_value >> LPGPIO_PIN_PAD_SHIFT) & LPGPIO_PIN_PAD_MASK);
+		/* get LPGPIO port pin-pad value. */
+		pinctrl_data = ((pinmux_value >> LPGPIO_PIN_PAD_SHIFT) & LPGPIO_PIN_PAD_MASK);
+	} else {
+		/* get the address of the pin using port value */
+		pinctrl_addr = (mem_addr_t)PINMUX_ADDR(pinmux_value);
 
-		return 0;
+		/* clear only the port value, other fields are set already */
+		pinctrl_data = (pinmux_value & (~PIN_NUM_CLR_MASK));
 	}
 
-	/* get the address of the pin using port value */
-	pinctrl_addr = PINMUX_ADDR(pinmux_value);
-
-	/* clear only the port value, other fields are set already */
-	*pinctrl_addr = (pinmux_value & (~PIN_NUM_CLR_MASK));
+	/* set the pinmux and pin-pad value. */
+	sys_write32(pinctrl_data, pinctrl_addr);
 
 	return 0;
 }
