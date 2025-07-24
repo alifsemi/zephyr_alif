@@ -36,4 +36,19 @@
 		status = "disabled";
 	};
 
+	lpi2c1: lpi2c1@43005000 {
+		compatible = "snps,designware-i2c";
+		clock-frequency = <I2C_BITRATE_STANDARD>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x43005000 0x1000>;
+		clocks    = <&clock ALIF_LPI2C1_CLK>;
+		pinctrl-0 = <&pinctrl_lpi2c1>;
+		pinctrl-names = "default";
+		interrupt-parent = <&nvic>;
+		interrupts = <51 3>;
+		tx_threshold = <16>;
+		rx_threshold = <0>;
+		status = "disabled";
+	};
 };

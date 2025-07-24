@@ -18,6 +18,10 @@ static int soc_init(void)
 {
 	unsigned int data;
 
+	/* Might need to move later.. Just putting this here for now..*/
+	/* Enable UART clock and clock selection bits in CFGMST0 */
+	sys_write32(0xFFFF, EXPSLV_UART_CTRL);
+
 	/*
 	 * Setting expansion master0 SPI control register values
 	 * 0xf at 8-11 bit is setting all 4 SPI instances as master
