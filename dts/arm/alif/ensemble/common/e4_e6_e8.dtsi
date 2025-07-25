@@ -42,7 +42,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg = <0x43005000 0x1000>;
-		clocks    = <&clock ALIF_LPI2C1_CLK>;
+		clocks    = <&clockctrl ALIF_LPI2C1_CLK>;
 		pinctrl-0 = <&pinctrl_lpi2c1>;
 		pinctrl-names = "default";
 		interrupt-parent = <&nvic>;
