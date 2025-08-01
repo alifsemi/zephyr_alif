@@ -15,5 +15,6 @@ if VIDEO_MT9M114
 
 config MT9M114_PARALLEL_INIT
 	bool "MT9M114 parallel init configuration"
+	default y
 
 endif #VIDEO_MT9M114
