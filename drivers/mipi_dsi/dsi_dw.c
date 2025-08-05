@@ -867,7 +867,7 @@ int dsi_dw_read_payload(uintptr_t regs, uint8_t *rx, ssize_t len)
 	int j;
 
 	/* Wait for 20ms at max to wait for Read operation to end. */
-	for (j = 0; j < 20 && !(sys_read32(regs + DSI_CMD_PKT_STATUS) &
+	for (j = 0; j < 20 && (sys_read32(regs + DSI_CMD_PKT_STATUS) &
 			 DSI_CMD_PKT_STATUS_GEN_RD_CMD_BUSY); j++)
 		k_busy_wait(1000);
 
@@ -884,7 +884,7 @@ int dsi_dw_read_payload(uintptr_t regs, uint8_t *rx, ssize_t len)
 		 * Generic Read Payload FIFO.
 		 */
 		for (j = 0; j < 20 &&
-			!(sys_read32(regs + DSI_CMD_PKT_STATUS) &
+			(sys_read32(regs + DSI_CMD_PKT_STATUS) &
 				DSI_CMD_PKT_STATUS_GEN_PLD_R_EMPTY); j++)
 			k_busy_wait(1000);
 
