@@ -1,0 +1,6 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_AB1C1F4M51820HH_RTSS_HE
+	select RTSS_HE

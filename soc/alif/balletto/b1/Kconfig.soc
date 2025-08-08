@@ -1,0 +1,23 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_SERIES_B1
+	bool
+	select SOC_FAMILY_BALLETTO
+
+config SOC_SERIES
+	default "b1" if SOC_SERIES_B1
+
+config SOC_AB1C1F4M51820HH
+	bool
+	select SOC_SERIES_B1
+	help
+	  Alif Balletto B1
+
+config SOC_AB1C1F4M51820HH_RTSS_HE
+	bool
+	select SOC_AB1C1F4M51820HH
+
+config SOC
+	default "ab1c1f4m51820hh" if SOC_AB1C1F4M51820HH

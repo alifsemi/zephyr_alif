@@ -1,0 +1,43 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config RTSS_HE
+	bool "RTSS_HE core"
+	help
+	  Enable RTSS_HE core.
+
+config ALIF_HWSEM_INIT_PRIORITY
+	int "HWSEM Init priority"
+	depends on ALIF_HWSEM
+	default 50
+	help
+	  Hardware Semaphore driver initialization priority.
+
+config SOC_SUPPORT_ARM_MHUV2
+	bool "SoC support communication through Arm MHUv2"
+	depends on SOC_FAMILY_ENSEMBLE || SOC_FAMILY_BALLETTO
+	select IPM
+	select ARM_MHUV2
+	help
+	  SoC support communication through Arm MHUv2
+
+config SPI_DW_ENABLE
+	bool "SPI DW"
+	default y
+	depends on SPI
+	help
+	  Enable Designware SPI driver.
+	select SPI_DW
+
+config USE_ALIF_HAL_UTIMER
+	bool "UTIMER ll driver access"
+	default n
+	help
+	  Enables UTIMER LL driver on Alif SoCs.
+
+config FLASH_SIZE
+	default $(dt_node_reg_size_int,$(dt_nodelabel_path,itcm),0,K) if !XIP
+
+config FLASH_BASE_ADDRESS
+	default $(dt_node_reg_addr_hex,$(dt_nodelabel_path,itcm))     if !XIP
