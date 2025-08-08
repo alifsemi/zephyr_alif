@@ -108,7 +108,9 @@ zephyr_library_sources_ifdef(CONFIG_CLOCK_CONTROL_WCH_RCC clock_control_wch_rcc.
 
 if(CONFIG_CLOCK_CONTROL_ALIF)
 if(CONFIG_SOC_SERIES_E7 OR CONFIG_SOC_SERIES_E4 OR CONFIG_SOC_SERIES_E8)
-zephyr_library_sources_ifdef(CONFIG_SOC_FAMILY_ENSEMBLE clock_control_alif_ensemble.c)
+zephyr_library_sources(clock_control_alif_ensemble.c)
+elseif(CONFIG_SOC_SERIES_E1C)
+zephyr_library_sources(clock_control_alif_ensemble_e1c.c)
 elseif(CONFIG_SOC_SERIES_B1)
 zephyr_library_sources(clock_control_alif_balletto.c)
 endif()
