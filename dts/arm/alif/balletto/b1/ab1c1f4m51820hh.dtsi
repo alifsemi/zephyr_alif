@@ -1,0 +1,24 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <alif/balletto/common/b1.dtsi>
+
+&itcm {
+	reg = <0x0 DT_SIZE_K(512)>;
+};
+
+&dtcm {
+	/* total dtcm(1536) - reserved dtcm(40) */
+	reg = <0x2000a000 DT_SIZE_K(1496)>;
+};
+
+&mram_flash {
+	/* Usable MRAM size for applications is 1824 KB */
+	reg = <0x80000000 DT_SIZE_K(1824)>;
+};
+
+&mram_storage {
+	reg = <0x80000000 DT_SIZE_K(1824)>;
+};
