@@ -19,3 +19,8 @@ family:
             cpuclusters:
               - name: rtss_he
               - name: rtss_hp
+      - name: e1c
+        socs:
+          - name: ae1c1f4051920hh
+            cpuclusters:
+              - name: rtss_he

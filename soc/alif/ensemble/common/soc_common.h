@@ -21,8 +21,10 @@
 
 /* VBAT registers. */
 #define VBAT_BASE				0x1A609000
+#define VBAT_GPIO_CTRL_EN		(VBAT_BASE)
 #define VBAT_PWR_CTRL			(VBAT_BASE + 0x8)
-#define VBAT_RTC_CLK_EN			(VBAT_BASE + 0x10)
+#define VBAT_LPRTC0_CLK_EN		(VBAT_BASE + 0x10)
+#define VBAT_LPRTC1_CLK_EN		(VBAT_BASE + 0x14)
 
 /* Expansion Slave registers. */
 #define EXPSLV_BASE				0x4902F000
