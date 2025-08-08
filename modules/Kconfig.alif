@@ -11,4 +11,4 @@ config ZEPHYR_HAL_ALIF_MODULE
 
 config HAS_ALIF_SE_SERVICES
 	bool "Alif HAL drivers support"
-	depends on SOC_FAMILY_ENSEMBLE
+	depends on SOC_FAMILY_ENSEMBLE || SOC_FAMILY_BALLETTO
