@@ -4,7 +4,7 @@
 
 config PINCTRL_ALIF
 	bool "Alif SoC pin controller driver"
-	depends on SOC_FAMILY_ENSEMBLE
+	depends on SOC_FAMILY_ENSEMBLE || SOC_FAMILY_BALLETTO
 	default y
 	help
 	  Enable pin controller for Alif Ensemble DevKits.
