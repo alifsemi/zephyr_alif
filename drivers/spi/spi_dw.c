@@ -212,7 +212,8 @@ static uint32_t spi_dw_dma_calc_dmardlr(const struct spi_dw_config *info, struct
 	while (total_burst_length % burst_length) {
 		burst_length--;
 	}
-	return burst_length - 1;
+
+	return burst_length;
 }
 
 static void spi_dw_dma_callback(const struct device *dma_dev, void *user_data,
@@ -265,18 +266,18 @@ static int spi_dw_start_dma_ch(const struct device *dev)
 	dma_cfg.error_callback_dis = 1U;
 	dma_cfg.user_data = (void *)dev;
 	dma_cfg.head_block = &dma_block_cfg;
-	dma_cfg.source_data_size = dma_cfg.dest_data_size = spi->dfs >> 1;
+	dma_cfg.source_data_size = dma_cfg.dest_data_size = spi->dfs;
 	dma_block_cfg.block_size = spi->dfs *
 			spi_context_max_continuous_chunk(&spi->ctx);
 
 	if (spi_context_rx_buf_on(&spi->ctx)) {
+		uint32_t dma_rdlr = spi_dw_dma_calc_dmardlr(info, spi);
+
+		write_dmardlr(dev, dma_rdlr - 1);
 		dma_cfg.channel_direction = PERIPHERAL_TO_MEMORY;
 
-		dma_cfg.dest_burst_length = spi_dw_dma_calc_dmardlr(info, spi);
-		write_dmardlr(dev, dma_cfg.dest_burst_length);
-		LOG_DBG("SPI:%p DMARDLR: %u", dev, dma_cfg.dest_burst_length);
-
 		dma_cfg.dma_slot = info->dma_rx.periph;
+		dma_cfg.dest_burst_length = dma_rdlr;
 		dma_cfg.source_burst_length = dma_cfg.dest_burst_length;
 
 		dma_block_cfg.source_address = (mm_reg_t)DEVICE_MMIO_GET(dev) + DW_SPI_REG_DR;
@@ -299,7 +300,7 @@ static int spi_dw_start_dma_ch(const struct device *dev)
 	}
 	if (spi_context_tx_buf_on(&spi->ctx)) {
 		dma_cfg.channel_direction = MEMORY_TO_PERIPHERAL;
-		dma_cfg.dest_burst_length = info->fifo_depth - dw_spi_txftlr_dflt - 1;
+		dma_cfg.dest_burst_length = info->fifo_depth - dw_spi_txftlr_dflt;
 		write_dmatdlr(dev, dw_spi_txftlr_dflt);
 		LOG_DBG("SPI:%p DMATDLR: %u", dev, dma_cfg.dest_burst_length);
 
