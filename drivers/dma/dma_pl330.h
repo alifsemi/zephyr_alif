@@ -32,7 +32,7 @@
  * b110 = 64 bytes
  * b111 = 128 bytes.
  */
-#define MAX_BURST_LEN		0xf /* 16byte data */
+#define MAX_BURST_LEN		16U /* 16byte data */
 #define MAX_BURST_SIZE_LOG2	4
 
 /*

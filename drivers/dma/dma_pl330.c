@@ -11,6 +11,8 @@
 #include <string.h>
 #include <soc.h>
 #include <zephyr/sys/__assert.h>
+#include <zephyr/sys/util.h>
+
 #include "dma_pl330.h"
 #include <soc_memory_map.h>
 
@@ -472,6 +474,13 @@ static int dma_pl330_xfer(const struct device *dev, uint64_t dst,
 		size = max_size;
 	}
 
+	LOG_DBG("DMA PL330: channel %d, src_addr: 0x%llx, "
+		"dst_addr: 0x%llx, size: %d, src_burst_sz: %d, "
+		"dst_burst_sz: %d, src_burst_len: %d, dst_burst_len: %d\n",
+		channel, src, dst, size, ch_handle->src_burst_sz,
+		ch_handle->dst_burst_sz, ch_handle->src_burst_len,
+		ch_handle->dst_burst_len);
+
 	dma_pl330_config_channel(channel_cfg, dst, src, size);
 #ifdef CONFIG_DMA_64BIT
 	/*
@@ -607,6 +616,7 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 	struct dma_pl330_dev_data *const dev_data = dev->data;
 	struct dma_pl330_ch_config *channel_cfg;
 	struct dma_pl330_ch_internal *ch_handle;
+	uint32_t bsize;
 
 	if (channel >= dev_cfg->max_dma_channels) {
 		return -EINVAL;
@@ -614,6 +624,18 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 
 	if (cfg->source_burst_length > MAX_BURST_LEN ||
 		cfg->dest_burst_length > MAX_BURST_LEN) {
+		LOG_ERR("DMA PL330: Burst length should be less than or equal to %d",
+			MAX_BURST_LEN);
+		return -EINVAL;
+	}
+
+	if (cfg->source_data_size != cfg->dest_data_size) {
+		LOG_ERR("DMA PL330: Source and Destination data size should be same");
+		return -EINVAL;
+	}
+
+	if ((cfg->source_data_size > 16U) || !is_power_of_two(cfg->source_data_size)) {
+		LOG_ERR("DMA PL330: Invalid source data size %d", cfg->source_data_size);
 		return -EINVAL;
 	}
 
@@ -646,10 +668,20 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 		local_to_global(UINT_TO_POINTER(cfg->head_block->dest_address));
 	channel_cfg->trans_size = cfg->head_block->block_size;
 
-	channel_cfg->src_burst_sz = cfg->source_data_size;
-	channel_cfg->dst_burst_sz = cfg->dest_data_size;
-	channel_cfg->src_blen = cfg->source_burst_length;
-	channel_cfg->dst_blen = cfg->dest_burst_length;
+	bsize = cfg->source_data_size;
+	channel_cfg->src_burst_sz = LOG2(bsize);
+	channel_cfg->dst_burst_sz = channel_cfg->src_burst_sz;
+
+	if (cfg->source_burst_length) {
+		channel_cfg->src_blen = cfg->source_burst_length - 1;
+	} else {
+		channel_cfg->src_blen = 0;
+	}
+	if (cfg->dest_burst_length) {
+		channel_cfg->dst_blen = cfg->dest_burst_length - 1;
+	} else {
+		channel_cfg->dst_blen = 0;
+	}
 
 	channel_cfg->dma_callback = cfg->dma_callback;
 	channel_cfg->user_data = cfg->user_data;
