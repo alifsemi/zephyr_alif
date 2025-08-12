@@ -27,7 +27,7 @@ jobs:
         pip install -U PyGithub>=1.55 west
 
     - name: Check out source code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Run assignment script
       env:

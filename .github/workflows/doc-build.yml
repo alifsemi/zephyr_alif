@@ -30,7 +30,7 @@ jobs:
       file_check: ${{ steps.check-doc-files.outputs.any_modified }}
     steps:
     - name: checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ github.event.pull_request.head.sha }}
         fetch-depth: 0
@@ -78,7 +78,7 @@ jobs:
         echo "${HOME}/.local/bin" >> $GITHUB_PATH
 
     - name: checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ github.event.pull_request.head.sha }}
         fetch-depth: 0
@@ -198,7 +198,7 @@ jobs:
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
 
     - name: checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: install-pkgs
       run: |
