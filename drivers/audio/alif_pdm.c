@@ -448,7 +448,7 @@ static void alif_pdm_warning_isr(void)
 		pdmdata->data_buffer = get_slab(pdmdata);
 
 		if (pdmdata->data_buffer) {
-			memcpy(pdmdata->data_buffer, data + bytes_available, whole);
+			memcpy(pdmdata->data_buffer, data + (bytes_available / 2), whole);
 			pdmdata->buf_index = whole;
 		} else {
 			pdmdata->buf_index = 0;
