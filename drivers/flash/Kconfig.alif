@@ -1,0 +1,11 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+config MRAM_FLASH_ALIF
+	bool "MRAM flash driver for Alif SoCs"
+	default y
+	depends on DT_HAS_ALIF_MRAM_FLASH_CONTROLLER_ENABLED
+	select FLASH_HAS_DRIVER_ENABLED
+	select FLASH_HAS_PAGE_LAYOUT
+	help
+	 Enables MRAM flash driver on Alif SoCs.
