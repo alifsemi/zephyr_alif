@@ -1,0 +1,6 @@
+board:
+  name: alif_e3_dk
+  full_name: alif e3 DK
+  vendor: alif
+  socs:
+  - name: 'ae302f80f55d5xx'

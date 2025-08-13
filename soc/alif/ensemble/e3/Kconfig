@@ -1,0 +1,9 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_AE302F80F55D5XX_RTSS_HE
+	select RTSS_HE
+
+config SOC_AE302F80F55D5XX_RTSS_HP
+	select RTSS_HP
