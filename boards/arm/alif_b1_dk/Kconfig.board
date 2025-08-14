@@ -5,3 +5,9 @@
 config ALIF_B1_DK_BOARD
 	bool "Alif Devkit Balletto B1 Dev board"
 	depends on SOC_SERIES_BALLETTO_B1
+
+if ALIF_B1_DK_BOARD
+
+config UART_DMA_ENABLE
+	bool
+endif

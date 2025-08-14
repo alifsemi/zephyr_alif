@@ -27,3 +27,9 @@ config BT_BUF_ACL_RX_COUNT
 config BT_BUF_ACL_TX_COUNT
 	default 10
 	range 6 255
+
+config UART_DMA_ENABLE
+	default y if BT
+	select DMA
+	select UART_ASYNC_API
+	select RING_BUFFER
