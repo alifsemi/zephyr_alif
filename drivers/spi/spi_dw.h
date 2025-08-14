@@ -34,6 +34,17 @@ struct spi_dw_dma_ch {
 	uint32_t ch;
 	uint32_t periph;
 };
+
+/**
+ * DMA transfer state structure
+ */
+struct spi_dw_dma_state {
+	size_t tx_idx, rx_idx;
+	size_t tx_off, rx_off;
+	size_t tx_count, rx_count;
+	bool is_fullduplex;
+	bool is_tx_req, is_rx_req;
+};
 #endif /* CONFIG_SPI_DW_USE_DMA */
 
 /* Private structures */
@@ -71,6 +82,7 @@ struct spi_dw_data {
 #ifdef CONFIG_SPI_DW_USE_DMA
 	struct k_sem dma_sem;
 	int dma_cb_status;
+	struct spi_dw_dma_state dma_state;  /* DMA transfer state tracking */
 #endif /* CONFIG_SPI_DW_USE_DMA */
 };
 
