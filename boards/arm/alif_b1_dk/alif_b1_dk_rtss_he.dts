@@ -55,14 +55,25 @@
 	status = "okay";
 };
 
+&dma2 {
+	status = "okay";
+
+};
+
 &uart_hci {
 	clock-frequency = <160000000>;
+	dmas = <&dma2 HCI_UART_DMA_RX_CH HCI_UART_DMA_RX_REQ>,
+	       <&dma2 HCI_UART_DMA_TX_CH HCI_UART_DMA_TX_REQ>;
+	dma-names = "rx", "tx";
 };
 
 &uart_ahi {
 	clock-frequency = <160000000>;
 	pinctrl-0 = < &pinctrl_ahi_trace >;
 	pinctrl-names = "default";
+	dmas = <&dma2 AHI_UART_DMA_RX_CH AHI_UART_DMA_RX_REQ>,
+	       <&dma2 AHI_UART_DMA_TX_CH AHI_UART_DMA_TX_REQ>;
+	dma-names = "rx", "tx";
 };
 
 &utimer2 {

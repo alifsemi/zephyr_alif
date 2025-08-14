@@ -10,6 +10,15 @@
 #include <zephyr/dt-bindings/display/ili9xxx.h>
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <mem.h>
+#define HCI_UART_DMA_RX_CH  0
+#define HCI_UART_DMA_RX_REQ 26
+#define HCI_UART_DMA_TX_CH  1
+#define HCI_UART_DMA_TX_REQ 27
+#define AHI_UART_DMA_RX_CH  2
+#define AHI_UART_DMA_RX_REQ 2
+#define AHI_UART_DMA_TX_CH  3
+#define AHI_UART_DMA_TX_REQ 3
+
 / {
 	soc {
 		clock: clock-controller@4903f000 {
