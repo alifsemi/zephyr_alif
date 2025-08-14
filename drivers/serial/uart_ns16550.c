@@ -1334,6 +1334,9 @@ static void uart_ns16550_irq_callback_set(const struct device *dev,
 	irq_enable(dev_data->irq);
 
 }
+#if (IS_ENABLED(CONFIG_UART_ASYNC_API) && UART_NS16550_DMAS_ENABLED)
+static void uart_ns16550_async_rx_flush(const struct device *dev);
+#endif
 
 /**
  * @brief Interrupt service routine.
@@ -1380,8 +1383,12 @@ static void uart_ns16550_isr(const struct device *dev)
 #endif
 #if CONFIG_DMA_PL330
 		if (dev_data->async.rx_dma_params.async_enabled) {
-			async_timer_start(&dev_data->async.rx_dma_params.timeout_work,
-					  dev_data->async.rx_dma_params.timeout_us);
+			if (dev_data->async.rx_dma_params.timeout_us == 0) {
+				uart_ns16550_async_rx_flush(dev);
+			} else {
+				async_timer_start(&dev_data->async.rx_dma_params.timeout_work,
+						  dev_data->async.rx_dma_params.timeout_us);
+			}
 			return;
 		}
 #else
@@ -1803,7 +1810,7 @@ static int uart_ns16550_rx_enable(const struct device *dev, uint8_t *buf, const 
 #if defined(CONFIG_UART_NS16550_INTEL_LPSS_DMA)
 	ns16550_outword(config, MST(dev), UNMASK_LPSS_INT(rx_dma_params->dma_channel));
 #else
-	if ((timeout_us != SYS_FOREVER_US) && (timeout_us != 0)) {
+	if (timeout_us != SYS_FOREVER_US) {
 		/* IRQ is needed to make character timeout working */
 		ns16550_outbyte(config, IER(dev),
 				(ns16550_inbyte(config, IER(dev)) | IER_RXRDY));
