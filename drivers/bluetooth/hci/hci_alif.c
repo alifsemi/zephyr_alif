@@ -32,6 +32,8 @@ LOG_MODULE_REGISTER(bt_driver);
 #include "../util.h"
 
 #include "es0_power_manager.h"
+#include "dma_event_router.h"
+#include <zephyr/sys/ring_buffer.h>
 
 #define H4_NONE 0x00
 #define H4_CMD  0x01
@@ -40,22 +42,45 @@ LOG_MODULE_REGISTER(bt_driver);
 #define H4_EVT  0x04
 #define H4_ISO  0x05
 
+/* Define appropriate timeouts */
+#define TX_TIMEOUT_US 200 /* 200us */
+#define RX_TIMEOUT_US 0   /* No delay */
+
+/* UART DMA request numbers from board-specific overlay */
+#define DMA_UART_TX_GROUP 0 /* DMA group for UART TX */
+#define DMA_UART_RX_GROUP 0 /* DMA group for UART RX */
+
 static K_KERNEL_STACK_DEFINE(alif_rx_thread_stack, CONFIG_BT_RX_STACK_SIZE);
 static struct k_thread alif_rx_thread_data;
 
+/* Disable RX dma because it not work optimal way */
+#define ALIF_HCI_DMA_RX_ENABLED 0
+
+#if ALIF_HCI_DMA_RX_ENABLED
+static bool pingpong;
+#endif
+#define BUFF_SIZE 32
+static uint8_t temp_rx_buf[64];
+
+/* Wait for specific message from HCI */
+static K_SEM_DEFINE(hci_tx_sem, 0, 1);
+
+#define MY_RING_BUF_BYTES 256
+RING_BUF_DECLARE(hci_ring_buf, MY_RING_BUF_BYTES);
+
 static struct {
 	struct net_buf *buf;
-	struct k_fifo   fifo;
+	struct k_fifo fifo;
 
-	uint16_t    remaining;
-	uint16_t    discard;
+	uint16_t remaining;
+	uint16_t discard;
 
-	bool     have_hdr;
-	bool     discardable;
+	bool have_hdr;
+	bool discardable;
 
-	uint8_t     hdr_len;
+	uint8_t hdr_len;
 
-	uint8_t     type;
+	uint8_t type;
 	union {
 		struct bt_hci_evt_hdr evt;
 		struct bt_hci_acl_hdr acl;
@@ -69,18 +94,24 @@ static struct {
 static struct {
 	uint8_t type;
 	struct net_buf *buf;
-	struct k_fifo   fifo;
+	struct k_fifo fifo;
 } tx = {
 	.fifo = Z_FIFO_INITIALIZER(tx.fifo),
 };
+
+static bool hci_uart_dma_rx_enabled;
+static bool hci_uart_dma_tx_enabled;
+/* Static tx buffer */
+static uint8_t hci_tx_buf[256];
 
 static const struct device *const hci_alif_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_bt_uart));
 
 static inline void hci_alif_get_type(void)
 {
 	/* Get packet type */
-	if (uart_fifo_read(hci_alif_dev, &rx.type, 1) != 1) {
-		LOG_WRN("Unable to read H:4 packet type");
+	int read = ring_buf_get(&hci_ring_buf, &rx.type, 1);
+
+	if (read != 1) {
 		rx.type = H4_NONE;
 		return;
 	}
@@ -113,7 +144,8 @@ static void hci_alif_read_hdr(void)
 	int bytes_read = rx.hdr_len - rx.remaining;
 	int ret;
 
-	ret = uart_fifo_read(hci_alif_dev, rx.hdr + bytes_read, rx.remaining);
+	ret = ring_buf_get(&hci_ring_buf, rx.hdr + bytes_read, rx.remaining);
+
 	if (unlikely(ret < 0)) {
 		LOG_ERR("Unable to read from UART (ret %d)", ret);
 	} else {
@@ -171,7 +203,7 @@ static inline void get_evt_hdr(void)
 	if (!rx.remaining) {
 		if (rx.evt.evt == BT_HCI_EVT_LE_META_EVENT &&
 		    ((rx.hdr[sizeof(*hdr)] == BT_HCI_EVT_LE_ADVERTISING_REPORT) ||
-			(rx.hdr[sizeof(*hdr)] == BT_HCI_EVT_LE_EXT_ADVERTISING_REPORT))) {
+		     (rx.hdr[sizeof(*hdr)] == BT_HCI_EVT_LE_EXT_ADVERTISING_REPORT))) {
 			LOG_DBG("Marking adv report as discardable");
 			rx.discardable = true;
 		}
@@ -181,7 +213,6 @@ static inline void get_evt_hdr(void)
 		rx.have_hdr = true;
 	}
 }
-
 
 static inline void copy_hdr(struct net_buf *buf)
 {
@@ -244,24 +275,28 @@ static void hci_alif_rx_thread(void *p1, void *p2, void *p3)
 				copy_hdr(rx.buf);
 			}
 		}
-
-		/* Let the ISR continue receiving new packets */
-		uart_irq_rx_enable(hci_alif_dev);
+		if (!hci_uart_dma_rx_enabled) {
+			/* Let the ISR continue receiving new packets */
+			uart_irq_rx_enable(hci_alif_dev);
+		}
 
 		buf = net_buf_get(&rx.fifo, K_FOREVER);
 		do {
-			uart_irq_rx_enable(hci_alif_dev);
+			if (!hci_uart_dma_rx_enabled) {
+				uart_irq_rx_enable(hci_alif_dev);
+			}
 
 			LOG_DBG("Calling bt_recv(%p)", buf);
 			bt_recv(buf);
 
-			/* Give other threads a chance to run if the ISR
-			 * is receiving data so fast that rx.fifo never
-			 * or very rarely goes empty.
-			 */
-			k_yield();
-
-			uart_irq_rx_disable(hci_alif_dev);
+			if (!hci_uart_dma_rx_enabled) {
+				/* Give other threads a chance to run if the ISR
+				 * is receiving data so fast that rx.fifo never
+				 * or very rarely goes empty.
+				 */
+				k_yield();
+				uart_irq_rx_disable(hci_alif_dev);
+			}
 			buf = net_buf_get(&rx.fifo, K_NO_WAIT);
 		} while (buf);
 	}
@@ -272,7 +307,8 @@ static size_t hci_alif_discard(const struct device *uart, size_t len)
 	uint8_t buf[33];
 	int err;
 
-	err = uart_fifo_read(uart, buf, MIN(len, sizeof(buf)));
+	err = ring_buf_get(&hci_ring_buf, buf, MIN(len, sizeof(buf)));
+
 	if (unlikely(err < 0)) {
 		LOG_ERR("Unable to read from UART (err %d)", err);
 		return 0;
@@ -317,7 +353,8 @@ static inline void read_payload(void)
 		copy_hdr(rx.buf);
 	}
 
-	read = uart_fifo_read(hci_alif_dev, net_buf_tail(rx.buf), rx.remaining);
+	read = ring_buf_get(&hci_ring_buf, net_buf_tail(rx.buf), rx.remaining);
+
 	if (unlikely(read < 0)) {
 		LOG_ERR("Failed to read UART (err %d)", read);
 		return;
@@ -346,8 +383,7 @@ static inline void read_payload(void)
 
 	reset_rx();
 
-	if (IS_ENABLED(CONFIG_BT_RECV_BLOCKING) &&
-	    (evt_flags & BT_HCI_EVT_FLAG_RECV_PRIO)) {
+	if (IS_ENABLED(CONFIG_BT_RECV_BLOCKING) && (evt_flags & BT_HCI_EVT_FLAG_RECV_PRIO)) {
 		LOG_DBG("Calling bt_recv_prio(%p)", buf);
 		bt_recv_prio(buf);
 	}
@@ -454,6 +490,70 @@ done:
 	}
 }
 
+static inline void process_dma_tx(struct net_buf *buf)
+{
+	int length, copy_length;
+	bool first_part = true;
+	uint8_t tx_type;
+
+	switch (bt_buf_get_type(buf)) {
+	case BT_BUF_ACL_OUT:
+		tx_type = H4_ACL;
+		break;
+	case BT_BUF_CMD:
+		tx_type = H4_CMD;
+		break;
+	case BT_BUF_ISO_OUT:
+		/* TODO: Figure out a way to use shared memory for ISO */
+		if (IS_ENABLED(CONFIG_BT_ISO)) {
+			tx_type = H4_ISO;
+			break;
+		}
+		__fallthrough;
+	default:
+		LOG_ERR("Unknown buffer type");
+		goto done;
+	}
+
+	length = buf->len;
+	while (length) {
+		if (first_part) {
+			copy_length = length;
+			if (copy_length > 255) {
+				copy_length = 255;
+			}
+			hci_tx_buf[0] = tx_type;
+			memcpy(&hci_tx_buf[1], buf->data, copy_length);
+			net_buf_pull(buf, copy_length);
+			length -= copy_length;
+			first_part = false;
+			copy_length += 1;
+		} else {
+			copy_length = length;
+			if (copy_length > 256) {
+				copy_length = 256;
+			}
+			memcpy(hci_tx_buf, buf->data, copy_length);
+			net_buf_pull(buf, copy_length);
+			length -= copy_length;
+		}
+
+		int ret = uart_tx(hci_alif_dev, hci_tx_buf, copy_length, TX_TIMEOUT_US);
+
+		if (ret < 0) {
+			LOG_ERR("TX err %d", ret);
+			goto done;
+		}
+		if (k_sem_take(&hci_tx_sem, K_MSEC(5)) != 0) {
+
+			LOG_ERR("TX SEM TO");
+			goto done;
+		}
+	}
+done:
+	net_buf_unref(buf);
+}
+
 static inline void process_rx(void)
 {
 	LOG_DBG("remaining %u discard %u have_hdr %u rx.buf %p len %u", rx.remaining, rx.discard,
@@ -471,6 +571,79 @@ static inline void process_rx(void)
 	}
 }
 
+static void hci_data_parse(void)
+{
+	/* Read A ring Buffer allways to empty */
+	while (1) {
+		if (ring_buf_is_empty(&hci_ring_buf)) {
+			return;
+		}
+
+		process_rx();
+	}
+}
+
+/**
+ * @brief UART async event callback
+ *
+ * This function handles UART async events for both TX and RX operations
+ * when using DMA-based transfers with the async UART API
+ *
+ * @param dev UART device
+ * @param evt UART event
+ * @param user_data User data pointer
+ */
+static void hci_uart_async_callback(const struct device *dev, struct uart_event *evt,
+				    void *user_data)
+{
+	switch (evt->type) {
+	case UART_TX_DONE:
+		/* TX completed successfully */
+		LOG_DBG("UART TX completed successfully");
+		k_sem_give(&hci_tx_sem);
+		break;
+
+	case UART_TX_ABORTED:
+		/* TX was aborted */
+		LOG_ERR("UART TX was aborted, sent %d bytes", evt->data.tx.len);
+		k_sem_give(&hci_tx_sem);
+		break;
+#if ALIF_HCI_DMA_RX_ENABLED
+	case UART_RX_RDY:
+		/* Data received and ready for processing */
+		char *p_start = evt->data.rx.buf + evt->data.rx.offset;
+		/* Push To ring buffer */
+		ring_buf_put(&hci_ring_buf, p_start, evt->data.rx.len);
+		LOG_DBG("Rxd %d , offset %d", evt->data.rx.len, evt->data.rx.offset);
+		hci_data_parse();
+		break;
+
+	case UART_RX_BUF_REQUEST:
+		/* UART driver is requesting a new buffer for continuous reception */
+		pingpong ^= true;
+		uart_rx_buf_rsp(dev, temp_rx_buf + (32 * pingpong), BUFF_SIZE);
+		break;
+
+	case UART_RX_BUF_RELEASED:
+		/* Buffer has been released */
+		break;
+
+	case UART_RX_DISABLED:
+		/* RX has been disabled */
+		break;
+
+	case UART_RX_STOPPED:
+		/* RX has been stopped due to error */
+		LOG_ERR("UART RX stopped due to error: %d", evt->data.rx_stop.reason);
+		break;
+#endif
+
+	default:
+		LOG_ERR("Unknown UART event: %d", evt->type);
+		break;
+	}
+}
+
 static void hci_alif_uart_isr(const struct device *unused, void *user_data)
 {
 	ARG_UNUSED(unused);
@@ -482,7 +655,14 @@ static void hci_alif_uart_isr(const struct device *unused, void *user_data)
 		}
 
 		if (uart_irq_rx_ready(hci_alif_dev)) {
-			process_rx();
+
+			int read = uart_fifo_read(hci_alif_dev, temp_rx_buf, 64);
+
+			LOG_DBG("RX %d", read);
+			if (read > 0) {
+				ring_buf_put(&hci_ring_buf, temp_rx_buf, read);
+				hci_data_parse();
+			}
 		}
 	}
 }
@@ -495,8 +675,12 @@ static int hci_alif_send(struct net_buf *buf)
 
 	wake_es0(hci_alif_dev);
 
-	net_buf_put(&tx.fifo, buf);
-	uart_irq_tx_enable(hci_alif_dev);
+	if (hci_uart_dma_tx_enabled) {
+		process_dma_tx(buf);
+	} else {
+		net_buf_put(&tx.fifo, buf);
+		uart_irq_tx_enable(hci_alif_dev);
+	}
 
 	return 0;
 }
@@ -517,6 +701,50 @@ static int hci_alif_close(void)
 	return 0;
 }
 
+static bool hci_uart_rx_dma_driver_check(void)
+{
+#if CONFIG_UART_ASYNC_API && ALIF_HCI_DMA_RX_ENABLED
+#if DT_NODE_HAS_STATUS(DT_DMAS_CTLR_BY_NAME(DT_NODELABEL(uart_hci), rx), okay)
+	/* RX DMA is disabled because it not give great value yet */
+	const struct device *rxdma =
+		DEVICE_DT_GET_OR_NULL(DT_DMAS_CTLR_BY_NAME(DT_NODELABEL(uart_hci), rx));
+
+	if (rxdma && device_is_ready(rxdma)) {
+		int rx_config = DT_DMAS_CELL_BY_NAME(DT_NODELABEL(uart_hci), rx, periph);
+
+		uart_callback_set(hci_alif_dev, hci_uart_async_callback, NULL);
+		LOG_DBG("DMA RX event enable %d", rx_config);
+		dma_event_router_configure(DMA_UART_RX_GROUP, rx_config, false);
+		return true;
+	}
+#endif
+#endif
+	uart_irq_callback_set(hci_alif_dev, hci_alif_uart_isr);
+	uart_irq_rx_enable(hci_alif_dev);
+	return false;
+}
+
+static bool hci_uart_tx_dma_driver_check(void)
+{
+#ifdef CONFIG_UART_ASYNC_API
+#if (DT_NODE_HAS_STATUS(DT_DMAS_CTLR_BY_NAME(DT_NODELABEL(uart_hci), tx), okay))
+	const struct device *txdma =
+		DEVICE_DT_GET_OR_NULL(DT_DMAS_CTLR_BY_NAME(DT_NODELABEL(uart_hci), tx));
+
+	if (txdma && device_is_ready(txdma)) {
+		int tx_config = DT_DMAS_CELL_BY_NAME(DT_NODELABEL(uart_hci), tx, periph);
+
+		uart_callback_set(hci_alif_dev, hci_uart_async_callback, NULL);
+		LOG_DBG("DMA tX event enable %d", tx_config);
+		dma_event_router_configure(DMA_UART_TX_GROUP, tx_config, false);
+		return true;
+	}
+#endif
+#endif
+	uart_irq_callback_set(hci_alif_dev, hci_alif_uart_isr);
+	return false;
+}
+
 static int hci_alif_open(void)
 {
 	int ret;
@@ -527,32 +755,42 @@ static int hci_alif_open(void)
 		return -EIO;
 	}
 
+	/* Disable receiver and interrupts */
 	uart_irq_rx_disable(hci_alif_dev);
 	uart_irq_tx_disable(hci_alif_dev);
+	uart_rx_disable(hci_alif_dev);
+
+	hci_uart_dma_rx_enabled = hci_uart_rx_dma_driver_check();
+	hci_uart_dma_tx_enabled = hci_uart_tx_dma_driver_check();
 
 	ret = bt_hci_transport_setup(hci_alif_dev);
 	if (ret < 0) {
 		return -EIO;
 	}
-
-	uart_irq_callback_set(hci_alif_dev, hci_alif_uart_isr);
-
+#if ALIF_HCI_DMA_RX_ENABLED
+	if (hci_uart_dma_rx_enabled) {
+		ret = uart_rx_enable(hci_alif_dev, temp_rx_buf + (32 * pingpong), BUFF_SIZE,
+				     RX_TIMEOUT_US);
+		if (ret < 0) {
+			LOG_ERR("Failed to enable UART: %d", ret);
+			return ret;
+		}
+	}
+#endif
 	tid = k_thread_create(&alif_rx_thread_data, alif_rx_thread_stack,
-			      K_KERNEL_STACK_SIZEOF(alif_rx_thread_stack),
-			      hci_alif_rx_thread, NULL, NULL, NULL,
-			      K_PRIO_COOP(CONFIG_BT_RX_PRIO),
-			      0, K_NO_WAIT);
+			      K_KERNEL_STACK_SIZEOF(alif_rx_thread_stack), hci_alif_rx_thread, NULL,
+			      NULL, NULL, K_PRIO_COOP(CONFIG_BT_RX_PRIO), 0, K_NO_WAIT);
 	k_thread_name_set(tid, "hci_alif_rx_thread");
 
 	return 0;
 }
 
 static const struct bt_hci_driver drv = {
-	.name		= "H:4",
-	.bus		= BT_HCI_DRIVER_BUS_UART,
-	.open		= hci_alif_open,
-	.send		= hci_alif_send,
-	.close		= hci_alif_close,
+	.name = "H:4",
+	.bus = BT_HCI_DRIVER_BUS_UART,
+	.open = hci_alif_open,
+	.send = hci_alif_send,
+	.close = hci_alif_close,
 };
 
 static int bt_uart_init(void)
