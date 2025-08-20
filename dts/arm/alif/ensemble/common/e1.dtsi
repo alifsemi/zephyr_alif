@@ -1064,6 +1064,23 @@
 		status = "disabled";
 	};
 
+	pdm: pdm@4902d000 {
+		compatible = "alif,alif-pdm";
+		reg = <0x4902d000 0x1000>;
+		interrupts = <145 0>,
+			     <146 0>,
+			     <147 0>;
+		interrupt-names = "warning_intr",
+				  "error_intr",
+				  "audio_det_intr";
+		pinctrl-0 = <&pinctrl_pdm0>;
+		pinctrl-names = "default";
+		clocks = <&clockctrl ALIF_PDM_76M8_CLK>;
+		fifo_watermark = <5>;
+		bypass_iir_filter = <1>;
+		status = "disabled";
+	};
+
 	i2c0: i2c0@49010000 {
 		compatible = "snps,designware-i2c";
 		clock-frequency = <I2C_BITRATE_STANDARD>;
