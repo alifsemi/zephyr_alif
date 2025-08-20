@@ -139,6 +139,7 @@ static int soc_init(void)
 	}
 #endif
 
+
 	/*Clock : OSPI */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi0), okay)
 	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2) ||
@@ -150,6 +151,13 @@ static int soc_init(void)
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi1), okay)
 	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2)) {
 		sys_write32(0x2, EXPSLV_OSPI_CTRL);
+	}
+#endif
+
+#if (DT_NODE_HAS_STATUS(DT_NODELABEL(pdm), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(lppdm), okay))
+	if (IS_ENABLED(CONFIG_SOC_SERIES_E8)) {
+		/* enable the HFOSCx2 clock */
+		sys_set_bits(CGU_CLK_ENA, BIT(24));
 	}
 #endif
 
