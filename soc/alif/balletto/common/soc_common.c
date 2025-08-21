@@ -16,7 +16,7 @@
  */
 static int soc_init(void)
 {
-	uint32_t uart_clk_mask = 0;
+	uint32_t uart_clk_mask = sys_read32(EXPSLV_UART_CTRL);
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(uart0), okay)
 	uart_clk_mask |= BIT(0) | BIT(8);
@@ -36,7 +36,7 @@ static int soc_init(void)
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(uart5), okay)
 	uart_clk_mask |= BIT(5) | BIT(13);
 #endif
-	sys_write32(uart_clk_mask, 0x4902F008);
+	sys_write32(uart_clk_mask, EXPSLV_UART_CTRL);
 
 	/* LPUART settings */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart), okay)
