@@ -104,6 +104,7 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_PCIE), "NS16550(s) in DT need CONFIG_PCIE");
 #define REG_DLF 0xC0  /* Divisor Latch Fraction         */
 #define REG_PCP 0x200 /* PRV_CLOCK_PARAMS (Apollo Lake) */
 #define REG_MDR1 0x08 /* Mode control reg. (TI_K3) */
+#define REG_SRR 0x22  /* Software reset reg.             */
 
 #if defined(CONFIG_UART_NS16550_INTEL_LPSS_DMA)
 #define REG_LPSS_SRC_TRAN 0xAF8 /* SRC Transfer LPSS DMA */
@@ -157,6 +158,11 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_PCIE), "NS16550(s) in DT need CONFIG_PCIE");
 #define MDR1_CIR_MODE					(6)
 #define MDR1_DISABLE					(7)
 
+/* fields for the software reset register */
+
+#define SRR_UR						0x01 /* UART reset */
+#define SRR_RFR						0x02 /* Rx FIFO reset */
+#define SRR_XFR						0x04 /* Tx FIFO reset */
 /*
  * Per PC16550D (Literature Number: SNLS378B):
  *
@@ -266,6 +272,7 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_PCIE), "NS16550(s) in DT need CONFIG_PCIE");
 #define TFL(dev) (get_port(dev) + REG_TFL * reg_interval(dev))
 #define RFL(dev) (get_port(dev) + REG_RFL * reg_interval(dev))
 #define MDR1(dev) (get_port(dev) + REG_MDR1 * reg_interval(dev))
+#define SRR(dev) (get_port(dev) + REG_SRR * reg_interval(dev))
 #define DLF(dev) (get_port(dev) + REG_DLF)
 #define PCP(dev) (get_port(dev) + REG_PCP)
 
@@ -593,6 +600,11 @@ static int uart_ns16550_configure(const struct device *dev,
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 	dev_data->iir_cache = 0U;
+#endif
+
+#ifdef CONFIG_UART_NS16550_DW_SRR
+	/* Reset the UART */
+	ns16550_outbyte(dev_cfg, SRR(dev), SRR_UR);
 #endif
 
 #if UART_NS16550_DLF_ENABLED

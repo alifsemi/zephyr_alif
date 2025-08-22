@@ -90,6 +90,16 @@ config UART_NS16550_ITE_HIGH_SPEED_BUADRATE
 	  Enable IT8XXX2 specific baud rate configuration.
 	  This applies to high-speed baud rate configuration.
 
+config UART_NS16550_DW_SRR
+	bool "Synopsys DesignWare UART with Software Reset Register"
+	help
+	  Enable support for Synopsys DesignWare UART implementations that
+	  include the optional Software Reset Register (SRR). The software
+	  reset register is used to reset the UART IP to a known state during
+	  configuration.
+
+	  Say y only if your DesignWare UART implementation includes SRR support.
+
 menu "NS16550 Workarounds"
 
 config UART_NS16550_WA_ISR_REENABLE_INTERRUPT
