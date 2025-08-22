@@ -25,3 +25,10 @@ properties:
   io-mapped:
     type: boolean
     description: specify registers are IO mapped or memory mapped
+
+  software-reset:
+    type: boolean
+    description: If present, the driver will perform a software reset on the UART
+      instance during initialization using the Software Reset Register (SRR) available
+      in some implementations of the Synopsys DesignWare UART. Use this property only
+      for UARTs that have the SRR.
