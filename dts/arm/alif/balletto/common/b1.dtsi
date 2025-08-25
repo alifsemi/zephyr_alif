@@ -455,6 +455,20 @@
 		rx-delay = <4>;
 		status = "disabled";
 	};
+	timer0: timer@42001000 {
+		compatible = "snps,dw-timers";
+		reg = <0x42001000 0x14>;
+		interrupts = <60 0>;
+		clocks = <&clockctrl ALIF_LPTIMER0_S32K_CLK>;
+		status = "disabled";
+	};
+	timer1: timer@42001014 {
+		compatible = "snps,dw-timers";
+		reg = <0x42001014 0x14>;
+		interrupts = <61 0>;
+		clocks = <&clockctrl ALIF_LPTIMER1_S32K_CLK>;
+		status = "disabled";
+	};
 	utimer0: utimer@48001000 {
 		compatible = "alif,utimer";
 		reg = <0x48001000 0x1000 0x48000000 0x24>;
