@@ -903,14 +903,7 @@ static int arx3a0_set_fmt(const struct device *dev, enum video_endpoint_id ep,
 
 	drv_data->fmt = *fmt;
 
-	/* Configure Sensor */
-	ret = arx3a0_write_all(dev, arx3a0_560_regs);
-	if (ret) {
-		LOG_ERR("Unable to write arx3a0 config. ret - %d", ret);
-		return ret;
-	}
-
-	/* Set output format */
+    /* Set output format */
 	ret = arx3a0_set_output_format(dev, fmt->pixelformat);
 	if (ret) {
 		LOG_ERR("Unable to set output format. ret - %d", ret);
@@ -1205,6 +1198,7 @@ static int arx3a0_init(const struct device *dev)
 	uint16_t val;
 	int ret;
 	const struct pinctrl_dev_config *pcfg;
+	struct video_format fmt;
 
 	PINCTRL_DT_INST_DEFINE(0);
 
@@ -1262,6 +1256,27 @@ static int arx3a0_init(const struct device *dev)
 			"ret - %d",
 			ret);
 		return ret;
+	}
+
+	/* Configure Sensor */
+	ret = arx3a0_write_all(dev, arx3a0_560_regs);
+	if (ret) {
+		LOG_ERR("Unable to write arx3a0 config. ret - %d", ret);
+		return ret;
+	}
+
+	/*
+	 * Currently ARX3A0 sensor supports only one format - RAW10 MIPI.
+	 * Set default format as RAW10 MIPI format
+	 */
+	fmt.pixelformat = VIDEO_PIX_FMT_Y10P;
+	fmt.width = 560;
+	fmt.height = 560;
+	fmt.pitch = (fmt.width + 8) << 1;
+	ret = arx3a0_set_fmt(dev, VIDEO_EP_OUT, &fmt);
+	if (ret) {
+		LOG_ERR("Unable to set default format");
+		return -EIO;
 	}
 
 	/* start streaming. */
