@@ -251,7 +251,7 @@ static int cam_set_fmt(const struct device *dev, enum video_endpoint_id ep,
 	uintptr_t regs = DEVICE_MMIO_GET(dev);
 	int ret;
 
-	if (!bits_pp || ep != VIDEO_EP_OUT) {
+	if (ep != VIDEO_EP_OUT) {
 		return -EINVAL;
 	}
 
