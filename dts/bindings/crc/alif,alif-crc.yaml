@@ -1,0 +1,20 @@
+# Copyright (c) 2024, Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Alif Cyclic Redundancy Check
+
+compatible: "alif,alif-crc"
+include: [base.yaml]
+
+properties:
+  reg:
+    required: true
+
+  crc_algo:
+    type: string
+    required: true
+    description: Select CRC algorithm
+    enum:
+      - "CRC_8_BIT_SIZE"
+      - "CRC_16_BIT_SIZE"
+      - "CRC_32_BIT_SIZE"

@@ -1015,6 +1015,20 @@
 		status = "disabled";
 	};
 
+	crc0: crc0@48107000 {
+		compatible = "alif,alif-crc";
+		reg = <0x48107000 0x1000>;
+		crc_algo = "CRC_8_BIT_SIZE";
+		status = "disabled";
+	};
+
+	crc1: crc1@48108000 {
+		compatible = "alif,alif-crc";
+		reg = <0x48108000 0x1000>;
+		crc_algo = "CRC_8_BIT_SIZE";
+		status = "disabled";
+	};
+
 	i2c0: i2c0@49010000 {
 		compatible = "snps,designware-i2c";
 		clock-frequency = <I2C_BITRATE_STANDARD>;

@@ -447,6 +447,13 @@
 		status = "disabled";
 	};
 
+	crc0: crc0@48107000 {
+		compatible = "alif,alif-crc";
+		reg = <0x48107000 0x1000>;
+		crc_algo = "CRC_8_BIT_SIZE";
+		status = "disabled";
+	};
+
 	spi0: spi@48103000 {
 		dwc-ssi;
 		compatible = "snps,designware-spi";
