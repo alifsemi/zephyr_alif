@@ -1,0 +1,47 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+# D/AVE2D driver configuration
+
+menuconfig DAVE2D
+    bool "D/AVE2D support"
+
+if DAVE2D
+
+choice D1_MEM_ALLOC
+    prompt "Select memory allocator for Layer 1 D/AVE2D driver"
+    default D1_MALLOC_D0LIB
+
+config D1_MALLOC_D0LIB
+    bool "Use D/AVE2D Layer 0 memory allocator"
+
+config D1_MALLOC_STDLIB
+    bool "Use default malloc() implementation from stdlib"
+
+config D1_MALLOC_CUSTOM
+    bool "Use custom dynamic memory allocation implementation"
+
+endchoice
+
+choice D0_MEMORY_MANAGER
+    prompt "Select D0 memory manager to use"
+    default WITH_MM_FIXED_RANGE
+    depends on D1_MALLOC_D0LIB
+
+config WITH_MM_FIXED_RANGE
+    bool "Memory management in a fixed range of memory"
+
+config WITH_MM_FIXED_RANGE_FIXED_BLKCNT
+    bool "Memory management with controlstructure in a separate addressspace"
+
+config WITH_MM_DYNAMIC
+    bool "Dynamic memory managment functions for D/AVE"
+
+endchoice
+
+config D1_DLIST_INDIRECT
+    bool "Use DLIST indirect"
+
+endif
