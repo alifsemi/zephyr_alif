@@ -95,6 +95,12 @@ static int soc_init(void)
 	sys_write32(0x1, LPRTC1_CLK_EN);
 #endif
 
+/* lptimer settings */
+#if DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers)
+	LPTIMER_CONFIG(0);
+	LPTIMER_CONFIG(1);
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers) */
+
 	return 0;
 }
 

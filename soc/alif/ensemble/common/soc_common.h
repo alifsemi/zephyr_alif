@@ -80,4 +80,15 @@
 /* LPGPIO Base address for LPTIMER pin config */
 #define LPGPIO_BASE		0x42002008
 
+/* lptimer helper macro */
+#define LPTIMER_CONFIG(idx)						\
+	/* Check if timer node is enabled in DT */			\
+	IF_ENABLED(DT_NODE_HAS_STATUS(DT_NODELABEL(timer##idx), okay), (\
+		if (IS_ENABLED(CONFIG_LPTIMER##idx##_OUTPUT_TOGGLE) ||	\
+			(CONFIG_LPTIMER##idx##_EXT_CLK_FREQ > 0U)) {	\
+			/* enable LPTIMER##idx pin via LPGPIO */	\
+			sys_set_bit(LPGPIO_BASE, idx);			\
+		}							\
+	))
+
 #endif /* _SOC_COMMON_H_ */

@@ -48,3 +48,49 @@ endif # RTSS_HP && !USE_DT_CODE_PARTITION
 
 config ROM_START_OFFSET
 	default 0x800 if BOOTLOADER_MCUBOOT
+
+if COUNTER_SNPS_DW
+config LPTIMER0_OUTPUT_TOGGLE
+	bool "LPTimer0 Output Toggle"
+	help
+	  Enable lptimer 0 output toggle.
+
+config LPTIMER0_EXT_CLK_FREQ
+	int "LPTimer0 External clock source Frequency value"
+	default 0
+	help
+	  Provide lptimer 0 clock frequency for external clock source.
+
+config LPTIMER1_OUTPUT_TOGGLE
+	bool "LPTimer1 Output Toggle"
+	help
+	  Enable lptimer 1 output toggle.
+
+config LPTIMER1_EXT_CLK_FREQ
+	int "LPTimer1 External clock source Frequency value"
+	default 0
+	help
+	  Provide lptimer 1 clock frequency for external clock source.
+
+config LPTIMER2_OUTPUT_TOGGLE
+	bool "LPTimer2 Output Toggle"
+	help
+	  Enable lptimer 2 output toggle.
+
+config LPTIMER2_EXT_CLK_FREQ
+	int "LPTimer2 External clock source Frequency value"
+	default 0
+	help
+	  Provide lptimer 2 clock frequency for external clock source.
+
+config LPTIMER3_OUTPUT_TOGGLE
+	bool "LPTimer3 Output Toggle"
+	help
+	  Enable lptimer 3 output toggle.
+
+config LPTIMER3_EXT_CLK_FREQ
+	int "LPTimer3 External clock source Frequency value"
+	default 0
+	help
+	  Provide lptimer 3 clock frequency for external clock source.
+endif # COUNTER_SNPS_DW

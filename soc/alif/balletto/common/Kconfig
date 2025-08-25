@@ -41,3 +41,27 @@ config FLASH_SIZE
 
 config FLASH_BASE_ADDRESS
 	default $(dt_node_reg_addr_hex,$(dt_nodelabel_path,itcm))     if !XIP
+
+if COUNTER_SNPS_DW
+config LPTIMER0_OUTPUT_TOGGLE
+	bool "LPTimer0 Output Toggle"
+	help
+	  Enable lptimer 0 output toggle.
+
+config LPTIMER0_EXT_CLK_FREQ
+	int "LPTimer0 External clock source Frequency value"
+	default 0
+	help
+	  Provide lptimer 0 clock frequency for external clock source.
+
+config LPTIMER1_OUTPUT_TOGGLE
+	bool "LPTimer1 Output Toggle"
+	help
+	  Enable lptimer 1 output toggle.
+
+config LPTIMER1_EXT_CLK_FREQ
+	int "LPTimer1 External clock source Frequency value"
+	default 0
+	help
+	  Provide lptimer 1 clock frequency for external clock source.
+endif # COUNTER_SNPS_DW

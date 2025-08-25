@@ -123,6 +123,14 @@ static int soc_init(void)
 	sys_write32(0x1, VBAT_LPRTC1_CLK_EN);
 #endif
 
+/* lptimer settings */
+#if DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers)
+	LPTIMER_CONFIG(0);
+	LPTIMER_CONFIG(1);
+	LPTIMER_CONFIG(2);
+	LPTIMER_CONFIG(3);
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers) */
+
 	return 0;
 }
 
