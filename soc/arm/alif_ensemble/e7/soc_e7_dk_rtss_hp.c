@@ -44,31 +44,35 @@ static int ensemble_e7_dk_rtss_hp_init(void)
 	/* Switch HOSTUARTCLK Source to CGU_UART_CLK */
 	sys_write32(2, 0x1A010850);
 
-
 	/* Setting expansion master0 control register value */
 	/* for enabling clock */
 	data |= 0xc0000000;
 	sys_write32(data, 0x4902F000);
 
-	/*
-	 * Setting expansion master0 SPI control register values
-	 * 0xf at 8-11 bit is setting all 4 SPI instances as master
-	 * bit 0-3; ss_in_sel; 0 - from io pad; 1 - from ssi_in_val
-	 * bit 8-11; ss_in_val; when ss_in_sel=1, feed ss_in_val to SSI,
-	 * each bit controls one SSI instance.
-	 * For setting an spi instance as slave, put 0 in the corresponding
-	 * bit position of both 8-11 and 0-3 bit fields.
-	 * For example if we want to set SPI1 as master and
-	 * remaining instances as slave, set the 1st bit for ss_in_sel, which will
-	 * make ss_in_val to feed to SSI, and set the corresponding ss_in_val bit.
-	 * here for SPI1 as master set the 9th bit. So the value to feed SPI1 as
-	 * master and remaining as slave is 0x0202.
-	 */
-	sys_write32(0x0202, 0x4902F028);
+	/* SPI: Enable Master Mode and SS Val */
+#if  UTIL_AND(DT_NODE_HAS_STATUS(DT_NODELABEL(spi0), okay), \
+	!DT_PROP(DT_NODELABEL(spi0), serial_target))
+	sys_set_bit(EXPSLV_SSI_CTRL, 0);
+	sys_set_bit(EXPSLV_SSI_CTRL, 8);
+#endif
 
-	data = sys_read32(0x43007010);
-	data |= (1 << 16);
-	sys_write32(data, 0x43007010);
+#if  UTIL_AND(DT_NODE_HAS_STATUS(DT_NODELABEL(spi1), okay), \
+	!DT_PROP(DT_NODELABEL(spi1), serial_target))
+	sys_set_bit(EXPSLV_SSI_CTRL, 1);
+	sys_set_bit(EXPSLV_SSI_CTRL, 9);
+#endif
+
+#if  UTIL_AND(DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(spi2)), \
+	!DT_PROP(DT_NODELABEL(spi2), serial_target))
+	sys_set_bit(EXPSLV_SSI_CTRL, 2);
+	sys_set_bit(EXPSLV_SSI_CTRL, 10);
+#endif
+
+#if  UTIL_AND(DT_NODE_HAS_STATUS_OKAY(DT_NODELABEL(spi3)), \
+	!DT_PROP(DT_NODELABEL(spi3), serial_target))
+	sys_set_bit(EXPSLV_SSI_CTRL, 3);
+	sys_set_bit(EXPSLV_SSI_CTRL, 11);
+#endif
 
 	/* enable pdm in expansion master */
 	sys_set_bits(EXPSLV_EXPMST0_CTRL, BIT(8));
