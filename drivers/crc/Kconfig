@@ -1,0 +1,10 @@
+menuconfig CRC_DRV
+	bool "CRC drivers"
+	help
+	  Enable support for CRC Driver
+
+if CRC_DRV
+
+source "drivers/crc/Kconfig.alif"
+
+endif
