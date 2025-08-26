@@ -108,4 +108,6 @@ source "drivers/counter/Kconfig.renesas_ra"
 
 source "drivers/counter/Kconfig.renesas_rz"
 
+source "drivers/counter/Kconfig.alif"
+
 endif # COUNTER
