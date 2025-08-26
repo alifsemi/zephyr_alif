@@ -55,7 +55,7 @@
 		group0 {
 			pinmux = < PIN_P4_0__UT0_T0_A >,
 				 < PIN_P4_1__UT0_T1_A >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 
@@ -71,7 +71,7 @@
 		group0 {
 			pinmux = < PIN_P4_4__UT2_T0_A >,
 				 < PIN_P4_5__UT2_T1_A >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 
@@ -79,7 +79,7 @@
 		group0 {
 			pinmux = < PIN_P4_6__UT3_T0_A >,
 				 < PIN_P4_7__UT3_T1_A >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 

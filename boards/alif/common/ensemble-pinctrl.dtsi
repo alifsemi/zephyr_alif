@@ -750,84 +750,84 @@
 		group0 {
 			pinmux = < PIN_P0_0__UT0_T0_A >,
 				 < PIN_P0_1__UT0_T1_A >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 	pinctrl_ut1:pinctrl_ut1 {
 		group0 {
 			pinmux = < PIN_P0_2__UT1_T0_A >,
 				 < PIN_P0_3__UT1_T1_A >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 	pinctrl_ut2:pinctrl_ut2 {
 		group0 {
 			pinmux = < PIN_P0_4__UT2_T0_A >,
 				 < PIN_P0_5__UT2_T1_A >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 	pinctrl_ut3:pinctrl_ut3 {
 		group0 {
 			pinmux = < PIN_P0_6__UT3_T0_A >,
 				 < PIN_P0_7__UT3_T1_A >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 	pinctrl_ut4:pinctrl_ut4 {
 		group0 {
 			pinmux = < PIN_P1_0__UT4_T0_A >,
 				 < PIN_P1_1__UT4_T1_A >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 	pinctrl_ut5:pinctrl_ut5 {
 		group0 {
 			pinmux = < PIN_P6_2__UT5_T0_B >,
 				 < PIN_P6_3__UT5_T1_B >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 	pinctrl_ut6:pinctrl_ut6 {
 		group0 {
 			pinmux = < PIN_P6_4__UT6_T0_B >,
 				 < PIN_P6_5__UT6_T1_B >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 	pinctrl_ut7:pinctrl_ut7 {
 		group0 {
 			pinmux = < PIN_P6_6__UT7_T0_B >,
 				 < PIN_P6_7__UT7_T1_B >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 	pinctrl_ut8:pinctrl_ut8 {
 		group0 {
 			pinmux = < PIN_P12_0__UT8_T0_C >,
 				 < PIN_P12_1__UT8_T1_C >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 	pinctrl_ut9:pinctrl_ut9 {
 		group0 {
 			pinmux = < PIN_P12_2__UT9_T0_C >,
 				 < PIN_P12_3__UT9_T1_C >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 	pinctrl_ut10:pinctrl_ut10 {
 		group0 {
 			pinmux = < PIN_P7_4__UT10_T0_B >,
 				 < PIN_P7_5__UT10_T1_B >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 	pinctrl_ut11:pinctrl_ut11 {
 		group0 {
 			pinmux = < PIN_P2_6__UT11_T0_A >,
 				 < PIN_P2_7__UT11_T1_A >;
-			read_enable = < 0x0 >;
+			read_enable = < 0x1 >;
 		};
 	};
 };
