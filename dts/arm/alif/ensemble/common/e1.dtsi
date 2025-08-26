@@ -426,7 +426,7 @@
 		};
 
 		qdec {
-			compatible = "alif,qdec";
+			compatible = "alif,utimer-qdec";
 			counts-per-revolution = <1000>;
 			input-filter-enable;
 			filter-prescaler = <16>;
@@ -462,7 +462,7 @@
 		};
 
 		qdec {
-			compatible = "alif,qdec";
+			compatible = "alif,utimer-qdec";
 			counts-per-revolution = <1000>;
 			input-filter-enable;
 			filter-prescaler = <16>;
@@ -498,7 +498,7 @@
 		};
 
 		qdec {
-			compatible = "alif,qdec";
+			compatible = "alif,utimer-qdec";
 			counts-per-revolution = <1000>;
 			input-filter-enable;
 			filter-prescaler = <16>;
@@ -534,7 +534,7 @@
 		};
 
 		qdec {
-			compatible = "alif,qdec";
+			compatible = "alif,utimer-qdec";
 			counts-per-revolution = <1000>;
 			input-filter-enable;
 			filter-prescaler = <16>;
@@ -570,7 +570,7 @@
 		};
 
 		qdec {
-			compatible = "alif,qdec";
+			compatible = "alif,utimer-qdec";
 			counts-per-revolution = <1000>;
 			input-filter-enable;
 			filter-prescaler = <16>;
@@ -606,7 +606,7 @@
 		};
 
 		qdec {
-			compatible = "alif,qdec";
+			compatible = "alif,utimer-qdec";
 			counts-per-revolution = <1000>;
 			input-filter-enable;
 			filter-prescaler = <16>;
@@ -642,7 +642,7 @@
 		};
 
 		qdec {
-			compatible = "alif,qdec";
+			compatible = "alif,utimer-qdec";
 			counts-per-revolution = <1000>;
 			input-filter-enable;
 			filter-prescaler = <16>;
@@ -678,7 +678,7 @@
 		};
 
 		qdec {
-			compatible = "alif,qdec";
+			compatible = "alif,utimer-qdec";
 			counts-per-revolution = <1000>;
 			input-filter-enable;
 			filter-prescaler = <16>;
@@ -714,7 +714,7 @@
 		};
 
 		qdec {
-			compatible = "alif,qdec";
+			compatible = "alif,utimer-qdec";
 			counts-per-revolution = <1000>;
 			input-filter-enable;
 			filter-prescaler = <16>;
@@ -750,7 +750,7 @@
 		};
 
 		qdec {
-			compatible = "alif,qdec";
+			compatible = "alif,utimer-qdec";
 			counts-per-revolution = <1000>;
 			input-filter-enable;
 			filter-prescaler = <16>;
@@ -786,7 +786,7 @@
 		};
 
 		qdec {
-			compatible = "alif,qdec";
+			compatible = "alif,utimer-qdec";
 			counts-per-revolution = <1000>;
 			input-filter-enable;
 			filter-prescaler = <16>;
@@ -822,7 +822,7 @@
 		};
 
 		qdec {
-			compatible = "alif,qdec";
+			compatible = "alif,utimer-qdec";
 			counts-per-revolution = <1000>;
 			input-filter-enable;
 			filter-prescaler = <16>;
