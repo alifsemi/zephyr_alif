@@ -532,7 +532,7 @@
 		status = "disabled";
 
 		counter {
-			compatible = "alif,counter";
+			compatible = "alif,utimer-counter";
 			status = "disabled";
 		};
 
@@ -568,7 +568,7 @@
 		status = "disabled";
 
 		counter {
-			compatible = "alif,counter";
+			compatible = "alif,utimer-counter";
 			status = "disabled";
 		};
 
@@ -604,7 +604,7 @@
 		status = "disabled";
 
 		counter {
-			compatible = "alif,counter";
+			compatible = "alif,utimer-counter";
 			status = "disabled";
 		};
 
@@ -640,7 +640,7 @@
 		status = "disabled";
 
 		counter {
-			compatible = "alif,counter";
+			compatible = "alif,utimer-counter";
 			status = "disabled";
 		};
 
