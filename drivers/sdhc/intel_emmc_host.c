@@ -12,11 +12,16 @@
 #include <zephyr/sd/sd_spec.h>
 #include <zephyr/cache.h>
 #include "intel_emmc_host.h"
+#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_FAMILY_BALLETTO)
+#include "soc_memory_map.h"
+#include <zephyr/drivers/pinctrl.h>
+#endif
 #if DT_ANY_INST_ON_BUS_STATUS_OKAY(pcie)
 BUILD_ASSERT(IS_ENABLED(CONFIG_PCIE), "DT need CONFIG_PCIE");
 #include <zephyr/drivers/pcie/pcie.h>
 #endif
 
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(emmc_hc, CONFIG_SDHC_LOG_LEVEL);
 
@@ -34,6 +39,9 @@ struct emmc_config {
 #else
 	DEVICE_MMIO_ROM;
 #endif
+#if DT_NODE_HAS_PROP(DT_NODELABEL(sdhc), pinctrl_0)
+	const struct pinctrl_dev_config *pincfg;
+#endif
 	emmc_isr_cb_t config_func;
 	uint32_t max_bus_freq;
 	uint32_t min_bus_freq;
@@ -50,7 +58,7 @@ struct emmc_data {
 	struct sdhc_io host_io;
 	struct k_sem lock;
 	struct k_event irq_event;
-	uint64_t desc_table[ADMA_DESC_SIZE];
+	uint64_t desc_table[ADMA_DESC_SIZE] __aligned(MAX(4, CONFIG_SDHC_BUFFER_ALIGNMENT));
 	struct sdhc_host_props props;
 	bool card_present;
 };
@@ -329,13 +337,15 @@ static int wait_for_cmd_complete(struct emmc_data *emmc, uint32_t time_out)
 {
 	int ret;
 	k_timeout_t wait_time;
-	uint32_t events;
+	uint32_t events = 0;
 
 	if (time_out == SDHC_TIMEOUT_FOREVER) {
 		wait_time = K_FOREVER;
 	} else {
 		wait_time = K_MSEC(time_out);
 	}
+
+	k_busy_wait(500u);
 
 	events = k_event_wait(&emmc->irq_event,
 			      EMMC_HOST_CMD_COMPLETE | ERR_INTR_STATUS_EVENT(EMMC_HOST_ERR_STATUS),
@@ -415,7 +425,11 @@ static int emmc_dma_init(const struct device *dev, struct sdhc_data *data, bool 
 	}
 
 	if (IS_ENABLED(CONFIG_INTEL_EMMC_HOST_ADMA)) {
+#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_FAMILY_BALLETTO)
+		uint64_t buff = local_to_global(data->data);
+#else
 		uint8_t *buff = data->data;
+#endif
 
 		/* Setup DMA transfer using ADMA2 */
 		memset(emmc->desc_table, 0, sizeof(emmc->desc_table));
@@ -424,7 +438,7 @@ static int emmc_dma_init(const struct device *dev, struct sdhc_data *data, bool 
 		__ASSERT_NO_MSG(data->blocks < CONFIG_INTEL_EMMC_HOST_ADMA_DESC_SIZE);
 #endif
 		for (int i = 0; i < data->blocks; i++) {
-			emmc->desc_table[i] = ((uint64_t)buff) << EMMC_HOST_ADMA_BUFF_ADD_LOC;
+			emmc->desc_table[i] = buff << EMMC_HOST_ADMA_BUFF_ADD_LOC;
 			emmc->desc_table[i] |= data->block_size << EMMC_HOST_ADMA_BUFF_LEN_LOC;
 
 			if (i == (data->blocks - 1u)) {
@@ -439,15 +453,29 @@ static int emmc_dma_init(const struct device *dev, struct sdhc_data *data, bool 
 			LOG_DBG("desc_table:%llx", emmc->desc_table[i]);
 		}
 
-		regs->adma_sys_addr1 = (uint32_t)((uintptr_t)emmc->desc_table & ADDRESS_32BIT_MASK);
+#if defined(CONFIG_CACHE_MANAGEMENT)
+		sys_cache_data_flush_range(&emmc->desc_table[0], sizeof(emmc->desc_table));
+#endif
+#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_FAMILY_BALLETTO)
+		regs->adma_sys_addr1 = (uint32_t)((uintptr_t)local_to_global(emmc->desc_table) &
+								ADDRESS_32BIT_MASK);
+#else
+		regs->adma_sys_addr1 =
+		(uint32_t)(((uintptr_t)emmc->desc_table) & ADDRESS_32BIT_MASK);
+#endif
 		regs->adma_sys_addr2 =
-			(uint32_t)(((uintptr_t)emmc->desc_table >> 32) & ADDRESS_32BIT_MASK);
+			(uint32_t)((((uint64_t)(uintptr_t)emmc->desc_table) >> 32) &
+					ADDRESS_32BIT_MASK);
 
 		LOG_DBG("adma: %llx %x %p", emmc->desc_table[0], regs->adma_sys_addr1,
 			emmc->desc_table);
 	} else {
 		/* Setup DMA transfer using SDMA */
+#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_FAMILY_BALLETTO)
+		regs->sdma_sysaddr = (uint32_t)local_to_global(data->data);
+#else
 		regs->sdma_sysaddr = (uint32_t)((uintptr_t)data->data);
+#endif
 		LOG_DBG("sdma_sysaddr: %x", regs->sdma_sysaddr);
 	}
 	return 0;
@@ -532,7 +560,7 @@ static int emmc_init_xfr(const struct device *dev, struct sdhc_data *data, bool 
 	}
 
 	/* Set data timeout time */
-	regs->timeout_ctrl = data->timeout_ms;
+	regs->timeout_ctrl = EMMC_HOST_MS_TO_TOUT(data->timeout_ms);
 
 	return 0;
 }
@@ -626,8 +654,12 @@ static enum emmc_response_type emmc_decode_resp_type(enum sd_rsp_type type)
 		break;
 
 	case SD_RSP_TYPE_R5b:
+		resp_type = EMMC_HOST_RESP_LEN_48B;
+		break;
 	case SD_RSP_TYPE_R6:
 	case SD_RSP_TYPE_R7:
+		resp_type = EMMC_HOST_RESP_LEN_48;
+		break;
 	default:
 		resp_type = EMMC_HOST_INVAL_HOST_RESP_LEN;
 	}
@@ -653,10 +685,30 @@ static void update_cmd_response(const struct device *dev, struct sdhc_command *s
 
 		LOG_DBG("cmd resp: %x %x %x %x", resp0, resp1, resp2, resp3);
 
+#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_FAMILY_BALLETTO)
+		sdhc_cmd->response[0u] = resp0;
+		sdhc_cmd->response[1U] = resp1;
+		sdhc_cmd->response[2U] = resp2;
+		sdhc_cmd->response[3U] = resp3;
+#else
 		sdhc_cmd->response[0u] = resp3;
 		sdhc_cmd->response[1U] = resp2;
 		sdhc_cmd->response[2U] = resp1;
 		sdhc_cmd->response[3U] = resp0;
+#endif
+
+	    /* shifting truncated CRC
+	     * 0-7 8bits crc is added in response
+	     * remove the crc and shift the actual response
+	     */
+
+		if (IS_ENABLED(CONFIG_SDHC_RSP_136_HAS_CRC)) {
+			for (int i = 0; i < 4; i++) {
+				sdhc_cmd->response[i] <<= 8;
+				if (i != 3)
+					sdhc_cmd->response[i] |= sdhc_cmd->response[i + 1] >> 24;
+			}
+		}
 	} else {
 		LOG_DBG("cmd resp: %x", resp0);
 		sdhc_cmd->response[0u] = resp0;
@@ -909,6 +961,10 @@ static int emmc_send_cmd_data(const struct device *dev, uint32_t cmd_idx,
 
 	if (IS_ENABLED(CONFIG_INTEL_EMMC_HOST_DMA)) {
 		ret = wait_xfr_complete(dev, data->timeout_ms);
+
+		if (IS_ENABLED(CONFIG_CACHE_MANAGEMENT)) {
+			sys_cache_data_invd_range(data->data, data->block_size * data->blocks);
+		}
 	} else {
 		if (read) {
 			ret = read_data_port(dev, data);
@@ -955,6 +1011,10 @@ static int emmc_xfr(const struct device *dev, struct sdhc_command *cmd, struct s
 
 	if (IS_ENABLED(CONFIG_INTEL_EMMC_HOST_DMA)) {
 		ret = wait_xfr_complete(dev, data->timeout_ms);
+
+		if (IS_ENABLED(CONFIG_CACHE_MANAGEMENT)) {
+			sys_cache_data_invd_range(data->data, data->block_size * data->blocks);
+		}
 	} else {
 		if (read) {
 			ret = read_data_port(dev, data);
@@ -966,6 +1026,7 @@ static int emmc_xfr(const struct device *dev, struct sdhc_command *cmd, struct s
 	if (!IS_ENABLED(CONFIG_INTEL_EMMC_HOST_AUTO_STOP)) {
 		emmc_stop_transfer(dev);
 	}
+
 	return ret;
 }
 
@@ -1040,10 +1101,9 @@ static int emmc_set_io(const struct device *dev, struct sdhc_io *ios)
 	if (host_io->bus_width != ios->bus_width) {
 		LOG_DBG("bus_width: %d", host_io->bus_width);
 
-		if (ios->bus_width == SDHC_BUS_WIDTH4BIT) {
+		if (ios->bus_width == SDHC_BUS_WIDTH8BIT) {
 			SET_BITS(regs->host_ctrl1, EMMC_HOST_CTRL1_EXT_DAT_WIDTH_LOC,
-				 EMMC_HOST_CTRL1_EXT_DAT_WIDTH_MASK,
-				 ios->bus_width == SDHC_BUS_WIDTH8BIT ? 1 : 0);
+				 EMMC_HOST_CTRL1_EXT_DAT_WIDTH_MASK, 1);
 		} else {
 			SET_BITS(regs->host_ctrl1, EMMC_HOST_CTRL1_DAT_WIDTH_LOC,
 				 EMMC_HOST_CTRL1_DAT_WIDTH_MASK,
@@ -1164,9 +1224,9 @@ static int emmc_get_host_props(const struct device *dev, struct sdhc_host_props 
 	props->host_caps.adma_2_support = (bool)(cap & BIT(19u));
 
 	props->host_caps.max_blk_len = (cap >> 16u) & 0x3u;
-	props->host_caps.ddr50_support = (bool)(cap & BIT(34u));
-	props->host_caps.sdr104_support = (bool)(cap & BIT(33u));
-	props->host_caps.sdr50_support = (bool)(cap & BIT(32u));
+	props->host_caps.ddr50_support = (bool)(cap & BIT64(34u));
+	props->host_caps.sdr104_support = (bool)(cap & BIT64(33u));
+	props->host_caps.sdr50_support = (bool)(cap & BIT64(32u));
 	props->host_caps.bus_8_bit_support = true;
 	props->host_caps.bus_4_bit_support = true;
 	props->host_caps.hs200_support = (bool)config->hs200_mode;
@@ -1181,6 +1241,7 @@ static void emmc_isr(const struct device *dev)
 {
 	struct emmc_data *emmc = dev->data;
 	volatile struct emmc_reg *regs = (struct emmc_reg *)DEVICE_MMIO_GET(dev);
+	uint16_t normal_int_stat = regs->normal_int_stat;
 
 	if (regs->normal_int_stat & EMMC_HOST_CMD_COMPLETE) {
 		regs->normal_int_stat |= EMMC_HOST_CMD_COMPLETE;
@@ -1229,11 +1290,50 @@ static void emmc_isr(const struct device *dev)
 
 static int emmc_init(const struct device *dev)
 {
+	int ret;
 	struct emmc_data *emmc = dev->data;
 	const struct emmc_config *config = dev->config;
 
+	static const struct gpio_dt_spec sdhc_reset =
+		GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sdhc), reset_gpios, {0});
+
+	if (sdhc_reset.port) {
+		ret = gpio_is_ready_dt(&sdhc_reset);
+		if (ret < 0) {
+			return ret;
+		}
+
+		ret = gpio_pin_configure_dt(&sdhc_reset, GPIO_OUTPUT_HIGH);
+		if (ret < 0) {
+			return ret;
+		}
+
+		/* High -> Low */
+		ret = gpio_pin_toggle_dt(&sdhc_reset);
+		if (ret < 0) {
+			return ret;
+		}
+
+		k_msleep(1000);
+
+		/* Low -> High */
+		ret = gpio_pin_toggle_dt(&sdhc_reset);
+		if (ret < 0) {
+			return ret;
+		}
+	}
+
 	k_sem_init(&emmc->lock, 1, 1);
 	k_event_init(&emmc->irq_event);
+
+#if defined(CONFIG_PINCTRL)
+	ret = pinctrl_apply_state(config->pincfg, PINCTRL_STATE_DEFAULT);
+
+	if (ret < 0) {
+		LOG_ERR("Applying Pinctrl state. error ret - %d", ret);
+		return ret;
+	}
+#endif
 
 #if DT_ANY_INST_ON_BUS_STATUS_OKAY(pcie)
 	if (config->pcie) {
@@ -1326,23 +1426,28 @@ static DEVICE_API(sdhc, emmc_api) = {
 #define DEFINE_PCIE1(n)          DEVICE_PCIE_INST_DECLARE(n)
 #define EMMC_HOST_PCIE_DEFINE(n) _CONCAT(DEFINE_PCIE, DT_INST_ON_BUS(n, pcie))(n)
 
-#define EMMC_HOST_DEV_CFG(n)                                                                       \
-	EMMC_HOST_PCIE_DEFINE(n);                                                                  \
-	EMMC_HOST_IRQ_CONFIG(n);                                                                   \
-	static const struct emmc_config emmc_config_data_##n = {                                   \
-		REG_INIT(n) INIT_PCIE(n).config_func = emmc_config_##n,                            \
-		.hs200_mode = DT_INST_PROP_OR(n, mmc_hs200_1_8v, 0),                               \
-		.hs400_mode = DT_INST_PROP_OR(n, mmc_hs400_1_8v, 0),                               \
-		.dw_4bit = DT_INST_ENUM_HAS_VALUE(n, bus_width, 4),                                \
-		.dw_8bit = DT_INST_ENUM_HAS_VALUE(n, bus_width, 8),                                \
-		.max_bus_freq = DT_INST_PROP_OR(n, max_bus_freq, 40000),                           \
-		.min_bus_freq = DT_INST_PROP_OR(n, min_bus_freq, 40000),                           \
-		.power_delay_ms = DT_INST_PROP_OR(n, power_delay_ms, 500),                         \
-	};                                                                                         \
-                                                                                                   \
-	static struct emmc_data emmc_priv_data_##n;                                                \
-                                                                                                   \
-	DEVICE_DT_INST_DEFINE(n, emmc_init, NULL, &emmc_priv_data_##n, &emmc_config_data_##n,      \
+#define EMMC_HOST_DEV_CFG(n)									\
+		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, pinctrl_0),					\
+		(PINCTRL_DT_INST_DEFINE(n)));							\
+	EMMC_HOST_PCIE_DEFINE(n);								\
+	EMMC_HOST_IRQ_CONFIG(n);								\
+	static const struct emmc_config emmc_config_data_##n = {				\
+		REG_INIT(n) INIT_PCIE(n).config_func = emmc_config_##n,				\
+		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, pinctrl_0),					\
+			(.pincfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n))),				\
+		.hs200_mode = DT_INST_PROP_OR(n, mmc_hs200_1_8v, 0),				\
+		.hs400_mode = DT_INST_PROP_OR(n, mmc_hs400_1_8v, 0),				\
+		.dw_4bit = DT_INST_ENUM_HAS_VALUE(n, bus_width, 4),				\
+		.dw_8bit = DT_INST_ENUM_HAS_VALUE(n, bus_width, 8),				\
+		.max_bus_freq = DT_INST_PROP_OR(n, max_bus_freq, 40000),			\
+		.min_bus_freq = DT_INST_PROP_OR(n, min_bus_freq, 40000),			\
+		.power_delay_ms = DT_INST_PROP_OR(n, power_delay_ms, 500),			\
+	};											\
+												\
+	static struct emmc_data Z_GENERIC_SECTION(CONFIG_SDHC_DESCRIPTOR_SECTION)		\
+					emmc_priv_data_##n;					\
+												\
+	DEVICE_DT_INST_DEFINE(n, emmc_init, NULL, &emmc_priv_data_##n, &emmc_config_data_##n,	\
 			      POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &emmc_api);
 
 DT_INST_FOREACH_STATUS_OKAY(EMMC_HOST_DEV_CFG)

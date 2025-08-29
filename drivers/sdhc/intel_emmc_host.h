@@ -103,6 +103,16 @@
 #define EMMC_HOST_CTRL2_UHS_MODE_SEL_LOC  0
 #define EMMC_HOST_CTRL2_UHS_MODE_SEL_MASK 0x07
 
+/* time(in ms) to TOUT_CTRL register value conversion
+ * 2^(tout+13) / 10^4 = time(in ms) for 10MHz TMCLK
+ */
+#define EMMC_HOST_MS_TO_TOUT(ms) ({ \
+			int _bit_pos; \
+			int _ms = (ms) * 10000;	\
+			_bit_pos = LOG2(_ms) - 13; \
+			_bit_pos > EMMC_HOST_MAX_TIMEOUT ? EMMC_HOST_MAX_TIMEOUT : _bit_pos; \
+		})
+
 /* Event/command status */
 #define EMMC_HOST_CMD_COMPLETE   BIT(0)
 #define EMMC_HOST_XFER_COMPLETE  BIT(1)

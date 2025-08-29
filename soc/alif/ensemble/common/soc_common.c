@@ -154,11 +154,12 @@ static int soc_init(void)
 	}
 #endif
 
-#if (DT_NODE_HAS_STATUS(DT_NODELABEL(pdm), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(lppdm), okay))
-	if (IS_ENABLED(CONFIG_SOC_SERIES_E8)) {
-		/* enable the HFOSCx2 clock */
-		sys_set_bits(CGU_CLK_ENA, BIT(24));
-	}
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(sdhc), okay)
+	/* Enable CFG (100 MHz and 20MHz) clock.*/
+	sys_set_bits(CGU_CLK_ENA, BIT(21) | BIT(22));
+
+	/* Peripheral clock enable */
+	sys_set_bits(EXPMST_PERIPH_CLK_EN, BIT(16));
 #endif
 
 	return 0;

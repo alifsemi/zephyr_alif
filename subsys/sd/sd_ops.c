@@ -401,6 +401,7 @@ int sdmmc_switch_voltage(struct sd_card *card)
 	}
 	card->card_voltage = SD_VOL_1_8_V;
 	LOG_INF("Card switched to 1.8V signaling");
+
 	return 0;
 }
 

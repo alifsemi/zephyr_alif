@@ -5,3 +5,11 @@
 if SOC_FAMILY_BALLETTO
 rsource "*/Kconfig.defconfig"
 endif # SOC_FAMILY_BALLETTO
+
+config SD_BUFFER_SECTION
+	string "Alif Non Secure Section Name for card internal buffer"
+	default ".alif_ns"
+
+config SDHC_DESCRIPTOR_SECTION
+	string "Alif Non Secure Section Name for SDHC Descriptor"
+	default ".alif_ns"

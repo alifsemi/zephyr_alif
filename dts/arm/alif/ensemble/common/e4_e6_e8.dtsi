@@ -10,6 +10,11 @@
 	reg = <0x08000000 DT_SIZE_K(4096)>;
 };
 
+/* sdhc reset pins */
+&sdhc {
+	reset-gpios = <&gpio14 7 GPIO_ACTIVE_HIGH>;
+};
+
 &{/soc} {
 
 	gpio16: gpio@4300a000 {

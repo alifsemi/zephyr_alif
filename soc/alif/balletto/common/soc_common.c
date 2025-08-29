@@ -107,6 +107,15 @@ static int soc_init(void)
 		sys_write32(0x1, EXPSLV_OSPI_CTRL);
 	}
 #endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(sdhc), okay)
+	/* Enable CFG (100 MHz and 20MHz) clock.*/
+	sys_set_bits(CGU_CLK_ENA, BIT(21) | BIT(22));
+
+	/* Peripheral clock enable */
+	sys_set_bits(EXPMST_PERIPH_CLK_EN, BIT(16));
+#endif
+
 	return 0;
 }
 

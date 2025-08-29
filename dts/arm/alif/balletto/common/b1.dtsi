@@ -75,6 +75,24 @@
 		zephyr,memory-region = "RESERVED_DTCM";
 	};
 
+	sdhc: sdhc@48102000 {
+		compatible = "intel,emmc-host";
+		reg = <0x48102000 0xF70>;
+		interrupt-parent = <&nvic>;
+		interrupts = <102 3>;
+		max-bus-freq = <50000000U>;
+		min-bus-freq = <400000>;
+		power-delay-ms = <500>;
+		pinctrl-0 = <&pinctrl_sdmmc>;
+		pinctrl-names = "default";
+		mmc {
+			compatible = "zephyr,sdmmc-disk";
+			bus-width = <4>;
+			status = "disabled";
+		};
+		status = "disabled";
+	};
+
 	peripheral@40000000 {
 		#address-cells = < 0x1 >;
 		#size-cells = < 0x1 >;

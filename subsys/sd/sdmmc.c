@@ -18,7 +18,8 @@
 
 LOG_MODULE_DECLARE(sd, CONFIG_SD_LOG_LEVEL);
 
-static inline void sdmmc_decode_scr(struct sd_scr *scr, uint32_t *raw_scr, uint8_t *version)
+static inline void sdmmc_decode_scr(struct sd_scr *scr,
+	uint32_t *raw_scr, uint8_t *version)
 {
 	uint32_t tmp_version = 0;
 
@@ -204,6 +205,24 @@ static int sdmmc_read_scr(struct sd_card *card)
 		card->flags |= SD_CMD23_FLAG;
 	}
 	return 0;
+}
+
+/* Sets block count for SD card */
+static int sdmmc_set_blockcnt(struct sd_card *card, uint32_t block_cnt)
+{
+	struct sdhc_command cmd = {0};
+
+	/* check CMD23 Support */
+	if (!(card->flags & SD_CMD23_FLAG)) {
+		return 0;
+	}
+
+	cmd.opcode = SD_SET_BLOCK_COUNT;
+	cmd.arg = block_cnt;
+	cmd.timeout_ms = CONFIG_SD_CMD_TIMEOUT;
+	cmd.response_type =  (SD_RSP_TYPE_R1 | SD_SPI_RSP_TYPE_R1);
+
+	return sdhc_request(card->sdhc, &cmd, NULL);
 }
 
 /* Sets block length of SD card */
@@ -773,6 +792,12 @@ int sdmmc_card_init(struct sd_card *card)
 		if (ret) {
 			LOG_ERR("HS card init failed");
 		}
+		ret = sdmmc_set_blocklen(card, SDMMC_DEFAULT_BLOCK_SIZE);
+		if (ret) {
+			LOG_ERR("Could not set SD blocklen to 512");
+			return ret;
+		}
+		card->block_size = SDMMC_DEFAULT_BLOCK_SIZE;
 	}
 	return ret;
 }
@@ -785,11 +810,30 @@ int sdmmc_ioctl(struct sd_card *card, uint8_t cmd, void *buf)
 int sdmmc_read_blocks(struct sd_card *card, uint8_t *rbuf, uint32_t start_block,
 		      uint32_t num_blocks)
 {
+	int ret;
+
+	if (num_blocks > 1) {
+		ret = sdmmc_set_blockcnt(card, num_blocks);
+		if (!ret) {
+			return ret;
+		}
+	}
+
 	return card_read_blocks(card, rbuf, start_block, num_blocks);
 }
 
 int sdmmc_write_blocks(struct sd_card *card, const uint8_t *wbuf, uint32_t start_block,
 		       uint32_t num_blocks)
 {
+	int ret;
+
+	if (num_blocks > 1) {
+		ret = sdmmc_set_blockcnt(card, num_blocks);
+
+		if (!ret) {
+			return ret;
+		}
+	}
+
 	return card_write_blocks(card, wbuf, start_block, num_blocks);
 }

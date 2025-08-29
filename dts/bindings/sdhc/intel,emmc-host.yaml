@@ -5,4 +5,4 @@ description: eMMC host controller
 
 compatible: "intel,emmc-host"
 
-include: [sdhc.yaml, pcie-device.yaml]
+include: [sdhc.yaml, pcie-device.yaml, pinctrl-device.yaml]

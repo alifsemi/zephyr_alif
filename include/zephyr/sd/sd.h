@@ -81,13 +81,14 @@ struct sd_card {
 	uint32_t cccr_flags; /*!< SDIO CCCR data */
 	struct sdio_func func0; /*!< Function 0 common card data */
 
-	/* NOTE: The buffer is accessed as a uint32_t* by the SD subsystem, so must be
-	 * aligned to 4 bytes for platforms that don't support unaligned access...
+	/* NOTE: The pointer pointing to cmd_dma_buff, buffer is accessed as a uint32_t*
+	 * by the SD subsystem, default placed in bss section, and can be changed
+	 * by board defconfig using CONFIG_SD_BUFFER_SECTION. it must be aligned to 4 bytes
+	 * for platforms that don't support unaligned access...
 	 * Systems where the buffer is accessed by DMA may require wider alignment, in
 	 * which case, use CONFIG_SDHC_BUFFER_ALIGNMENT.
 	 */
-	uint8_t card_buffer[CONFIG_SD_BUFFER_SIZE]
-		__aligned(MAX(4, CONFIG_SDHC_BUFFER_ALIGNMENT)); /* Card internal buffer */
+	uint8_t *card_buffer;
 };
 
 /**

@@ -59,3 +59,8 @@ properties:
     type: boolean
     description: |
       The host controller supports HS400 at 1.8V
+
+  reset-gpios:
+    type: phandle-array
+    description: |
+      sdhc reset Pins.
