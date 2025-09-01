@@ -138,6 +138,21 @@ static int soc_init(void)
 		sys_set_bits(CGU_CLK_ENA, BIT(24));
 	}
 #endif
+
+	/*Clock : OSPI */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi0), okay)
+	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2) ||
+		IS_ENABLED(CONFIG_SOC_SERIES_E1C)) {
+		sys_write32(0x1, EXPSLV_OSPI_CTRL);
+	}
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi1), okay)
+	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2)) {
+		sys_write32(0x2, EXPSLV_OSPI_CTRL);
+	}
+#endif
+
 	return 0;
 }
 

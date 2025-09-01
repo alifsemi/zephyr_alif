@@ -33,6 +33,7 @@
 #define EXPSLV_SSI_CTRL                 (EXPSLV_BASE + 0x28)
 #define EXPSLV_ADC_CTRL                 (EXPSLV_BASE + 0x30)
 #define EXPSLV_CMP_CTRL                 (EXPSLV_BASE + 0x38)
+#define EXPSLV_OSPI_CTRL                (EXPSLV_BASE + 0x3C)
 
 #define EVTRTR0_BASE                    0x49035000
 #define EVTRTR0_DMA_CTRL0               (EVTRTR0_BASE)

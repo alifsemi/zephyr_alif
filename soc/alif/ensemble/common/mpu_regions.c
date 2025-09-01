@@ -7,6 +7,23 @@
 #include <zephyr/arch/arm/mpu/arm_mpu.h>
 #include <zephyr/devicetree.h>
 
+#define ALIF_ENSEMBLE_OSPI_REG			0x83000000
+#define ALIF_ENSEMBLE_OSPI_SIZE			KB(16)
+
+#define ALIF_ENSEMBLE_OSPI0_XIP_BASE		0xA0000000
+#define ALIF_ENSEMBLE_OSPI0_XIP_SIZE		MB(512)
+
+#define ALIF_ENSEMBLE_OSPI1_XIP_BASE		0xC0000000
+#define ALIF_ENSEMBLE_OSPI1_XIP_SIZE		MB(512)
+
+#define REGION_OSPI_FLASH_ATTR(base, size) \
+{\
+	.rbar = RO_Msk | NON_SHAREABLE_Msk, \
+	/* Cache-ability */ \
+	.mair_idx = MPU_MAIR_INDEX_SRAM_NOCACHE, \
+	.r_limit = REGION_LIMIT_ADDR(base, size),  \
+}
+
 static const struct arm_mpu_region mpu_regions[] = {
 	/* Region 0 */
 	MPU_REGION_ENTRY("FLASH_0", CONFIG_FLASH_BASE_ADDRESS,
@@ -23,6 +40,21 @@ static const struct arm_mpu_region mpu_regions[] = {
 	/* Region 4 */
 	MPU_REGION_ENTRY("PERIPHERALS", DT_REG_ADDR(DT_NODELABEL(host_peripheral)),
 			 REGION_DEVICE_ATTR(DT_REG_ADDR(DT_NODELABEL(host_peripheral)), DT_REG_SIZE(DT_NODELABEL(host_peripheral)))),
+	/* Region 5 */
+	MPU_REGION_ENTRY("OSPI_CTRL", ALIF_ENSEMBLE_OSPI_REG,
+			 REGION_DEVICE_ATTR(ALIF_ENSEMBLE_OSPI_REG, ALIF_ENSEMBLE_OSPI_SIZE)),
+
+ #ifdef CONFIG_SOC_SERIES_ENSEMBLE_E1C
+	/* Region 6 */
+	MPU_REGION_ENTRY("OSPI0_XIP", ALIF_ENSEMBLE_OSPI0_XIP_BASE,
+			 REGION_OSPI_FLASH_ATTR(ALIF_ENSEMBLE_OSPI0_XIP_BASE,
+							ALIF_ENSEMBLE_OSPI0_XIP_SIZE)),
+#else
+	/* Region 6 */
+	MPU_REGION_ENTRY("OSPI1_XIP", ALIF_ENSEMBLE_OSPI1_XIP_BASE,
+			 REGION_OSPI_FLASH_ATTR(ALIF_ENSEMBLE_OSPI1_XIP_BASE,
+							ALIF_ENSEMBLE_OSPI1_XIP_SIZE)),
+#endif
 };
 
 const struct arm_mpu_config mpu_config = {
