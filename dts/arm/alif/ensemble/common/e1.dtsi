@@ -1151,6 +1151,20 @@
 		interrupts = <48 0>;
 		status = "disabled";
 	};
+
+	ospi0: ospi0@83000000 {
+		compatible = "snps,designware-ospi";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x83000000 0x1000>;
+		pinctrl-0 = <&pinctrl_ospi0>;
+		pinctrl-names = "default";
+		interrupt-parent = <&nvic>;
+		interrupts = <96 0>;
+		aes-reg = <0x83001000 0x100>;
+		cs-pin = <0>;
+		status = "disabled";
+	};
 };
 
 &{/} {

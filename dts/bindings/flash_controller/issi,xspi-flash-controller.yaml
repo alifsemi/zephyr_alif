@@ -1,0 +1,42 @@
+# Copyright (C) 2024 Alif Semiconductor.
+# SPDX-License-Identifier: Apache-2.0
+
+description: ISSI xSPI Flash controller
+
+compatible: "issi,xspi-flash-controller"
+
+include: flash-controller.yaml
+
+#on-bus: ospi
+
+properties:
+  cs-gpios:
+    type: phandle-array
+    required: false
+    description: Chip select GPIO
+
+  erase-value:
+    type: int
+    description: block size to write
+    required: true
+    default: 256
+
+  num-of-sector:
+    type: int
+    description: available sectors in the connected NOR Flash
+    required: true
+
+  page-size:
+    type: int
+    description: Page Size
+    required: true
+
+  sector-size:
+    type: int
+    description: number of bytes in each sector
+    required: true
+
+  write-block-size:
+    type: int
+    description: number of bytes in each sector
+    required: true
