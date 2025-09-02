@@ -25,7 +25,7 @@
 #include <zephyr/platform/hooks.h>
 #include <zephyr/arch/cache.h>
 
-#if defined(CONFIG_ARMV7_R) || defined(CONFIG_ARMV7_A)
+#if defined(CONFIG_ARMV7_R) || defined(CONFIG_ARMV7_A) || defined(CONFIG_AARCH32_ARMV8_A)
 #include <cortex_a_r/stack.h>
 #endif
 
@@ -109,7 +109,8 @@ void z_prep_c(void)
 #endif
 	z_bss_zero();
 	z_data_copy();
-#if ((defined(CONFIG_ARMV7_R) || defined(CONFIG_ARMV7_A)) && defined(CONFIG_INIT_STACKS))
+#if ((defined(CONFIG_ARMV7_R) || defined(CONFIG_ARMV7_A) || defined(CONFIG_AARCH32_ARMV8_A)) \
+		 && defined(CONFIG_INIT_STACKS))
 	z_arm_init_stacks();
 #endif
 	z_arm_interrupt_init();

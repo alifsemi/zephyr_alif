@@ -27,6 +27,14 @@ config ARMV7_A
 	select ATOMIC_OPERATIONS_BUILTIN
 	select ISA_ARM
 
+config AARCH32_ARMV8_A
+	bool
+	select ATOMIC_OPERATIONS_BUILTIN
+	select ISA_ARM
+	help
+	  This option signifies the use of an ARMv8-A AArch32 processor
+	  implementation.
+
 config ARMV7_EXCEPTION_STACK_SIZE
 	int "Undefined Instruction and Abort stack size (in bytes)"
 	default 256
