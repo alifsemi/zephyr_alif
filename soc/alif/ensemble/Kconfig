@@ -4,6 +4,11 @@
 
 config SOC_FAMILY_ENSEMBLE
 	bool "Alif Ensemble family of SoC"
+
+
+if SOC_FAMILY_ENSEMBLE
+
+config RTSS_HE
 	select ARM
 	select ARMV8_M_DSP
 	select ARMV8_1_M_MVEI
@@ -20,7 +25,29 @@ config SOC_FAMILY_ENSEMBLE
 	select CLOCK_CONTROL
 	select HAS_ALIF_SE_SERVICES
 
-if SOC_FAMILY_ENSEMBLE
+config RTSS_HP
+	select ARM
+	select ARMV8_M_DSP
+	select ARMV8_1_M_MVEI
+	select ARMV8_1_M_MVEF
+	select CPU_CORTEX_M55
+	select CPU_CORTEX_M_HAS_SYSTICK
+	select CPU_HAS_ARM_MPU
+	select CPU_HAS_ARM_SAU
+	select CPU_HAS_FPU
+	select CPU_HAS_CUSTOM_FIXED_SOC_MPU_REGIONS
+	select SOC_RESET_HOOK
+	select BUILTIN_STACK_GUARD
+	select PINCTRL
+	select CLOCK_CONTROL
+	select HAS_ALIF_SE_SERVICES
+
+config APSS
+	select ARM
+	select CPU_CORTEX_A32
+	select GIC_V2
+	select PINCTRL
+	select CLOCK_CONTROL
 
 rsource "*/Kconfig"
 

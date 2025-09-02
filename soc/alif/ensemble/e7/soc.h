@@ -6,6 +6,7 @@
 #ifndef _SOC_H_
 #define _SOC_H_
 
+#if defined(CONFIG_RTSS_HE) || defined(CONFIG_RTSS_HP)
 #include <zephyr/arch/arm/cortex_m/nvic.h>
 
 #define __MPU_PRESENT             1U        /* MPU regions present */
@@ -38,5 +39,5 @@ typedef enum IRQn {
 #define __Vendor_SysTickConfig         0 /* Default to standard SysTick */
 
 #include <core_cm55.h>
-
+#endif /* CONFIG_RTSS_HE || CONFIG_RTSS_HP */
 #endif /* _SOC_H_ */

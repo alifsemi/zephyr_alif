@@ -12,6 +12,11 @@ config RTSS_HP
 	help
 	  Enable RTSS_HP core.
 
+config APSS
+	bool "APSS core"
+	help
+	  Enable APSS core.
+
 config ALIF_HWSEM_INIT_PRIORITY
 	int "HWSEM Init priority"
 	depends on ALIF_HWSEM

@@ -7,6 +7,7 @@ family:
             cpuclusters:
               - name: rtss_he
               - name: rtss_hp
+              - name: apss
       - name: e8
         socs:
           - name: ae822fa0e5597xx0
