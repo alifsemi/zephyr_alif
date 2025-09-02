@@ -20,6 +20,13 @@ config CPU_CORTEX_A9
 	help
 	  This option signifies the use of a Cortex-A9 CPU.
 
+config CPU_CORTEX_A32
+	bool
+	select CPU_AARCH32_CORTEX_A
+	select AARCH32_ARMV8_A
+	help
+	  This option signifies the use of a Cortex-A32 CPU.
+
 if CPU_AARCH32_CORTEX_A
 
 config ARMV7_A
