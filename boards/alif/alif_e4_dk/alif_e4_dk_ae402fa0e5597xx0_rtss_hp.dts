@@ -35,6 +35,7 @@
 
 	leds {
 		compatible = "gpio-leds";
+
 		aled0: led_0 {
 			gpios = <&gpio6 2 0>;
 			label = "LED1_R";
@@ -42,6 +43,7 @@
 	};
 	pwmleds {
 		compatible = "pwm-leds";
+
 		pwm_led0_green: pwm_led_0 {
 			pwms = <&pwm10 0 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
 			label = "RED PWM GREEN 0";
@@ -49,11 +51,16 @@
 	};
 	buttons {
 		compatible = "gpio-keys";
+
 		button0: button_0 {
 			gpios = < &lpgpio 4 0 >;
 			label = "SW0";
 		};
 	};
+};
+
+&lpgpio {
+	status = "okay";
 };
 
 &gpio6 {
@@ -73,3 +80,4 @@
 		status = "okay";
 	};
 };
+
