@@ -171,6 +171,7 @@
 			driver_state_control = < 0x1 >;
 		};
 	};
+
 	pinctrl_i2c1: pinctrl_i2c1 {
 		group0 {
 			pinmux = < PIN_P7_2__I2C1_SDA_C >,
@@ -199,6 +200,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_spi1: pinctrl_spi1 {
 		group0 {
 			pinmux = < PIN_P8_3__SPI1_MISO_B >,
@@ -208,6 +210,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_spi2: pinctrl_spi2 {
 		group0 {
 			pinmux = < PIN_P4_2__SPI2_MISO_A >,
@@ -217,6 +220,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_spi3: pinctrl_spi3 {
 		group0 {
 			pinmux = < PIN_P10_5__SPI3_MISO_B >,
@@ -226,6 +230,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_lpspi: pinctrl_lpspi {
 		group0 {
 			pinmux = < PIN_P7_4__LPSPI_MISO_A >,
@@ -235,6 +240,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_i2s0:pinctrl_i2s0 {
 		group0 {
 			pinmux = < PIN_P1_6__I2S0_SDI_A >,
@@ -243,6 +249,7 @@
 				 < PIN_P3_1__I2S0_WS_A >;
 		};
 	};
+
 	pinctrl_i2s1:pinctrl_i2s1 {
 		group0 {
 			pinmux = < PIN_P3_2__I2S1_SDI_A >,
@@ -251,6 +258,7 @@
 				 < PIN_P4_0__I2S1_WS_A >;
 		};
 	};
+
 	pinctrl_i2s2:pinctrl_i2s2 {
 		group0 {
 			pinmux = < PIN_P8_1__I2S2_SDI_A >,
@@ -259,6 +267,7 @@
 				 < PIN_P8_4__I2S2_WS_A >;
 		};
 	};
+
 	pinctrl_i2s3:pinctrl_i2s3 {
 		group0 {
 			pinmux = < PIN_P9_0__I2S3_SDI_B >;
@@ -270,7 +279,8 @@
 				 < PIN_P8_7__I2S3_WS_B >;
 		};
 	};
-	pinctrl_i2s4:pinctrl_lpi2s {
+
+	pinctrl_lpi2s:pinctrl_lpi2s {
 		group0 {
 			pinmux = < PIN_P13_4__LPI2S_SDI_C >,
 				 < PIN_P13_5__LPI2S_SDO_C >,
@@ -278,6 +288,7 @@
 				 < PIN_P13_7__LPI2S_WS_C >;
 		};
 	};
+
 	pinctrl_ospi0:pinctrl_ospi0 {
 		group0 {
 			pinmux = < PIN_P3_0__OSPI0_SCLK_B >,
@@ -296,6 +307,7 @@
 			slew_rate = <0x1>;
 		};
 	};
+
 	pinctrl_ospi1:pinctrl_ospi1 {
 		group0 {
 			pinmux = < PIN_P5_5__OSPI1_SCLK_C >,
@@ -314,6 +326,7 @@
 			slew_rate = <0x1>;
 		};
 	};
+
 	pinctrl_flash:pinctrl_flash {
 		group0 {
 			pinmux = < PIN_P5_5__OSPI1_SCLK_C >,
@@ -349,6 +362,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio1:pinctrl_gpio1 {
 		group0 {
 			/*comment out based on requirement */
@@ -363,6 +377,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio2:pinctrl_gpio2 {
 		group0 {
 			/*comment out based on requirement */
@@ -377,6 +392,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio3:pinctrl_gpio3 {
 		group0 {
 			/*comment out based on requirement */
@@ -391,6 +407,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio4:pinctrl_gpio4 {
 		group0 {
 			/*comment out based on requirement */
@@ -405,6 +422,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio5:pinctrl_gpio5 {
 		group0 {
 			/*comment out based on requirement */
@@ -419,6 +437,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio6:pinctrl_gpio6 {
 		group0 {
 			/*comment out based on requirement */
@@ -433,6 +452,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio7:pinctrl_gpio7 {
 		group0 {
 			/*comment out based on requirement */
@@ -447,6 +467,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio8:pinctrl_gpio8 {
 		group0 {
 			/* comment out based on requirement */
@@ -461,6 +482,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio9:pinctrl_gpio9 {
 		group0 {
 			/* comment out based on requirement */
@@ -475,6 +497,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio10:pinctrl_gpio10 {
 		group0 {
 			/* comment out based on requirement */
@@ -489,6 +512,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio11:pinctrl_gpio11 {
 		group0 {
 			/* comment out based on requirement */
@@ -503,6 +527,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio12:pinctrl_gpio12 {
 		group0 {
 			/* comment out based on requirement */
@@ -517,6 +542,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio13:pinctrl_gpio13 {
 		group0 {
 			/* comment out based on requirement */
@@ -531,6 +557,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio14:pinctrl_gpio14 {
 		group0 {
 			/* comment out based on requirement */
@@ -706,6 +733,7 @@
 				 < PIN_P9_7__CAM_D15_B >;
 		};
 	};
+
 	pinctrl_cam8: pinctrl_cam8 {
 		/* CAM-8 interface. */
 		group0 {
@@ -723,12 +751,14 @@
 				 < PIN_P8_7__CAM_D7_B >;
 		};
 	};
+
 	pinctrl_cam_xvclk: pinctrl_cam_xvclk {
 		/* CAM XVCLK */
 		group0 {
 			pinmux = < PIN_P0_3__CAM_XVCLK_A >;
 		};
 	};
+
 	pinctrl_lpcam: pinctrl_lpcam {
 		/* LP-CAM interface. */
 		group0 {
@@ -746,6 +776,7 @@
 				 < PIN_P8_7__LPCAM_D7_A >;
 		};
 	};
+
 	pinctrl_ut0:pinctrl_ut0 {
 		group0 {
 			pinmux = < PIN_P0_0__UT0_T0_A >,
@@ -753,6 +784,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_ut1:pinctrl_ut1 {
 		group0 {
 			pinmux = < PIN_P0_2__UT1_T0_A >,
@@ -760,6 +792,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_ut2:pinctrl_ut2 {
 		group0 {
 			pinmux = < PIN_P0_4__UT2_T0_A >,
@@ -767,6 +800,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_ut3:pinctrl_ut3 {
 		group0 {
 			pinmux = < PIN_P0_6__UT3_T0_A >,
@@ -774,6 +808,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_ut4:pinctrl_ut4 {
 		group0 {
 			pinmux = < PIN_P1_0__UT4_T0_A >,
@@ -781,6 +816,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_ut5:pinctrl_ut5 {
 		group0 {
 			pinmux = < PIN_P6_2__UT5_T0_B >,
@@ -788,6 +824,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_ut6:pinctrl_ut6 {
 		group0 {
 			pinmux = < PIN_P6_4__UT6_T0_B >,
@@ -795,6 +832,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_ut7:pinctrl_ut7 {
 		group0 {
 			pinmux = < PIN_P6_6__UT7_T0_B >,
@@ -802,6 +840,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_ut8:pinctrl_ut8 {
 		group0 {
 			pinmux = < PIN_P12_0__UT8_T0_C >,
@@ -809,6 +848,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_ut9:pinctrl_ut9 {
 		group0 {
 			pinmux = < PIN_P12_2__UT9_T0_C >,
@@ -816,6 +856,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_ut10:pinctrl_ut10 {
 		group0 {
 			pinmux = < PIN_P7_4__UT10_T0_B >,
@@ -823,6 +864,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_ut11:pinctrl_ut11 {
 		group0 {
 			pinmux = < PIN_P2_6__UT11_T0_A >,

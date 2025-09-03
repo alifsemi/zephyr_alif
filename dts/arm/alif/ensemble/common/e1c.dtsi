@@ -28,6 +28,7 @@
 		#clock-cells = <1>;
 		status = "okay";
 	};
+
 	mram_flash: mram_flash@80000000 {
 		compatible = "alif,mram-flash-controller";
 		/* Usable MRAM size for applications is 1824 KB */
@@ -35,6 +36,7 @@
 
 		#address-cells = <1>;
 		#size-cells = <1>;
+
 		mram_storage: mram_storage@80000000 {
 			compatible = "soc-nv-flash";
 			reg = <0x80000000 DT_SIZE_K(1824)>;
@@ -42,6 +44,7 @@
 			write-block-size = <16>;
 		};
 	};
+
 	itcm: itcm@0 {
 		compatible = "alif,itcm", "zephyr,memory-region";
 		reg = <0x0 DT_SIZE_K(512)>;
@@ -60,6 +63,7 @@
 		compatible = "zephyr,memory-region","mmio-sram";
 		zephyr,memory-region = "SRAM0";
 	};
+
 	sram1: sram@8000000 {
 		compatible = "zephyr,memory-region","mmio-sram";
 		zephyr,memory-region = "SRAM1";
@@ -88,18 +92,21 @@
 			interrupts = < 37 0 >;
 			interrupt-names = "rx";
 		};
+
 		seservice0s: mhu@40050000 {
 			compatible = "arm,mhuv2";
 			reg = < 0x40050000 0x1000 >;
 			interrupts = < 38 0 >;
 			interrupt-names = "tx";
 		};
+
 		seservice1r: mhu@40060000 {
 			compatible = "arm,mhuv2";
 			reg = < 0x40060000 0x1000 >;
 			interrupts = < 39 0 >;
 			interrupt-names = "rx";
 		};
+
 		seservice1s: mhu@40070000 {
 			compatible = "arm,mhuv2";
 			reg = < 0x40070000 0x1000 >;
@@ -124,6 +131,7 @@
 		load-value = <0>;
 		status = "disabled";
 	};
+
 	rtc1: lprtc@42003000 {
 		compatible = "snps,dw-apb-rtc";
 		reg = <0x42003000 0x1000>;
@@ -346,6 +354,7 @@
 		#gpio-cells = <2>;
 		status = "disabled";
 	};
+
 	gpio9: gpio@49009000 {
 		compatible = "snps,designware-gpio";
 		reg = <0x49009000 0x1000>;
@@ -487,6 +496,7 @@
 		rx-delay = <4>;
 		status = "disabled";
 	};
+
 	spi1: spi@48104000 {
 		dwc-ssi;
 		compatible = "snps,designware-spi";
@@ -503,6 +513,7 @@
 		rx-delay = <4>;
 		status = "disabled";
 	};
+
 	spi2: spi@48105000 {
 		dwc-ssi;
 		compatible = "snps,designware-spi";
@@ -519,6 +530,7 @@
 		rx-delay = <4>;
 		status = "disabled";
 	};
+
 	lpspi0: lpspi0@43000000 {
 		compatible = "snps,designware-spi";
 		#address-cells = <1>;
@@ -534,6 +546,7 @@
 		rx-delay = <4>;
 		status = "disabled";
 	};
+
 	timer0: timer@42001000 {
 		compatible = "snps,dw-timers";
 		reg = <0x42001000 0x14>;
@@ -541,6 +554,7 @@
 		clocks = <&clockctrl ALIF_LPTIMER0_S32K_CLK>;
 		status = "disabled";
 	};
+
 	timer1: timer@42001014 {
 		compatible = "snps,dw-timers";
 		reg = <0x42001014 0x14>;
@@ -548,6 +562,7 @@
 		clocks = <&clockctrl ALIF_LPTIMER1_S32K_CLK>;
 		status = "disabled";
 	};
+
 	utimer0: utimer@48001000 {
 		compatible = "alif,utimer";
 		reg = <0x48001000 0x1000 0x48000000 0x24>;
@@ -691,6 +706,39 @@
 			status = "disabled";
 		};
 	};
+
+	i2s0: i2s0@49014000 {
+		compatible = "snps,designware-i2s";
+		clock-frequency = <76800000>;
+		driver_instance	= "I2S_INSTANCE_0";
+		reg = <0x49014000 0x1000>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_i2s0>;
+		interrupts = <141 0>;
+		status = "disabled";
+	};
+
+	i2s1: i2s1@49015000 {
+		compatible = "snps,designware-i2s";
+		clock-frequency = <76800000>;
+		driver_instance	= "I2S_INSTANCE_1";
+		reg = <0x49015000 0x1000>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_i2s1>;
+		interrupts = <142 0>;
+		status = "disabled";
+	};
+
+	i2s4: lpi2s@43001000 {
+		compatible = "snps,designware-i2s";
+		clock-frequency = <76800000>;
+		driver_instance	= "I2S_INSTANCE_4";
+		reg = <0x43001000 0x1000>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_lpi2s>;
+		interrupts = <48 0>;
+		status = "disabled";
+	};
 };
 
 &{/} {
@@ -701,46 +749,54 @@
 			status = "okay";
 			#clock-cells = <0>;
 		};
+
 		lfxo: lfxo {
 			compatible = "fixed-clock";
 			clock-frequency = <32768>;
 			status = "okay";
 			#clock-cells = <0>;
 		};
+
 		hfrc: hfrc {
 			compatible = "fixed-clock";
 			clock-frequency = <76800000>;
 			status = "okay";
 			#clock-cells = <0>;
 		};
+
 		hfxo: hfxo {
 			compatible = "fixed-clock";
 			clock-frequency = <38400000>;
 			status = "okay";
 			#clock-cells = <0>;
 		};
+
 		pll_clk1: pll_clk1 {
 			compatible = "alif,clock";
 			clock-frequency = <160000000>;
 			status = "okay";
 		};
+
 		pll_clk2: pll_clk2 {
 			compatible = "alif,clock";
 			clock-frequency = <120000000>;
 			status = "okay";
 		};
+
 		syst_aclk: axi_clk {
 			compatible = "alif,clock";
 			clock-frequency = <160000000>;
 			status = "okay";
 			#clock-cells = <0>;
 		};
+
 		syst_hclk: ahb_clk {
 			compatible = "alif,clock";
 			clock-frequency = <80000000>;
 			status = "okay";
 			#clock-cells = <0>;
 		};
+
 		syst_core: core_clk {
 			compatible = "alif,clock";
 			clock-frequency = <160000000>;
@@ -768,15 +824,18 @@
 		compatible = "alif,secure-enclave-trng";
 		status = "okay";
 	};
+
 	se_service: se_service {
 		compatible = "alif,secure-enclave-services";
 		mhuv2-send-node = <&seservice0s>;
 		mhuv2-recv-node = <&seservice0r>;
 		status = "okay";
 	};
+
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;
+
 		cpu0: cpu@0 {
 			device_type = "cpu";
 			compatible = "arm,cortex-m55";

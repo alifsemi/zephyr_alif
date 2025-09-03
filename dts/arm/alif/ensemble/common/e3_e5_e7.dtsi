@@ -111,4 +111,27 @@
 		#gpio-cells = <2>;
 		status = "disabled";
 	};
+
+	i2s2: i2s2@49016000 {
+		compatible = "snps,designware-i2s";
+		clock-frequency = <76800000>;
+		driver_instance	= "I2S_INSTANCE_2";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_i2s2>;
+		reg = <0x49016000 0x1000>;
+		interrupts = <143 0>;
+		status = "disabled";
+	};
+
+	i2s3: i2s3@49017000 {
+		compatible = "snps,designware-i2s";
+		clock-frequency = <76800000>;
+		driver_instance	= "I2S_INSTANCE_3";
+		reg = <0x49017000 0x1000>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_i2s3>;
+		interrupts = <144 0>;
+		status = "disabled";
+	};
+
 };

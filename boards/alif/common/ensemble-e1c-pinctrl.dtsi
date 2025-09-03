@@ -127,6 +127,7 @@
 			driver_state_control = < 0x1 >;
 		};
 	};
+
 	pinctrl_i2c1: pinctrl_i2c1 {
 		group0 {
 			pinmux = < PIN_P7_2__I2C1_SDA_C >,
@@ -221,6 +222,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_spi1: pinctrl_spi1 {
 		group0 {
 			pinmux = < PIN_P8_4__SPI1_MISO_C >,
@@ -230,6 +232,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_spi2: pinctrl_spi2 {
 		group0 {
 			pinmux = < PIN_P7_0__SPI2_MISO_B >,
@@ -239,6 +242,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_lpspi0: pinctrl_lpspi0 {
 		group0 {
 			pinmux = < PIN_P1_3__LPSPI_MISO_A >,
@@ -324,6 +328,7 @@
 				 < PIN_P2_7__I2S0_WS_B >;
 		};
 	};
+
 	pinctrl_i2s1:pinctrl_i2s1 {
 		group0 {
 			pinmux = < PIN_P2_0__I2S1_SDI_A >,
@@ -332,14 +337,17 @@
 				 < PIN_P2_3__I2S1_WS_SLV_A >;
 		};
 	};
+
 	pinctrl_lpi2s:pinctrl_lpi2s {
 		group0 {
 			pinmux = < PIN_P9_0__LPI2S_SDI_C >,
 				 < PIN_P9_1__LPI2S_SDO_C >,
 				 < PIN_P9_2__LPI2S_SCLK_C >,
 				 < PIN_P4_6__LPI2S_WS_B >;
+			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_ospi0:pinctrl_ospi0 {
 		group0 {
 			pinmux = < PIN_P4_2__OSPI0_SCLK_A >,
@@ -372,6 +380,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio1:pinctrl_gpio1 {
 		group0 {
 			pinmux = < PIN_P1_0__GPIO >,
@@ -385,6 +394,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio2:pinctrl_gpio2 {
 		group0 {
 			pinmux = < PIN_P2_0__GPIO >,
@@ -398,6 +408,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio3:pinctrl_gpio3 {
 		group0 {
 			pinmux = < PIN_P3_0__GPIO >,
@@ -411,6 +422,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio4:pinctrl_gpio4 {
 		group0 {
 			pinmux = < PIN_P4_0__GPIO >,
@@ -424,6 +436,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio5:pinctrl_gpio5 {
 		group0 {
 			pinmux = < PIN_P5_0__GPIO >,
@@ -437,6 +450,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio6:pinctrl_gpio6 {
 		group0 {
 			pinmux = < PIN_P6_0__GPIO >,
@@ -450,6 +464,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio7:pinctrl_gpio7 {
 		group0 {
 			pinmux = < PIN_P7_0__GPIO >,
@@ -463,6 +478,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio8:pinctrl_gpio8 {
 		group0 {
 			pinmux = < PIN_P8_0__GPIO >,
@@ -476,6 +492,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_gpio9:pinctrl_gpio9 {
 		group0 {
 			pinmux = < PIN_P9_0__GPIO >,
@@ -484,6 +501,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_lpgpio:pinctrl_lpgpio {
 		group0 {
 			pinmux = < PIN_P15_0__LPGPIO >,
@@ -508,6 +526,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	/* Below pin-mux will be available from Rev-B boards */
 	pinctrl_can1:pinctrl_can1 {
 		group0 {
@@ -517,6 +536,7 @@
 			read_enable = < 0x1 >;
 		};
 	};
+
 	pinctrl_dac0: pinctrl_dac0 {
 		group0 {
 			pinmux = <PIN_P2_3__ANA_S11>;
