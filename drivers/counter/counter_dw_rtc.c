@@ -6,12 +6,13 @@
 
 #include <zephyr/irq.h>
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(counter_dw_rtc, CONFIG_COUNTER_LOG_LEVEL);
-
 #include <zephyr/drivers/counter.h>
+#include <zephyr/sys/util.h>
 #include <errno.h>
 #include <stdbool.h>
 #include "counter_dw_rtc.h"
+
+LOG_MODULE_REGISTER(counter_dw_rtc, CONFIG_COUNTER_LOG_LEVEL);
 
 
 struct counter_dw_config {
@@ -26,7 +27,7 @@ struct counter_dw_config {
 struct counter_dw_data {
 	counter_alarm_callback_t alarm_cb;
 	void *user_data;
-	uint32_t ccr_reg_value;
+	uint32_t ccr_cache;
 };
 
 static int counter_dw_start(const struct device *dev)
@@ -34,9 +35,9 @@ static int counter_dw_start(const struct device *dev)
 	const struct counter_dw_config *config = dev->config;
 	struct counter_dw_data *data = dev->data;
 
-	data->ccr_reg_value = read_ccr(config->base_address);
+	data->ccr_cache = read_ccr(config->base_address);
 
-	if ((data->ccr_reg_value & (1 << DW_RTC_CCR_EN))) {
+	if (data->ccr_cache & BIT(DW_RTC_CCR_EN)) {
 		return -EALREADY;
 	}
 
@@ -44,15 +45,15 @@ static int counter_dw_start(const struct device *dev)
 
 	if (config->prescaler) {
 		write_cpsr(config->prescaler, config->base_address);
-		data->ccr_reg_value |= (1 << DW_RTC_CCR_PSCLR_EN);
+		data->ccr_cache |= BIT(DW_RTC_CCR_PSCLR_EN);
 	}
 
 	if (config->wrap_enable) {
-		data->ccr_reg_value |= (1 << DW_RTC_CCR_WEN);
+		data->ccr_cache |= BIT(DW_RTC_CCR_WEN);
 	}
 
-	data->ccr_reg_value |= (1 << DW_RTC_CCR_EN);
-	write_ccr(data->ccr_reg_value, config->base_address);
+	data->ccr_cache |= BIT(DW_RTC_CCR_EN);
+	write_ccr(data->ccr_cache, config->base_address);
 	LOG_DBG("%p Counter started", dev);
 
 	return 0;
@@ -63,13 +64,13 @@ static int counter_dw_stop(const struct device *dev)
 	const struct counter_dw_config *config = dev->config;
 	struct counter_dw_data *data = dev->data;
 
-	if (!(data->ccr_reg_value & (1 << DW_RTC_CCR_EN))) {
+	if (!(data->ccr_cache & BIT(DW_RTC_CCR_EN))) {
 		LOG_DBG("%p Counter already in stopped state", dev);
 		return 0;
 	}
 
-	data->ccr_reg_value &= ~(1 << DW_RTC_CCR_EN);
-	write_ccr(data->ccr_reg_value, config->base_address);
+	data->ccr_cache &= ~BIT(DW_RTC_CCR_EN);
+	write_ccr(data->ccr_cache, config->base_address);
 
 	return 0;
 }
@@ -109,10 +110,10 @@ static int counter_dw_set_alarm(const struct device *dev, uint8_t chan_id,
 	data->alarm_cb = alarm_cfg->callback;
 	data->user_data = alarm_cfg->user_data;
 
-	data->ccr_reg_value |= (1 << DW_RTC_CCR_IEN);
-	data->ccr_reg_value &= ~(1 << DW_RTC_CCR_MASK);
+	data->ccr_cache |= BIT(DW_RTC_CCR_IEN);
+	data->ccr_cache &= ~BIT(DW_RTC_CCR_MASK);
 
-	write_ccr(data->ccr_reg_value, config->base_address);
+	write_ccr(data->ccr_cache, config->base_address);
 
 	LOG_DBG("%p Counter alarm set to %u ticks", dev, alarm_cfg->ticks);
 
@@ -129,9 +130,9 @@ static int counter_dw_cancel_alarm(const struct device *dev, uint8_t chan_id)
 		return -ENOTSUP;
 	}
 
-	if (data->ccr_reg_value & (1 << DW_RTC_CCR_IEN)) {
-		data->ccr_reg_value &= ~(1 << DW_RTC_CCR_IEN);
-		write_ccr(data->ccr_reg_value, config->base_address);
+	if (data->ccr_cache & BIT(DW_RTC_CCR_IEN)) {
+		data->ccr_cache &= ~BIT(DW_RTC_CCR_IEN);
+		write_ccr(data->ccr_cache, config->base_address);
 	}
 
 	data->alarm_cb = NULL;
@@ -158,14 +159,13 @@ static void counter_dw_isr(const struct device *dev)
 
 	/* Single alarm is supported, disable interrupt and callback */
 	clear_interrupts(config->base_address);
-	data->ccr_reg_value &= ~(1 << DW_RTC_CCR_IEN);
 
-	write_ccr(data->ccr_reg_value, config->base_address);
-
-	counter_dw_get_value(dev, &ticks);
+	data->ccr_cache &= ~BIT(DW_RTC_CCR_IEN);
+	write_ccr(data->ccr_cache, config->base_address);
 
 	if (alarm_cb) {
 		data->alarm_cb = NULL;
+		counter_dw_get_value(dev, &ticks);
 		alarm_cb(dev, 0, ticks, data->user_data);
 	}
 }
@@ -186,41 +186,42 @@ static int counter_dw_init(const struct device *dev)
 
 	data->alarm_cb = NULL;
 	config->config_func();
+
+	LOG_DBG("Designware RTC driver initialized on device: %p", dev);
 	return 0;
 }
 
-#define COUNTER_DW_INIT(inst)                                                                      \
-	static void counter_dw_irq_config_##inst(void);                                            \
-                                                                                                   \
-	static struct counter_dw_data counter_dw_dev_data_##inst __attribute__((noinit));          \
-                                                                                                   \
-	static struct counter_dw_config counter_dw_dev_config_##inst = {                           \
-		.info =                                                                            \
-			{                                                                          \
-				.freq = DT_INST_PROP(inst, clock_frequency) /                      \
-					(DT_INST_PROP(inst, prescaler)                             \
-						 ? DT_INST_PROP(inst, prescaler)                   \
-						 : 1),                                             \
-				.flags = COUNTER_CONFIG_INFO_COUNT_UP,                             \
-				.channels = 1,                                                     \
-			},                                                                         \
-                                                                                                   \
-		.config_func = counter_dw_irq_config_##inst,                                       \
-		.base_address = DT_INST_REG_ADDR(inst),                                            \
-		.prescaler = DT_INST_PROP(inst, prescaler),                                        \
-		.load_value = DT_INST_PROP(inst, load_value),                                      \
-		.wrap_enable = DT_INST_PROP(inst, wrap_enable),                                    \
-	};                                                                                         \
-                                                                                                   \
-	DEVICE_DT_INST_DEFINE(inst, counter_dw_init, NULL, &counter_dw_dev_data_##inst,            \
-			      &counter_dw_dev_config_##inst, POST_KERNEL,                          \
-			      CONFIG_COUNTER_INIT_PRIORITY, &counter_dw_api);                      \
-                                                                                                   \
-	static void counter_dw_irq_config_##inst(void)                                             \
-	{                                                                                          \
-		IRQ_CONNECT(DT_INST_IRQN(inst), DT_INST_IRQ(inst, priority), counter_dw_isr,       \
-			    DEVICE_DT_INST_GET(inst), 0);                                          \
-		irq_enable(DT_INST_IRQN(inst));                                                    \
+#define COUNTER_DW_INIT(inst)							\
+	static void counter_dw_irq_config_##inst(void);				\
+										\
+	static struct counter_dw_data counter_dw_dev_data_##inst;		\
+										\
+	static struct counter_dw_config counter_dw_dev_config_##inst = {	\
+		.info = {							\
+			.freq = DT_INST_PROP(inst, clock_frequency) /		\
+				(DT_INST_PROP(inst, prescaler)			\
+					? DT_INST_PROP(inst, prescaler)		\
+					: 1),					\
+			.flags = COUNTER_CONFIG_INFO_COUNT_UP,			\
+			.channels = 1,						\
+		},								\
+		.config_func = counter_dw_irq_config_##inst,			\
+		.base_address = DT_INST_REG_ADDR(inst),				\
+		.prescaler = DT_INST_PROP(inst, prescaler),			\
+		.load_value = DT_INST_PROP(inst, load_value),			\
+		.wrap_enable = DT_INST_PROP(inst, wrap_enable),			\
+	};									\
+										\
+	DEVICE_DT_INST_DEFINE(inst, counter_dw_init, NULL,			\
+			      &counter_dw_dev_data_##inst,			\
+			      &counter_dw_dev_config_##inst, POST_KERNEL,	\
+			      CONFIG_COUNTER_INIT_PRIORITY, &counter_dw_api);	\
+										\
+	static void counter_dw_irq_config_##inst(void)				\
+	{									\
+		IRQ_CONNECT(DT_INST_IRQN(inst), DT_INST_IRQ(inst, priority),	\
+			    counter_dw_isr, DEVICE_DT_INST_GET(inst), 0);	\
+		irq_enable(DT_INST_IRQN(inst));					\
 	}
 
 DT_INST_FOREACH_STATUS_OKAY(COUNTER_DW_INIT)
