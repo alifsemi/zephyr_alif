@@ -30,7 +30,7 @@ jobs:
 
     - name: Load PR number
       if: steps.download-artifacts.outputs.found_artifact == 'true'
-      uses: actions/github-script@v7
+      uses: actions/github-script@v8
       with:
         script: |
           let fs = require("fs");
@@ -63,7 +63,7 @@ jobs:
 
     - name: Configure AWS Credentials
       if: steps.download-artifacts.outputs.found_artifact == 'true'
-      uses: aws-actions/configure-aws-credentials@v4
+      uses: aws-actions/configure-aws-credentials@v5
       with:
         aws-access-key-id: ${{ vars.AWS_BUILDS_ZEPHYR_PR_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_BUILDS_ZEPHYR_PR_SECRET_ACCESS_KEY }}
