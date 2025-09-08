@@ -689,7 +689,12 @@ static int uart_ns16550_configure(const struct device *dev,
 	ns16550_outbyte(dev_cfg, LCR(dev),
 			uart_cfg.data_bits | uart_cfg.stop_bits | uart_cfg.parity);
 
+#if defined(CONFIG_PM_DEVICE)
+	mdc = MCR_OUT2  | MCR_DTR;
+#else
 	mdc = MCR_OUT2 | MCR_RTS | MCR_DTR;
+#endif
+
 #if defined(CONFIG_UART_NS16550_VARIANT_NS16750) || \
 	defined(CONFIG_UART_NS16550_VARIANT_NS16950)
 	if (cfg->flow_ctrl == UART_CFG_FLOW_CTRL_RTS_CTS) {
@@ -2045,10 +2050,16 @@ static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_actio
 
 	switch (action) {
 	case PM_DEVICE_ACTION_TURN_ON:
+#ifdef CONFIG_UART_NS16550_LINE_CTRL
+		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 0);
+#endif
+	break;
 	case PM_DEVICE_ACTION_RESUME:
 #ifdef CONFIG_UART_NS16550_LINE_CTRL
 		/* Clear break condition */
 		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 0);
+		/* RTS is set to enabled at resume as clocks are right*/
+		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 1);
 #endif
 		break;
 	case PM_DEVICE_ACTION_TURN_OFF:
@@ -2056,6 +2067,9 @@ static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_actio
 #ifdef CONFIG_UART_NS16550_LINE_CTRL
 		/* Set break condition */
 		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 1);
+		/* Also RTS is set to inactive to disable communication*/
+		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 0);
+
 #endif
 		break;
 	default:
