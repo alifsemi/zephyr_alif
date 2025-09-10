@@ -33,6 +33,12 @@ config USE_ALIF_HAL_UTIMER
 	help
 	  Enables UTIMER LL driver on Alif SoCs.
 
+config USE_ALIF_HAL_ANALOG
+	bool "Enable Alif HAL Analog support"
+	default n
+	help
+	  Enables access to Alif HAL analog layer(ADC, DAC, CMP)
+
 config SPI_DW_ENABLE
 	bool "SPI DW"
 	default y

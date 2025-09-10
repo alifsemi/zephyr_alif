@@ -36,6 +36,12 @@ config USE_ALIF_HAL_UTIMER
 	help
 	  Enables UTIMER LL driver on Alif SoCs.
 
+config USE_ALIF_HAL_ANALOG
+	bool "Enable Alif HAL Analog support"
+	default n
+	help
+	  Enables access to Alif HAL analog layer(ADC, DAC, CMP)
+
 config FLASH_SIZE
 	default $(dt_node_reg_size_int,$(dt_nodelabel_path,itcm),0,K) if !XIP
 
