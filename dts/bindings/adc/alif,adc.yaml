@@ -1,0 +1,137 @@
+# Copyright (C) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Alif ADC
+
+include: [base.yaml, pinctrl-device.yaml]
+
+compatible: "alif,adc"
+
+properties:
+
+  sample-width:
+    type: int
+    default : 16
+    description: Rate at which the analog samples is sampled
+    enum: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+           17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+           30, 31, 32]
+
+  clock_div:
+    type: int
+    default: 2
+    description: Clock divisor applied to the input clock
+    enum: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+
+  avg_sample_num:
+    type: int
+    default: 256
+    description: Number of sample input need to be sampled and must be in power of 2
+    enum: [1, 2, 4, 8, 16, 32, 64, 128, 256]
+
+  shift_n_bits:
+    type: int
+    default: 0
+    description: number of bits to shift before loading it to the sample output register
+
+  shift_direction:
+    type: string
+    description: shift left or right before loading it to the sample output register
+    required: true
+    enum:
+      - "LEFT_SHIFT"
+      - "RIGHT_SHIFT"
+
+  comparator_threshold_a:
+    type: int
+    default: 0
+    description: set comparator a threshold value
+
+  comparator_threshold_b:
+    type: int
+    default: 0
+    description: set comparator b threshold value
+
+  comparator_threshold_comparison:
+    type: string
+    description: set comparator threshold comparison mode
+    enum:
+      - "ABOVE_THRESHOLD_A_AND_B"
+      - "BELOW_THRESHOLD_A_AND_B"
+      - "BETWEEN_AND_OUTSIDE_THRESHOLD_A_AND_B"
+
+  comparator_bias:
+    type: string
+    description: set conversion sampling rate for adc12
+    enum:
+      - "0.5_MS/s"
+      - "1_MS/s"
+      - "2.5_MS/s"
+      - "5_MS/s"
+
+  driver_instance:
+    type: string
+    description: Operating channel
+    required: true
+    enum:
+      -  "ADC_INSTANCE_ADC24_0"
+      -  "ADC_INSTANCE_ADC12_0"
+      -  "ADC_INSTANCE_ADC12_1"
+      -  "ADC_INSTANCE_ADC12_2"
+
+  interrupts:
+    type: int
+    description: Enable required interrupts
+    required: true
+
+  pga_enable:
+    type: boolean
+    description: set this when working with differential to set the gain
+
+  pga_gain:
+    type: string
+    default: "ADC_PGA_GAIN_0_DB"
+    description: select the gain for the Peripheral in differential mode
+    enum:
+      -  "ADC_PGA_GAIN_0_DB"
+      -  "ADC_PGA_GAIN_6_DB"
+      -  "ADC_PGA_GAIN_12_DB"
+      -  "ADC_PGA_GAIN_18_DB"
+      -  "ADC_PGA_GAIN_24_DB"
+      -  "ADC_PGA_GAIN_30_DB"
+      -  "ADC_PGA_GAIN_36_DB"
+      -  "ADC_PGA_GAIN_42_DB"
+
+  adc_channel_scan:
+    type: string
+    description: select for scanning single channel or multiple channel
+    required: true
+    enum:
+      -  "MULTIPLE_CHANNEL_SCAN"
+      -  "SINGLE_CHANNEL_SCAN"
+
+  adc_conversion_mode:
+    type: string
+    description: adc operate in single shot or continuous conversion
+    required: true
+    enum:
+      -  "CONTINUOUS_CONVERSION"
+      -  "SINGLE_SHOT_CONVERSION"
+
+  adc24_output_rate:
+    type: string
+    description: setting the sampling rate of adc24
+    enum:
+      -  "1KS/s"
+      -  "2KS/s"
+      -  "4KS/s"
+      -  "8KS/s"
+      -  "16KS/s"
+  adc24_bias:
+    type: string
+    description: Bias setting for adc24
+    enum:
+      -  "5uA"
+      -  "6.25uA"
+      -  "7.5uA"
+      -  "8.75uA"

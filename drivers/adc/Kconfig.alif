@@ -1,0 +1,9 @@
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config ADC_ALIF
+	bool "Alif ADC Driver"
+	depends on DT_HAS_ALIF_ADC_ENABLED
+	default y
+	help
+	  Enable ADC Module
