@@ -7,3 +7,8 @@ config SOC_AE822FA0E5597XX0_RTSS_HE
 
 config SOC_AE822FA0E5597XX0_RTSS_HP
 		select RTSS_HP
+
+config ANALOG_ALIASING
+	bool "Enable Analog Aliasing"
+	help
+	  Enable the analog aliasing feature for peripherals.
