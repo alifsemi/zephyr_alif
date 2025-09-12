@@ -123,7 +123,7 @@ static int soc_init(void)
 	sys_write32(0x1, VBAT_LPRTC1_CLK_EN);
 #endif
 
-/* lptimer settings */
+	/* lptimer settings */
 #if DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers)
 	LPTIMER_CONFIG(0);
 	LPTIMER_CONFIG(1);
@@ -131,6 +131,13 @@ static int soc_init(void)
 	LPTIMER_CONFIG(3);
 #endif /* DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers) */
 
+	/*Enable Clock : 76P8M */
+#if DT_HAS_COMPAT_STATUS_OKAY(snps_designware_i2s)
+	if (IS_ENABLED(CONFIG_SOC_SERIES_E8) ||
+		IS_ENABLED(CONFIG_SOC_SERIES_E4)) {
+		sys_set_bits(CGU_CLK_ENA, BIT(24));
+	}
+#endif
 	return 0;
 }
 
