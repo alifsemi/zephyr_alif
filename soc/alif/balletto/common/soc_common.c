@@ -95,12 +95,18 @@ static int soc_init(void)
 	sys_write32(0x1, LPRTC1_CLK_EN);
 #endif
 
-/* lptimer settings */
+	/* lptimer settings */
 #if DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers)
 	LPTIMER_CONFIG(0);
 	LPTIMER_CONFIG(1);
 #endif /* DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers) */
 
+	/*Clock : OSPI */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi0), okay)
+	if (IS_ENABLED(CONFIG_SOC_SERIES_B1)) {
+		sys_write32(0x1, EXPSLV_OSPI_CTRL);
+	}
+#endif
 	return 0;
 }
 

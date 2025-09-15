@@ -732,6 +732,49 @@
 		interrupts = <48 0>;
 		status = "disabled";
 	};
+
+	ospi0: ospi0@83000000 {
+		compatible = "snps,designware-ospi";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x83000000 0x1000>;
+		pinctrl-0 = <&pinctrl_ospi0>;
+		pinctrl-names = "default";
+		interrupt-parent = <&nvic>;
+		interrupts = <96 0>;
+		aes-reg = <0x83001000 0x100>;
+		bus-speed = <10000000>;
+		clock-frequency = <160000000>;
+		cs-pin = <1>;
+		ddr-drive-edge = <1>;
+		rx-ds-delay = <11>;
+		tx-fifo-threshold = <64>;
+		xip-rxds-vl-en;
+		xip-wait-cycles = <15>;
+		xip-base-address = <0xA0000000 0x20000000>;
+		status = "disabled";
+
+		ospi_flash: ospi_flash@0 {
+			compatible = "issi,xspi-flash-controller";
+			reg = <0x0>;
+			erase-value = <0xff>;
+			num-of-sector = <16384>;
+			page-size = <4096>;
+			sector-size = <4096>;
+			write-block-size = <1>;
+
+			/* Flash Size 64MB */
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			flash_storage: flash_storage@0 {
+				compatible = "soc-nv-flash";
+				reg = <0x0 DT_SIZE_M(64)>;
+				erase-block-size = <DT_SIZE_K(4)>;
+				write-block-size = <1>;
+			};
+		};
+	};
 };
 
 &{/} {
