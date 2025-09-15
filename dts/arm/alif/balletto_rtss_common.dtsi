@@ -369,6 +369,7 @@
 			current-speed = <3000000>;
 			dlf = <5>;
 			hw-flow-control;
+			rts-ctrl;
 			status = "okay";
 		};
 

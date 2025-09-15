@@ -381,6 +381,7 @@ struct uart_ns16550_dev_data {
 	struct k_spinlock lock;
 	uint8_t fifo_size;
 	uint16_t irq;
+	bool rts_ctrl;
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 	uint8_t iir_cache;	/**< cache of IIR since it clears when read */
@@ -702,7 +703,22 @@ static int uart_ns16550_configure(const struct device *dev,
 	ns16550_outbyte(dev_cfg, LCR(dev),
 			uart_cfg.data_bits | uart_cfg.stop_bits | uart_cfg.parity);
 
-	mdc = MCR_OUT2 | MCR_RTS | MCR_DTR;
+	bool enable_MSI_IER = false;
+
+	if (dev_data->rts_ctrl) {
+		mdc = MCR_OUT2 | MCR_DTR;
+
+		uint8_t cts_stat = ns16550_inbyte(dev_cfg, MSR(dev)) & MSR_CTS;
+
+		if (cts_stat == MSR_CTS) {
+			mdc |= MCR_RTS;
+		} else {
+			enable_MSI_IER = true;
+		}
+	} else {
+		mdc = MCR_OUT2 | MCR_RTS | MCR_DTR;
+	}
+
 #if defined(CONFIG_UART_NS16550_VARIANT_NS16750) || \
 	defined(CONFIG_UART_NS16550_VARIANT_NS16950)
 	if (cfg->flow_ctrl == UART_CFG_FLOW_CTRL_RTS_CTS) {
@@ -774,6 +790,11 @@ static int uart_ns16550_configure(const struct device *dev,
 
 	/* disable interrupts  */
 	ns16550_outbyte(dev_cfg, IER(dev), 0x00);
+
+	if (enable_MSI_IER) {
+		/* Enable interrupt for modem status */
+		ns16550_outbyte(dev_cfg, IER(dev), ns16550_inbyte(dev_cfg, IER(dev)) | IER_MSI);
+	}
 
 out:
 	k_spin_unlock(&dev_data->lock, key);
@@ -1351,6 +1372,7 @@ static void uart_ns16550_isr(const struct device *dev)
 	if (dev_data->cb) {
 		dev_data->cb(dev, dev_data->cb_data);
 	}
+
 #if (IS_ENABLED(CONFIG_UART_ASYNC_API))
 	if (dev_data->async.tx_dma_params.dma_dev != NULL) {
 #if !CONFIG_DMA_PL330
@@ -1388,6 +1410,29 @@ static void uart_ns16550_isr(const struct device *dev)
 #endif
 	}
 #endif
+	if (dev_data->rts_ctrl) {
+		const struct uart_ns16550_device_config *const config = dev->config;
+		const uint8_t IIR_status = ns16550_inbyte(config, IIR(dev));
+
+		if ((IIR_status & 0xf) == IIR_MSTAT) {
+			/* Handle device RTS signal for modem CTS signal */
+			if (ns16550_inbyte(config, MSR(dev)) & MSR_CTS) {
+				uint32_t mdc = ns16550_inbyte(config, MDC(dev));
+
+				mdc |= MCR_RTS;
+#if defined(CONFIG_UART_NS16550_VARIANT_NS16750) || defined(CONFIG_UART_NS16550_VARIANT_NS16950)
+				if (dev_data->uart_config.flow_ctrl == UART_CFG_FLOW_CTRL_RTS_CTS) {
+					mdc |= MCR_AFCE;
+				}
+#endif
+				ns16550_outbyte(config, MDC(dev), mdc);
+
+				/* Disable Modem status  interrupt*/
+				ns16550_outbyte(config, IER(dev),
+						ns16550_inbyte(config, IER(dev)) & ~IER_MSI);
+			}
+		}
+	}
 
 #ifdef CONFIG_UART_NS16550_WA_ISR_REENABLE_INTERRUPT
 	const struct uart_ns16550_device_config * const dev_cfg = dev->config;
@@ -1431,6 +1476,12 @@ static int uart_ns16550_line_ctrl_set(const struct device *dev,
 	case UART_LINE_CTRL_BAUD_RATE:
 		set_baud_rate(dev, val, pclk);
 		return 0;
+	case UART_LINE_CTRL_AFCE:
+		key = k_spin_lock(&data->lock);
+		mdc = ns16550_inbyte(dev_cfg, MDC(dev));
+		ns16550_outbyte(dev_cfg, MDC(dev), (mdc | MCR_AFCE));
+		k_spin_unlock(&data->lock, key);
+		return 0;
 
 	case UART_LINE_CTRL_RTS:
 	case UART_LINE_CTRL_DTR:
@@ -1468,6 +1519,41 @@ static int uart_ns16550_line_ctrl_set(const struct device *dev,
 		/* Modify the break condition */
 		ns16550_outbyte(dev_cfg, LCR(dev), lcr);
 
+		k_spin_unlock(&data->lock, key);
+		return 0;
+	}
+
+	return -ENOTSUP;
+}
+
+
+static int uart_ns16550_line_ctrl_get(const struct device *dev,
+				      uint32_t ctrl, uint32_t *val)
+{
+	struct uart_ns16550_dev_data *data = dev->data;
+	const struct uart_ns16550_device_config *const dev_cfg = dev->config;
+	uint32_t mdc, msr = 0U;
+	k_spinlock_key_t key;
+
+	switch (ctrl) {
+	case UART_LINE_MODEM_CTS:
+		key = k_spin_lock(&data->lock);
+		msr = ns16550_inbyte(dev_cfg, MSR(dev));
+		if (msr & MSR_CTS) {
+			*val = 1;
+		} else {
+			*val = 0;
+		}
+		k_spin_unlock(&data->lock, key);
+		return 0;
+	case UART_LINE_CTRL_RTS:
+		key = k_spin_lock(&data->lock);
+		mdc = ns16550_inbyte(dev_cfg, MDC(dev));
+		if (mdc & MCR_RTS) {
+			*val = 1;
+		} else {
+			*val = 0;
+		}
 		k_spin_unlock(&data->lock, key);
 		return 0;
 	}
@@ -1912,6 +1998,7 @@ static const struct uart_driver_api uart_ns16550_driver_api = {
 
 #ifdef CONFIG_UART_NS16550_LINE_CTRL
 	.line_ctrl_set = uart_ns16550_line_ctrl_set,
+	.line_ctrl_get = uart_ns16550_line_ctrl_get,
 #endif
 
 #ifdef CONFIG_UART_NS16550_DRV_CMD
@@ -2058,10 +2145,16 @@ static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_actio
 
 	switch (action) {
 	case PM_DEVICE_ACTION_TURN_ON:
+#ifdef CONFIG_UART_NS16550_LINE_CTRL
+		/* Clear break condition */
+		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 0);
+#endif
+		break;
 	case PM_DEVICE_ACTION_RESUME:
 #ifdef CONFIG_UART_NS16550_LINE_CTRL
 		/* Clear break condition */
 		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 0);
+		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 1);
 #endif
 		break;
 	case PM_DEVICE_ACTION_TURN_OFF:
@@ -2069,6 +2162,7 @@ static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_actio
 #ifdef CONFIG_UART_NS16550_LINE_CTRL
 		/* Set break condition */
 		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 1);
+		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 0);
 #endif
 		break;
 	default:
@@ -2128,6 +2222,8 @@ static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_actio
 				    (UART_CFG_FLOW_CTRL_NONE)),                      \
 		.fifo_size = DT_INST_PROP_OR(n, fifo_size, 0),                       \
 		.irq = DT_INST_IRQN(n),\
+		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, rts_ctrl),                       \
+			(.rts_ctrl = DT_INST_PROP(n, rts_ctrl),))		     \
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, dlf),                            \
 			(.dlf = DT_INST_PROP_OR(n, dlf, 0),))			     \
 		DEV_DATA_ASYNC(n)						     \

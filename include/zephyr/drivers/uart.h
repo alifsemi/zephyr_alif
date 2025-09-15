@@ -38,6 +38,8 @@ enum uart_line_ctrl {
 	UART_LINE_CTRL_DCD = BIT(3),       /**< Data Carrier Detect (DCD) */
 	UART_LINE_CTRL_DSR = BIT(4),       /**< Data Set Ready (DSR) */
 	UART_LINE_CTRL_BRK = BIT(5),       /**< Break control (BRK) */
+	UART_LINE_CTRL_AFCE = BIT(6),      /**< Autoflow enable */
+	UART_LINE_MODEM_CTS = BIT(7),      /**< Modem Status  (CTS) */
 };
 
 /**
