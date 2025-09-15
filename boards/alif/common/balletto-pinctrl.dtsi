@@ -512,4 +512,11 @@
 				 < PIN_P1_7__CDC_VSYNC_A >;
 		};
 	};
+
+	pinctrl_dac0: pinctrl_dac0 {
+		group0 {
+			pinmux = <PIN_P2_3__ANA_S11>;
+			read_enable = <0x0>;
+		};
+	};
 };
