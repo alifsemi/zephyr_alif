@@ -67,6 +67,7 @@ zephyr_library_sources_ifdef(CONFIG_SOC_FLASH_XMC4XXX soc_flash_xmc4xxx.c)
 zephyr_library_sources_ifdef(CONFIG_SPI_FLASH_AT45 spi_flash_at45.c)
 zephyr_library_sources_ifdef(CONFIG_SPI_NOR spi_nor.c)
 zephyr_library_sources_ifdef(CONFIG_MRAM_FLASH_ALIF flash_mram_alif.c)
+zephyr_library_sources_ifdef(CONFIG_OSPI_FLASH_IS25WX flash_ospi_is25wx.c)
 # zephyr-keep-sorted-stop
 
 if(CONFIG_FLASH_SIMULATOR)

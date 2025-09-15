@@ -75,6 +75,9 @@ struct flash_parameters {
 	/** @endcond */
 	/** Value the device is filled in erased areas */
 	uint8_t erase_value;
+	const size_t  page_size;
+	const size_t  sector_size;
+	const size_t  num_of_sector;
 };
 
 /** Set for ordinary Flash where erase is needed before write of random data */

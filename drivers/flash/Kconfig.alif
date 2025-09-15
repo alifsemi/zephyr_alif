@@ -9,3 +9,49 @@ config MRAM_FLASH_ALIF
 	select FLASH_HAS_PAGE_LAYOUT
 	help
 	 Enables MRAM flash driver on Alif SoCs.
+
+menuconfig OSPI_FLASH_IS25WX
+	bool "OSPI Flash IS25WX 128/256/512 driver for Alif DevKit"
+	depends on DT_HAS_ISSI_XSPI_FLASH_CONTROLLER_ENABLED
+	select FLASH_HAS_DRIVER_ENABLED
+	select FLASH_HAS_PAGE_LAYOUT
+	select EVENTS
+	help
+	 Enables IS25WX256/512 flash driver on Alif DevKit.
+	 Update num-of-sector@ospi_flash property value in devicetree.
+	 - 8K for 256Mb and 16K for 512Mb size support.
+
+if OSPI_FLASH_IS25WX
+	config OSPI
+	bool "OSPI Controller Enabled"
+	default y
+	help
+	 Indicate OSPI Controller Enabled.
+
+	config USE_ALIF_HAL_OSPI
+	bool "OSPI driver located in HAL Module"
+	default y
+	help
+	 Enables OSPI driver on Alif SoCs.
+
+	config FLASH_ADDRESS_IN_SINGLE_FIFO_LOCATION
+	bool "IS25WX Flash Setup with Single Address mode"
+	default y if SOC_SERIES_E8 || SOC_SERIES_E4 \
+		     || SOC_SERIES_E1C || SOC_SERIES_B1
+	help
+	 Enables Single Address mode while setting up IS25Wx Flash.
+	 It required only in specific Alif SoC family.
+
+	config FLASH_PREPARE_CMD_LEN
+	int "Number of 32 bit buffer provided for prepare command"
+	default 3 if FLASH_ADDRESS_IN_SINGLE_FIFO_LOCATION
+	default 5
+	help
+	  Configure prepare command length
+
+	config ALIF_OSPI_FLASH_XIP
+	bool "Enable XiP mode"
+	help
+	  Enable XiP mode of Flash at initialization.
+
+endif # OSPI_FLASH_IS25WX
