@@ -32,3 +32,7 @@ properties:
       instance during initialization using the Software Reset Register (SRR) available
       in some implementations of the Synopsys DesignWare UART. Use this property only
       for UARTs that have the SRR.
+
+  rts-ctrl:
+    type: boolean
+    description: Support RTS signal controlled by SW
