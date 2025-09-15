@@ -329,7 +329,7 @@ static inline void read_payload(void)
 		rx.buf = get_rx(K_NO_WAIT);
 		if (!rx.buf) {
 			if (rx.discardable) {
-				LOG_WRN("Discarding event 0x%02x", rx.evt.evt);
+				LOG_DBG("Discarding event 0x%02x", rx.evt.evt);
 				rx.discard = rx.remaining;
 				reset_rx();
 				return;
