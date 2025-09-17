@@ -1407,6 +1407,13 @@
 		csi-vact = <560>;
 	};
 
+	gpu2d: dave2d@49040000 {
+		compatible = "tes,dave2d";
+		reg = < 0x49040000 0x1000 >;
+		interrupts = < 332 2 >;
+		clocks = < &clock ALIF_GPU_CLK >;
+	};
+
 	dma0: dma0@49080000 {
 		compatible = "arm,dma-pl330";
 		reg = <0x49080000 0x1000>;
