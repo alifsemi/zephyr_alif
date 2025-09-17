@@ -21,6 +21,11 @@ extern "C" {
 
 typedef void (*gpio_config_irq_t)(const struct device *port);
 
+#define VBAT_INIT_DONE 0xeabceabc
+struct gpio_dw_vbat {
+	uint32_t init_done;
+};
+
 struct gpio_dw_config {
 	/* gpio_driver_config needs to be first */
 	struct gpio_driver_config common;
@@ -30,6 +35,7 @@ struct gpio_dw_config {
 #ifdef CONFIG_PINCTRL
 	const struct pinctrl_dev_config *pcfg;
 #endif
+	bool vbat_support;
 };
 
 struct gpio_dw_runtime {
@@ -37,6 +43,7 @@ struct gpio_dw_runtime {
 	struct gpio_driver_data common;
 	uint32_t base_addr;
 	sys_slist_t callbacks;
+	struct gpio_dw_vbat *vbat_resume;
 };
 
 #ifdef __cplusplus

@@ -412,70 +412,82 @@ static int gpio_dw_initialize(const struct device *port)
 {
 	struct gpio_dw_runtime *context = port->data;
 	const struct gpio_dw_config *config = port->config;
+	struct gpio_dw_vbat *vbat = context->vbat_resume;
 	uint32_t base_addr;
 	int err = 0;
 
+	base_addr = dw_base_to_block_base(context->base_addr);
+
 	if (dw_interrupt_support(config)) {
+		if (!config->vbat_support || vbat->init_done != VBAT_INIT_DONE) {
 
-		base_addr = dw_base_to_block_base(context->base_addr);
+			/* interrupts in sync with system clock */
+			dw_set_bit(base_addr, INT_CLOCK_SYNC, LS_SYNC_POS, 1);
 
-		/* interrupts in sync with system clock */
-		dw_set_bit(base_addr, INT_CLOCK_SYNC, LS_SYNC_POS, 1);
+			/* mask and disable interrupts */
+			dw_write(base_addr, INTMASK, ~(0));
+			dw_write(base_addr, INTEN, 0);
+			dw_write(base_addr, PORTA_EOI, ~(0));
 
-		/* mask and disable interrupts */
-		dw_write(base_addr, INTMASK, ~(0));
-		dw_write(base_addr, INTEN, 0);
-		dw_write(base_addr, PORTA_EOI, ~(0));
-
-		config->config_func(port);
+			config->config_func(port);
+		}
 	}
 
 #if defined(CONFIG_PINCTRL)
 	if (config->pcfg != NULL) {
-		err = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+		if (!config->vbat_support || vbat->init_done != VBAT_INIT_DONE) {
+			err = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+		}
 	}
 #endif
+	/* Mark vbat init done */
+	if (config->vbat_support) {
+		vbat->init_done = VBAT_INIT_DONE;
+	}
+
 
 	return err;
 }
 
 /* Bindings to the platform */
-#define INST_IRQ_FLAGS(n) \
-	COND_CODE_1(DT_INST_IRQ_HAS_CELL(n, flags), (DT_INST_IRQ(n, flags)), (0))
+#define INST_IRQ_FLAGS(n) COND_CODE_1(DT_INST_IRQ_HAS_CELL(n, flags), (DT_INST_IRQ(n, flags)), (0))
 
-#define GPIO_CFG_IRQ(idx, n)									\
-		IRQ_CONNECT(DT_INST_IRQ_BY_IDX(n, idx, irq),					\
-			    DT_INST_IRQ_BY_IDX(n, idx, priority), gpio_dw_isr,			\
-			    DEVICE_DT_INST_GET(n), INST_IRQ_FLAGS(n));				\
-		irq_enable(DT_INST_IRQ_BY_IDX(n, idx, irq));					\
+#define GPIO_CFG_IRQ(idx, n)                                                                       \
+	IRQ_CONNECT(DT_INST_IRQ_BY_IDX(n, idx, irq), DT_INST_IRQ_BY_IDX(n, idx, priority),         \
+		    gpio_dw_isr, DEVICE_DT_INST_GET(n), INST_IRQ_FLAGS(n));                        \
+	irq_enable(DT_INST_IRQ_BY_IDX(n, idx, irq));
 
-#define GPIO_DW_INIT(n)										\
-	static void gpio_config_##n##_irq(const struct device *port)				\
-	{											\
-		ARG_UNUSED(port);			                                        \
-		LISTIFY(DT_NUM_IRQS(DT_DRV_INST(n)), GPIO_CFG_IRQ, (), n)                       \
-	}											\
-												\
-	IF_ENABLED(DT_INST_NODE_HAS_PROP(n, pinctrl_0),						\
-			(PINCTRL_DT_INST_DEFINE(n)));						\
-												\
-	static const struct gpio_dw_config gpio_dw_config_##n = {				\
-		.common = {									\
-			.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(n),			\
-		},										\
-		.irq_num = COND_CODE_1(DT_INST_IRQ_HAS_IDX(n, 0), (DT_INST_IRQN(n)), (0)),	\
-		.ngpios = DT_INST_PROP(n, ngpios),						\
-		.config_func = gpio_config_##n##_irq,						\
-		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, pinctrl_0),					\
-		(.pcfg = PINCTRL_DT_DEV_CONFIG_GET(DT_DRV_INST(n)),))				\
-	};											\
-												\
-	static struct gpio_dw_runtime gpio_##n##_runtime = {					\
-		.base_addr = DT_INST_REG_ADDR(n),						\
-	};											\
-												\
-	DEVICE_DT_INST_DEFINE(n, gpio_dw_initialize, NULL, &gpio_##n##_runtime,			\
-		      &gpio_dw_config_##n, PRE_KERNEL_1,					\
-		      CONFIG_GPIO_INIT_PRIORITY, &api_funcs);					\
+#define GPIO_DW_INIT(n)                                                                            \
+	static void gpio_config_##n##_irq(const struct device *port)                               \
+	{                                                                                          \
+		ARG_UNUSED(port);                                                                  \
+		LISTIFY(DT_NUM_IRQS(DT_DRV_INST(n)), GPIO_CFG_IRQ, (), n)                          \
+	}                                                                                          \
+                                                                                                   \
+	IF_ENABLED(DT_INST_NODE_HAS_PROP(n, pinctrl_0), (PINCTRL_DT_INST_DEFINE(n)));              \
+                                                                                                   \
+	static struct gpio_dw_vbat gpio_dw_vbat_##n __attribute__((noinit));                       \
+                                                                                                   \
+	static const struct gpio_dw_config gpio_dw_config_##n = {                                  \
+		.common =                                                                          \
+			{                                                                          \
+				.port_pin_mask = GPIO_PORT_PIN_MASK_FROM_DT_INST(n),               \
+			},                                                                         \
+		.irq_num = COND_CODE_1(DT_INST_IRQ_HAS_IDX(n, 0), (DT_INST_IRQN(n)), (0)),         \
+		.ngpios = DT_INST_PROP(n, ngpios),                                                 \
+		.config_func = gpio_config_##n##_irq,                                              \
+		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, vbat_resume),                                  \
+			   (.vbat_support = DT_INST_PROP(n, vbat_resume),))                       \
+			IF_ENABLED(DT_INST_NODE_HAS_PROP(n, pinctrl_0),                            \
+				   (.pcfg = PINCTRL_DT_DEV_CONFIG_GET(DT_DRV_INST(n)),))};        \
+                                                                                                   \
+	static struct gpio_dw_runtime gpio_##n##_runtime = {                                       \
+		.base_addr = DT_INST_REG_ADDR(n),                                                  \
+		.vbat_resume = &gpio_dw_vbat_##n,                                                  \
+	};                                                                                         \
+                                                                                                   \
+	DEVICE_DT_INST_DEFINE(n, gpio_dw_initialize, NULL, &gpio_##n##_runtime,                    \
+			      &gpio_dw_config_##n, PRE_KERNEL_1, CONFIG_GPIO_INIT_PRIORITY,        \
+			      &api_funcs);
 
 DT_INST_FOREACH_STATUS_OKAY(GPIO_DW_INIT)

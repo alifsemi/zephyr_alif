@@ -14,6 +14,10 @@ properties:
   "#gpio-cells":
     const: 2
 
+  vbat-resume:
+    type: boolean
+    description: Vbat resume support
+
 gpio-cells:
   - pin
   - flags

@@ -672,6 +672,7 @@
 			pinctrl-0 = < &pinctrl_lpgpio >;
 			pinctrl-names = "default";
 			gpio-controller;
+			vbat-resume;
 			#gpio-cells = <2>;
 		};
 
