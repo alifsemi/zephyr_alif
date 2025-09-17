@@ -364,6 +364,61 @@
 		status = "disabled";
 	};
 
+	i2c0: i2c0@49010000 {
+		compatible = "snps,designware-i2c";
+		clock-frequency = <I2C_BITRATE_STANDARD>;
+		/*
+		 * For Standard  speed LCNT=0 and HCNT=0
+		 * For Fast      speed LCNT=50 and HCNT=30
+		 * For Fast Plus speed LCNT=35 and HCNT=5
+		 */
+		hcnt-offset = <0>;
+		lcnt-offset = <0>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x49010000 0x1000>;
+		pinctrl-0 = <&pinctrl_i2c0>;
+		pinctrl-names = "default";
+		interrupt-parent = <&nvic>;
+		interrupts = <132 0>;
+		tx_threshold = <16>;
+		rx_threshold = <0>;
+		status = "disabled";
+	};
+
+	i2c1: i2c1@49011000 {
+		compatible = "snps,designware-i2c";
+		clock-frequency = <I2C_BITRATE_STANDARD>;
+		/*
+		 * For Standard  speed LCNT=0 and HCNT=0
+		 * For Fast      speed LCNT=50 and HCNT=30
+		 * For Fast Plus speed LCNT=35 and HCNT=5
+		 */
+		hcnt-offset = <0>;
+		lcnt-offset = <0>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x49011000 0x1000>;
+		pinctrl-0 = <&pinctrl_i2c1>;
+		pinctrl-names = "default";
+		interrupt-parent = <&nvic>;
+		interrupts = <133 0>;
+		tx_threshold = <16>;
+		rx_threshold = <0>;
+		status = "disabled";
+	};
+
+	lpi2c: lpi2c@43009000 {
+		compatible = "alif,lpi2c";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_lpi2c>;
+		reg = <0x43009000 0x100>;
+		interrupts = <47 0>;
+		status = "disabled";
+	};
+
 	lpuart: uart@43008000 {
 		compatible = "ns16550";
 		reg = <0x43008000 0x100>;
