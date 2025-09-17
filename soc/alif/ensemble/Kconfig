@@ -49,6 +49,9 @@ config APSS
 	select PINCTRL
 	select CLOCK_CONTROL
 
+config ENSEMBLE_GEN2
+	bool
+
 rsource "*/Kconfig"
 
 endif # SOC_FAMILY_ENSEMBLE
