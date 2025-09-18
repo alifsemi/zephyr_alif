@@ -180,10 +180,10 @@
 		};
 	};
 
-	pinctrl_lpi2c: pinctrl_lpi2c {
+	pinctrl_lpi2c0: pinctrl_lpi2c0 {
 		group0 {
-			pinmux = < PIN_P7_5__LPI2C_SDA_A >,
-				 < PIN_P7_4__LPI2C_SCL_A >;
+			pinmux = < PIN_P7_5__LPI2C0_SDA_A >,
+				 < PIN_P7_4__LPI2C0_SCL_A >;
 
 			read_enable = < 0x1 >;
 			driver_state_control = < 0x1 >;

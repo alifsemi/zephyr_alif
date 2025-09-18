@@ -196,7 +196,7 @@
 		};
 	};
 
-	pinctrl_lpi2c: pinctrl_lpi2c {
+	pinctrl_lpi2c0: pinctrl_lpi2c0 {
 		group0 {
 			pinmux = < PIN_P7_5__LPI2C0_SDA_A >,
 				 < PIN_P7_4__LPI2C0_SCL_A >;
