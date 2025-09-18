@@ -409,6 +409,16 @@
 		tx_threshold = <16>;
 		rx_threshold = <0>;
 		status = "disabled";
+
+	lpi2c0: lpi2c0@43009000 {
+		compatible = "alif,lpi2c";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_lpi2c0>;
+		reg = <0x43009000 0x100>;
+		interrupts = <47 0>;
+		status = "disabled";
 	};
 
 	lpuart: uart@43008000 {
