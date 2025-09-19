@@ -128,6 +128,11 @@ manifest:
     - name: cmsis-nn
       revision: 0c8669d81381ccf3b1a01d699f3b68b50134a99f
       path: modules/lib/cmsis-nn
+    - name: dave2d
+      remote: alif
+      repo-path: alif_dave2d-driver
+      revision: 7d8909ea801529d4fc8902180f16bdb279f087e0
+      path: modules/drivers/dave2d
     - name: edtt
       revision: 64e5105ad82390164fb73fc654be3f73a608209a
       path: tools/edtt
