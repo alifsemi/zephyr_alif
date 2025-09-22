@@ -1,0 +1,58 @@
+# Copyright (C) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Alif DAC controller
+
+compatible: "alif,dac"
+
+include: [base.yaml, pinctrl-device.yaml]
+
+properties:
+  reg:
+    required: true
+
+  twoscomp_enabled:
+    type: boolean
+    description: Enables conversion from two's complement signed input to
+                 unsigned binary.
+
+  bypass_enabled:
+    type: boolean
+    description: Enables DAC input bypass mode.
+
+  bypass_val:
+    type: int
+    description: Value to be used when DAC bypass mode is enabled(0-0xFFF)
+
+  output_current:
+    type: string
+    required: true
+    description: Selects the DAC output current trim value.
+    enum:
+      -  "DAC_0UA_OUT_CUR"
+      -  "DAC_100UA_OUT_CUR"
+      -  "DAC_200UA_OUT_CUR"
+      -  "DAC_300UA_OUT_CUR"
+      -  "DAC_400UA_OUT_CUR"
+      -  "DAC_500UA_OUT_CUR"
+      -  "DAC_600UA_OUT_CUR"
+      -  "DAC_700UA_OUT_CUR"
+      -  "DAC_800UA_OUT_CUR"
+      -  "DAC_900UA_OUT_CUR"
+      -  "DAC_1000UA_OUT_CUR"
+      -  "DAC_1100UA_OUT_CUR"
+      -  "DAC_1200UA_OUT_CUR"
+      -  "DAC_1300UA_OUT_CUR"
+      -  "DAC_1400UA_OUT_CUR"
+      -  "DAC_1500UA_OUT_CUR"
+
+  capacitance:
+    type: string
+    required: true
+    description: Selects DAC high-performance mode capacitance trim value.
+    enum:
+      -  "DAC_2PF_CAPACITANCE"
+      -  "DAC_4PF_CAPACITANCE"
+      -  "DAC_6PF_CAPACITANCE"
+      -  "DAC_8PF_CAPACITANCE"
+
