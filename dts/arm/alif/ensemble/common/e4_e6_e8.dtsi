@@ -51,4 +51,90 @@
 		rx_threshold = <0>;
 		status = "disabled";
 	};
+
+	lputimer0: lputimer@4300d000 {
+		compatible = "alif,utimer";
+		reg = <0x4300D000 0x1000 0x4300C000 0x24>;
+		reg-names = "timer", "global";
+		interrupts = <351 3>, <352 3>,
+				<353 3>, <354 3>, <355 3>,
+				<356 3>, <357 3>, <358 3>;
+		interrupt-names = "comp_capt_a", "comp_capt_b",
+				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+				"comp_b_buf2", "underflow", "overflow";
+		timer-id = <0>;
+		clocks = <&clockctrl ALIF_LPUTIMER_CLK>;
+		counter-direction = <ALIF_UTIMER_COUNTER_DIRECTION_UP>;
+		status = "disabled";
+
+		counter {
+			compatible = "alif,counter";
+			status = "disabled";
+		};
+
+		pwm {
+			compatible = "alif,pwm";
+			#pwm-cells = <3>;
+			status = "disabled";
+		};
+
+		qdec {
+			compatible = "alif,qdec";
+			counts-per-revolution = <1000>;
+			input-filter-enable;
+			filter-prescaler = <16>;
+			filter-taps = <1>;
+			status = "disabled";
+		};
+	};
+
+	lputimer1: lputimer@4300e000 {
+		compatible = "alif,utimer";
+		reg = <0x4300E000 0x1000 0x4300C000 0x24>;
+		reg-names = "timer", "global";
+		timer-id = <1>;
+		clocks = <&clockctrl ALIF_LPUTIMER_CLK>;
+		counter-direction = <ALIF_UTIMER_COUNTER_DIRECTION_UP>;
+		status = "disabled";
+
+		pwm {
+			compatible = "alif,pwm";
+			#pwm-cells = <3>;
+			status = "disabled";
+		};
+
+		qdec {
+			compatible = "alif,qdec";
+			counts-per-revolution = <1000>;
+			input-filter-enable;
+			filter-prescaler = <16>;
+			filter-taps = <1>;
+			status = "disabled";
+		};
+	};
+
+	lputimer2: lputimer@4300f000 {
+		compatible = "alif,utimer";
+		reg = <0x4300F000 0x1000 0x4300C000 0x24>;
+		reg-names = "timer", "global";
+		timer-id = <2>;
+		clocks = <&clockctrl ALIF_LPUTIMER_CLK>;
+		counter-direction = <ALIF_UTIMER_COUNTER_DIRECTION_UP>;
+		status = "disabled";
+
+		pwm {
+			compatible = "alif,pwm";
+			#pwm-cells = <3>;
+			status = "disabled";
+		};
+
+		qdec {
+			compatible = "alif,qdec";
+			counts-per-revolution = <1000>;
+			input-filter-enable;
+			filter-prescaler = <16>;
+			filter-taps = <1>;
+			status = "disabled";
+		};
+	};
 };
