@@ -94,6 +94,7 @@ static uint32_t alif_get_input_clock(uint32_t clock_name)
 	case ALIF_CANFD0_HFOSC_CLK:
 		return ALIF_CLOCK_HFOSC_CLK_FREQ;
 	case ALIF_CANFD0_160M_CLK:
+	case ALIF_LPUTIMER_CLK:
 		return ALIF_CLOCK_160M_CLK_FREQ;
 	case ALIF_I2S0_76M8_CLK:
 	case ALIF_I2S1_76M8_CLK:
