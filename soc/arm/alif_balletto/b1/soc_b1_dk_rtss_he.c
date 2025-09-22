@@ -29,12 +29,6 @@ LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
  */
 static int balletto_b1_dk_rtss_he_init(void)
 {
-	/* Enable ICACHE */
-	sys_cache_instr_enable();
-
-	/* Enable DCACHE */
-	sys_cache_data_enable();
-
 	/* enable all UART[5-0] modules */
 	/* select UART[5-0]_SCLK as SYST_PCLK clock. */
 	uint32_t uart_clk_mask = 0;
