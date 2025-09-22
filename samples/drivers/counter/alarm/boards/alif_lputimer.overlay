@@ -4,16 +4,16 @@
  */
 
 /*
- * Enabling utimer for the sample application
+ * Enabling lp-utimer for the sample application
  */
 
 / {
 	aliases {
-		timer = &utimer0;
+		timer = &lputimer0;
 	};
 };
 
-&utimer0 {
+&lputimer0 {
 	status = "okay";
 
 	counter {

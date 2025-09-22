@@ -64,7 +64,7 @@ struct counter_alarm_cfg alarm_cfg;
 #elif defined(CONFIG_COUNTER_RENESAS_RZ_GTM)
 #define TIMER DT_INST(0, renesas_rz_gtm_counter)
 #elif defined(CONFIG_COUNTER_ALIF_UTIMER)
-#define TIMER DT_CHILD(DT_NODELABEL(utimer0), counter)
+#define TIMER DT_CHILD(DT_ALIAS(timer), counter)
 #else
 #error Unable to find a counter device node in devicetree
 #endif
