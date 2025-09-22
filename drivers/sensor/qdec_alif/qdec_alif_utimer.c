@@ -11,6 +11,7 @@
 #include <zephyr/irq.h>
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/drivers/clock_control.h>
 
 #include "utimer.h"
 
@@ -26,6 +27,8 @@ struct qdec_alif_utimer_config {
 	uint8_t filter_taps;
 	const struct pinctrl_dev_config *pcfg;
 	uint32_t counts_per_revolution;
+	const struct device *clk_dev;
+	clock_control_subsys_t clkid;
 };
 
 /* QDEC run time data */
@@ -92,6 +95,18 @@ static int qdec_alif_utimer_init(const struct device *dev)
 		return -EINVAL;
 	}
 
+	/* check device availability */
+	if (!device_is_ready(cfg->clk_dev)) {
+		LOG_ERR("clock controller device not ready");
+		return -ENODEV;
+	}
+	/* Enable clock only for lputimer instances from clock manager */
+	ret = clock_control_on(cfg->clk_dev, cfg->clkid);
+	if (ret != 0) {
+		LOG_ERR("Unable to turn on clock: err:%d", ret);
+		return ret;
+	}
+
 	alif_utimer_enable_timer_clock(global_base, cfg->timer_id);
 	alif_utimer_disable_soft_counter_ctrl(timer_base);
 	alif_utimer_set_up_counter(timer_base);
@@ -126,6 +141,8 @@ static int qdec_alif_utimer_init(const struct device *dev)
 		.timer_id = DT_PROP(DT_INST_PARENT(n), timer_id),				\
 		.counts_per_revolution = DT_INST_PROP(n, counts_per_revolution),		\
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),					\
+		.clk_dev = DEVICE_DT_GET(DT_CLOCKS_CTLR(DT_INST_PARENT(n))),			\
+		.clkid = (clock_control_subsys_t)DT_CLOCKS_CELL(DT_INST_PARENT(n), clkid),	\
 		COND_CODE_1(DT_INST_PROP(n, input_filter_enable),				\
 		(.filter_enable = DT_INST_PROP(n, input_filter_enable),				\
 		.filter_prescaler = DT_INST_PROP(n, filter_prescaler),				\

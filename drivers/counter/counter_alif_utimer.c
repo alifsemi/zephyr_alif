@@ -406,11 +406,18 @@ static int counter_alif_utimer_init(const struct device *dev)
 	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
 	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
 
-	/* get clock rate from clock manager */
+	/* check device availability */
 	if (!device_is_ready(cfg->clk_dev)) {
 		LOG_ERR("clock controller device not ready");
 		return -ENODEV;
 	}
+	/* Enable clock only for lputimer instances from clock manager */
+	ret = clock_control_on(cfg->clk_dev, cfg->clkid);
+	if (ret != 0) {
+		LOG_ERR("Unable to turn on clock: err:%d", ret);
+		return ret;
+	}
+	/* get clock rate from clock manager */
 	ret = clock_control_get_rate(cfg->clk_dev,
 			cfg->clkid, &data->frequency);
 	if (ret != 0) {
