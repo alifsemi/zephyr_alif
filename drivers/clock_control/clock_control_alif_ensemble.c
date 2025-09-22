@@ -273,8 +273,8 @@ static int alif_clock_control_on(const struct device *dev,
 	int32_t ret;
 
 	if (!ALIF_CLOCK_CFG_EN_MASK(clk_id)) {
-		LOG_ERR("ERROR: Clock enable not supported\n");
-		return -ENOTSUP;
+		LOG_WRN("Clock enable not supported\n");
+		return 0;
 	}
 
 	ret = alif_get_module_base(dev, ALIF_CLOCK_CFG_MODULE(clk_id),
@@ -297,8 +297,8 @@ static int alif_clock_control_off(const struct device *dev,
 	int32_t ret;
 
 	if (!ALIF_CLOCK_CFG_EN_MASK(clk_id)) {
-		LOG_ERR("ERROR: Clock disable not supported\n");
-		return -ENOTSUP;
+		LOG_WRN("Clock disable not supported\n");
+		return 0;
 	}
 
 	ret = alif_get_module_base(dev, ALIF_CLOCK_CFG_MODULE(clk_id),
@@ -309,47 +309,6 @@ static int alif_clock_control_off(const struct device *dev,
 	reg_addr = module_base + ALIF_CLOCK_CFG_REG(clk_id);
 
 	sys_clear_bit(reg_addr, ALIF_CLOCK_CFG_ENABLE(clk_id));
-
-	return 0;
-}
-
-static int alif_clock_control_set_rate(const struct device *dev,
-				clock_control_subsys_t sub_system,
-				clock_control_subsys_rate_t rate)
-{
-	uint32_t clk_id = (uint32_t) sub_system;
-	uint32_t clk_freq, reg_addr, module_base;
-	uint32_t div_mask, freq_div, div_pos;
-	uint32_t frequency = (uint32_t) rate;
-	int32_t ret;
-
-
-	clk_freq = alif_get_input_clock(clk_id);
-	if (!clk_freq) {
-		return -ENOTSUP;
-	}
-
-	ret = alif_get_module_base(dev, ALIF_CLOCK_CFG_MODULE(clk_id),
-					&module_base);
-	if (ret) {
-		return ret;
-	}
-	reg_addr = module_base + ALIF_CLOCK_CFG_REG(clk_id);
-
-	freq_div = (clk_freq / frequency);
-
-	alif_get_div_reg_info(clk_id, &div_mask, &div_pos);
-
-	if (!div_mask) {
-		LOG_ERR("ERROR: Frequency setting is not possible\n");
-		return -ENOTSUP;
-	}
-	if (freq_div > div_mask) {
-		LOG_ERR("ERROR: Desired frequency setting is not possible\n");
-		return -EINVAL;
-	}
-
-	alif_set_clock_divisor((mem_addr_t) reg_addr, div_mask, div_pos, freq_div);
 
 	return 0;
 }
@@ -387,6 +346,52 @@ static int alif_clock_control_get_rate(const struct device *dev,
 	return 0;
 }
 
+static int alif_clock_control_set_rate(const struct device *dev,
+				clock_control_subsys_t sub_system,
+				clock_control_subsys_rate_t rate)
+{
+	uint32_t clk_id = (uint32_t) sub_system;
+	uint32_t clk_freq, curr_freq, reg_addr, module_base;
+	uint32_t div_mask, freq_div, div_pos;
+	uint32_t frequency = (uint32_t) rate;
+	int32_t ret;
+
+	ret = alif_clock_control_get_rate(dev, sub_system, &curr_freq);
+	if (ret) {
+		return ret;
+	}
+
+	/* check if current frequency is already same as desired frequency */
+	if (curr_freq == frequency) {
+		return 0;
+	}
+
+	clk_freq = alif_get_input_clock(clk_id);
+
+	ret = alif_get_module_base(dev, ALIF_CLOCK_CFG_MODULE(clk_id),
+					&module_base);
+	if (ret) {
+		return ret;
+	}
+	reg_addr = module_base + ALIF_CLOCK_CFG_REG(clk_id);
+
+	freq_div = (clk_freq / frequency);
+
+	alif_get_div_reg_info(clk_id, &div_mask, &div_pos);
+
+	if (!div_mask) {
+		LOG_WRN("Frequency setting is not supported\n");
+		return 0;
+	}
+	if (freq_div > div_mask) {
+		LOG_ERR("ERROR: Frequency setting is not supported\n");
+		return -ENOTSUP;
+	}
+
+	alif_set_clock_divisor((mem_addr_t) reg_addr, div_mask, div_pos, freq_div);
+
+	return 0;
+}
 
 static enum clock_control_status
 	alif_clock_control_get_status(const struct device *dev,
@@ -422,7 +427,7 @@ static inline int alif_clock_control_configure(const struct device *dev,
 	ARG_UNUSED(data);
 
 	if (!ALIF_CLOCK_CFG_CLK_SRC_MASK(clk_id)) {
-		return -ENOTSUP;
+		return 0;
 	}
 
 	ret = alif_get_module_base(dev, ALIF_CLOCK_CFG_MODULE(clk_id),
