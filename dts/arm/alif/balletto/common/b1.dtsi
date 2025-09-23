@@ -752,6 +752,7 @@
 		zephyr,code-partition = &slot0_partition;
 		zephyr,sram = &dtcm;
 		zephyr,dtcm = &dtcm;
+		zephyr,entropy = &rng;
 	};
 };
 
