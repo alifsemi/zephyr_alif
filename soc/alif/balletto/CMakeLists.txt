@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 add_subdirectory(${SOC_SERIES})
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../common ${CMAKE_CURRENT_BINARY_DIR}/common)
 zephyr_include_directories(common)
-zephyr_include_directories(../common)
 zephyr_sources(common/startup.S)
 zephyr_sources(common/soc_common.c)
 
