@@ -409,6 +409,7 @@
 		tx_threshold = <16>;
 		rx_threshold = <0>;
 		status = "disabled";
+	};
 
 	lpi2c0: lpi2c0@43009000 {
 		compatible = "alif,lpi2c";
