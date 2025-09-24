@@ -108,15 +108,16 @@ static void analog_config(const struct device *dev)
 
 	irq_unlock(key);
 
-	uintptr_t adc_vref_base = 0;
-#if CONFIG_ANALOG_ALIASING
-	adc_vref_base = DEVICE_MMIO_NAMED_GET(dev, adc_vref);
-#endif
-
 	key = irq_lock();
 
 	/* Enables DAC12 voltage reference and internal buffer for DAC operation */
-	enable_dac12_ref_voltage(cmp_reg2_addr, adc_vref_base);
+#if CONFIG_ANALOG_ALIASING
+	uintptr_t adc_vref_base = DEVICE_MMIO_NAMED_GET(dev, adc_vref);
+
+	enable_dac12_ref_voltage_alias_mode(cmp_reg2_addr, adc_vref_base);
+#else
+	enable_dac12_ref_voltage(cmp_reg2_addr);
+#endif
 
 	irq_unlock(key);
 }
