@@ -44,6 +44,12 @@ config USE_ALIF_HAL_ANALOG
 	help
 	  Enables access to Alif HAL analog layer(ADC, DAC, CMP)
 
+config USE_ALIF_HAL_OSPI
+	bool "OSPI driver located in HAL Module"
+	default n
+	help
+	  Enables OSPI driver on Alif SoCs.
+
 config SPI_DW_ENABLE
 	bool "SPI DW"
 	default y
