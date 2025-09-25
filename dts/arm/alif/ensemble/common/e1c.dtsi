@@ -70,9 +70,10 @@
 	};
 
 	ns: ns@20020000 {
-		compatible = "zephyr,memory-region", "mmio-region";
+		compatible = "zephyr,memory-region";
 		reg = <0x20020000 DT_SIZE_K(512)>;
-		zephyr,memory-region = "NS";
+		zephyr,memory-region = "NON_SECURE0";
+		status = "disabled";
 	};
 
 	host_peripheral: host_peripheral@1a000000 {

@@ -5,4 +5,10 @@
 config SOC_FAMILY
 	default "ensemble" if SOC_FAMILY_ENSEMBLE
 
+config NONSECURE0_REGION
+	string
+	default "NON-SECURE0" if $(dt_nodelabel_enabled,ns)
+	help
+	    Provide config Non-Secure region
+
 rsource "*/Kconfig.soc"
