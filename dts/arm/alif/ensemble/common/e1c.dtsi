@@ -977,6 +977,16 @@
 		status = "okay";
 	};
 
+	power-states {
+		subsys_off: subsys_off {
+			compatible = "zephyr,power-state";
+			power-state-name = "soft-off";
+			min-residency-us = <5000000>;
+			exit-latency-us = <60000>;
+			status = "disabled";
+		};
+	};
+
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -987,7 +997,7 @@
 			d-cache-line-size = <32>;
 			i-cache-line-size = <32>;
 			reg = <0>;
+			cpu-power-states = <&subsys_off>;
 		};
 	};
 };
-
