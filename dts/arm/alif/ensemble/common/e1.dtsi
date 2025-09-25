@@ -1171,8 +1171,6 @@
 
 	ospi0: ospi0@83000000 {
 		compatible = "snps,designware-ospi";
-		#address-cells = <1>;
-		#size-cells = <0>;
 		reg = <0x83000000 0x1000>;
 		pinctrl-0 = <&pinctrl_ospi0>;
 		pinctrl-names = "default";

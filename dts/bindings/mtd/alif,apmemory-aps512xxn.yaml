@@ -1,0 +1,21 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+description: AP-Memory PSRAM on ALIF OSPI(DW-SSI) bus
+
+compatible: "alif,apmemory-aps512xxn"
+
+include: base.yaml
+
+properties:
+  size:
+    type: int
+    description: |
+      The RAM size in bits.
+
+  x16-data-transfer-mode:
+    type: boolean
+    description: |
+      Enable 16 Data lines transfer mode. This is only available for Data Transfer.
+      Default is 8 Data lines transfer mode.
