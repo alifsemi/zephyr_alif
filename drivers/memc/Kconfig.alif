@@ -1,0 +1,21 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config MEMC_OSPI_ALIF
+	bool "ALIF OSPI Memory controller"
+	default y
+	depends on DT_HAS_SNPS_DESIGNWARE_OSPI_ENABLED
+	help
+	  Enable OSPI Memory Controller.
+
+if MEMC_OSPI_ALIF
+
+config MEMC_ALIF_OSPI_APS512XXN
+	bool "ALIF OSPI AP-Memory PSRAM driver"
+	default y
+	depends on DT_HAS_ALIF_APMEMORY_APS512XXN_ENABLED
+	help
+	  Enable support for the AP-Memory APS512XXN PSRAM device on Alif platforms.
+
+endif
