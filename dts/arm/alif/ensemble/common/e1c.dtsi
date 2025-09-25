@@ -751,6 +751,7 @@
 		pinctrl-0 = <&pinctrl_lpi2s>;
 		interrupts = <48 0>;
 		status = "disabled";
+	};
 
 	ospi0: ospi0@83000000 {
 		compatible = "snps,designware-ospi";
