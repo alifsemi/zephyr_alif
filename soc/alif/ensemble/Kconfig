@@ -24,6 +24,8 @@ config RTSS_HE
 	select PINCTRL
 	select CLOCK_CONTROL
 	select HAS_ALIF_SE_SERVICES
+	select HAS_PM
+	select HAS_POWEROFF
 
 config RTSS_HP
 	select ARM
@@ -41,6 +43,8 @@ config RTSS_HP
 	select PINCTRL
 	select CLOCK_CONTROL
 	select HAS_ALIF_SE_SERVICES
+	select HAS_PM
+	select HAS_POWEROFF
 
 config APSS
 	select ARM
