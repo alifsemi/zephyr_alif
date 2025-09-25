@@ -4,8 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "bmi323.h"
+#ifdef CONFIG_BMI323_BUS_SPI
 #include "bmi323_spi.h"
+#endif
+#ifdef CONFIG_BMI323_BUS_I3C
+#include "bmi323_i3c.h"
+#endif
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
@@ -140,6 +144,7 @@ static int bosch_bmi323_validate_chip_id(const struct device *dev)
 	return 0;
 }
 
+#ifndef CONFIG_BMI323_BUS_I3C
 static int bosch_bmi323_soft_reset(const struct device *dev)
 {
 	uint16_t cmd;
@@ -157,6 +162,7 @@ static int bosch_bmi323_soft_reset(const struct device *dev)
 
 	return 0;
 }
+#endif
 
 static int bosch_bmi323_enable_feature_engine(const struct device *dev)
 {
@@ -1191,6 +1197,7 @@ static int bosch_bmi323_pm_resume(const struct device *dev)
 		return ret;
 	}
 
+#ifndef CONFIG_BMI323_BUS_I3C
 	ret = bosch_bmi323_soft_reset(dev);
 
 	if (ret < 0) {
@@ -1198,7 +1205,6 @@ static int bosch_bmi323_pm_resume(const struct device *dev)
 
 		return ret;
 	}
-
 	ret = bosch_bmi323_bus_init(dev);
 
 	if (ret < 0) {
@@ -1206,7 +1212,7 @@ static int bosch_bmi323_pm_resume(const struct device *dev)
 
 		return ret;
 	}
-
+#endif
 	ret = bosch_bmi323_enable_feature_engine(dev);
 
 	if (ret < 0) {
@@ -1214,7 +1220,6 @@ static int bosch_bmi323_pm_resume(const struct device *dev)
 
 		return ret;
 	}
-
 	ret = bosch_bmi323_init_int1(dev);
 
 	if (ret < 0) {
@@ -1241,8 +1246,12 @@ static int bosch_bmi323_pm_suspend(const struct device *dev)
 		LOG_WRN("Failed to disable int");
 	}
 
+#ifndef CONFIG_BMI323_BUS_I3C
 	/* Soft reset device to put it into suspend */
 	return bosch_bmi323_soft_reset(dev);
+#else
+	return 0;
+#endif
 }
 #endif /* CONFIG_PM_DEVICE */
 
@@ -1320,8 +1329,9 @@ static int bosch_bmi323_init(const struct device *dev)
  * select the appropriate bus once I2C is implemented.
  */
 #define BMI323_DEVICE_BUS(inst)                                                                    \
-	BUILD_ASSERT(DT_INST_ON_BUS(inst, spi), "Unimplemented bus");                              \
-	BMI323_DEVICE_SPI_BUS(inst)
+	COND_CODE_1(DT_INST_ON_BUS(inst, spi), (BMI323_DEVICE_SPI_BUS(inst)),                      \
+	(COND_CODE_1(DT_INST_ON_BUS(inst, i3c), (BMI323_DEVICE_I3C_BUS(inst)),                     \
+	(BUILD_ASSERT(0, "Unsupported bus type for BMI323")))))
 
 #define BMI323_DEVICE(inst)                                                                        \
 	static struct bosch_bmi323_data bosch_bmi323_data_##inst;                                  \
