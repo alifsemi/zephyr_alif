@@ -91,6 +91,40 @@ void pm_s2ram_mark_set(void);
  * @retval false if marking is not found which indicates standard boot.
  */
 bool pm_s2ram_mark_check_and_clear(void);
+
+/**
+ * @brief Save extended register sets during suspend-to-RAM
+ *
+ * This function is used to save extended register sets that are not saved by
+ * the default suspend-to-RAM implementation. It can be invoked from SoC-specific
+ * power drivers when additional CPU registers need to be preserved
+ * during suspend operations.
+ *
+ * The function should be called before entering the suspend state to ensure
+ * all necessary extended registers are stored in retained memory.
+ *
+ * @note This function is typically called by SoC-specific power management
+ *       drivers and should be implemented to handle platform-specific
+ *       register saving requirements.
+ */
+void pm_s2ram_save_ext_regs(void);
+
+/**
+ * @brief Restore extended register sets during resume from suspend-to-RAM
+ *
+ * This function is used to restore extended register sets that were previously
+ * saved by @ref pm_s2ram_save_ext_regs during suspend-to-RAM operations. It can
+ * be invoked from SoC-specific power drivers when additional CPU or peripheral
+ * registers need to be restored during resume operations.
+ *
+ * The function should be called after resuming from the suspend state to ensure
+ * all necessary extended registers are restored from retained memory.
+ *
+ * @note This function is typically called by SoC-specific power management
+ *       drivers and should be implemented to handle platform-specific
+ *       register restoration requirements.
+ */
+void pm_s2ram_restore_ext_regs(void);
 /**
  * @}
  */
