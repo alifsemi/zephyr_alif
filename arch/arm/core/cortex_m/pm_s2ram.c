@@ -82,12 +82,12 @@ typedef struct {
 } _memsysctl_context_t;
 #endif
 
-#if defined(SAU)
+#if defined(CONFIG_PM_SAU_SAVE_RESTORE)
 typedef struct {
-	uint32_t CTRL;
-	uint32_t TYPE;
-	uint32_t RBAR[SAU_MAX_NUM_REGIONS];
-	uint32_t RLAR[SAU_MAX_NUM_REGIONS];
+	uint32_t ctrl;
+	uint32_t type;
+	uint32_t rbar[SAU_MAX_NUM_REGIONS];
+	uint32_t rlar[SAU_MAX_NUM_REGIONS];
 } _sau_context_t;
 #endif
 
@@ -120,7 +120,7 @@ struct backup {
 #if defined(MEMSYSCTL)
 	_memsysctl_context_t memsysctl_context;
 #endif
-#if defined(SAU)
+#if defined(CONFIG_PM_SAU_SAVE_RESTORE)
 	_sau_context_t sau_context;
 #endif
 #if (defined(__FPU_USED) && (__FPU_USED == 1U)) || \
@@ -318,17 +318,18 @@ static void memsysctl_resume(_memsysctl_context_t *backup)
 }
 #endif
 
-#if defined(SAU)
+#if defined(CONFIG_PM_SAU_SAVE_RESTORE)
 static void sau_suspend(_sau_context_t *backup)
 {
 	uint8_t nr;
 
-	backup->CTRL = SAU->CTRL;
-	nr = SAU->TYPE & SAU_TYPE_NUM_REGION_Msk;
+	backup->ctrl = _SAU->ctrl;
+	backup->type = _SAU->type;
+	nr = backup->type & SAU_TYPE_NUM_REGION_Msk;
 	for (uint8_t i = 0; i < nr; i++) {
-		SAU->RNR = i;
-		backup->RBAR[i] = SAU->RBAR;
-		backup->RLAR[i] = SAU->RLAR;
+		_SAU->rnr = i;
+		backup->rbar[i] = _SAU->rbar;
+		backup->rlar[i] = _SAU->rlar;
 	}
 }
 
@@ -336,14 +337,13 @@ static void sau_resume(_sau_context_t *backup)
 {
 	uint8_t nr;
 
-	nr = SAU->TYPE & SAU_TYPE_NUM_REGION_Msk;
+	nr = backup->type & SAU_TYPE_NUM_REGION_Msk;
 	for (uint8_t i = 0; i < nr; i++) {
-		SAU->RNR = i;
-		SAU->RBAR = backup->RBAR[i];
-		SAU->RLAR = backup->RLAR[i];
+		_SAU->rnr = i;
+		_SAU->rbar = backup->rbar[i];
+		_SAU->rlar = backup->rlar[i];
 	}
-
-	SAU->CTRL = backup->CTRL;
+	_SAU->ctrl = backup->ctrl;
 }
 #endif
 
@@ -414,7 +414,7 @@ void pm_s2ram_save_ext_regs(void)
 #if defined(MEMSYSCTL)
 	memsysctl_suspend(&backup_data.memsysctl_context);
 #endif
-#if defined(SAU)
+#if defined(CONFIG_PM_SAU_SAVE_RESTORE)
 	sau_suspend(&backup_data.sau_context);
 #endif
 #if (defined(__FPU_USED) && (__FPU_USED == 1U)) || \
@@ -439,7 +439,7 @@ void pm_s2ram_restore_ext_regs(void)
 #if defined(MEMSYSCTL)
 	memsysctl_resume(&backup_data.memsysctl_context);
 #endif
-#if defined(SAU)
+#if defined(CONFIG_PM_SAU_SAVE_RESTORE)
 	sau_resume(&backup_data.sau_context);
 #endif
 #if defined(MPU)

@@ -46,6 +46,21 @@ config PM_S2RAM_CUSTOM_MARKING
 	  By default a magic word in RAM is used to mark entering suspend-to-RAM. Enabling
 	  this option allows custom implementation of functions which handle the marking.
 
+config PM_SAU_SAVE_RESTORE
+	bool "Save and restore SAU context during Power Management"
+	depends on PM_S2RAM && (CPU_CORTEX_M33 || CPU_CORTEX_M55 || CPU_CORTEX_M85)
+	default y if ARM_TRUSTZONE_M
+	help
+	  Enable save and restore of Security Attribution Unit (SAU) registers
+	  during power management operations (e.g., suspend-to-RAM).
+
+	  This is automatically enabled when TrustZone is enabled (ARM_TRUSTZONE_M),
+	  but can also be manually enabled for applications that need SAU context
+	  preservation.
+
+	  The implementation is independent of CMSE and uses a unified _SAU pointer
+	  for accessing SAU registers, decoupling SAU from TrustZone dependencies.
+
 config PM_NEED_ALL_DEVICES_IDLE
 	bool "System Low Power Mode Needs All Devices Idle"
 	depends on PM_DEVICE && !SMP
