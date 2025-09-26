@@ -470,6 +470,30 @@
 		status = "disabled";
 	};
 
+	uart_hci: uart@4300a000 {
+		compatible = "ns16550";
+		reg = <0x4300a000 0x100>;
+		clock-frequency = <160000000>;
+		interrupts = <50 0>;
+		reg-shift = <2>;
+		current-speed = <3000000>;
+		dlf = <5>;
+		hw-flow-control;
+		status = "disabled";
+	};
+
+	uart_ahi: uart@4300b000 {
+		compatible = "ns16550";
+		reg = <0x4300b000 0x100>;
+		clock-frequency = <160000000>;
+		interrupts = <51 0>;
+		reg-shift = <2>;
+		current-speed = <3000000>;
+		dlf = <5>;
+		hw-flow-control;
+		status = "disabled";
+	};
+
 	dma2: dma2@400c0000 {
 		compatible = "arm,dma-pl330";
 		reg = <0x400C0000 0x1000>;
@@ -878,7 +902,30 @@
 		zephyr,code-partition = &slot0_partition;
 		zephyr,sram = &dtcm;
 		zephyr,dtcm = &dtcm;
+		zephyr,bt-uart = &uart_hci;
+		zephyr,hci-uart = &uart_hci;
+		zephyr,ahi-uart = &uart_ahi;
+		zephyr,ieee802154 = &ieee802154;
 		zephyr,entropy = &rng;
+	};
+
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		/* ROM code for BLE host stack and LC3 codec is compiled to use reserved
+		 * static RAM in these defined address ranges. If the ROM code is not used,
+		 * these reserved memory regions are ignored and may be used by the
+		 * application. But if ROM BLE stack and/or LC3 codec is selected, these
+		 * entries are used to create reserved regions in the linker script.
+		 */
+		dtcm_lc3_codec: memory@20000000 {
+			reg = <0x20000000 0x600>;
+		};
+		dtcm_ble_host: memory@20000600 {
+			reg = <0x20000600 0x9A00>;
+		};
 	};
 };
 
@@ -892,6 +939,11 @@
 		mhuv2-send-node = <&seservice0s>;
 		mhuv2-recv-node = <&seservice0r>;
 		status = "okay";
+	};
+
+	ieee802154: ieee802154 {
+		compatible = "alif,ahi-ieee802154";
+		status = "disabled";
 	};
 
 	rng: rng {

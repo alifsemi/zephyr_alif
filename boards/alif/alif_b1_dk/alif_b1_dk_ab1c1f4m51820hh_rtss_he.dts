@@ -18,6 +18,9 @@
 	chosen {
 		zephyr,console = &uart2;
 		zephyr,shell-uart = &uart2;
+		zephyr,bt-uart = &uart_hci;
+		zephyr,hci-uart = &uart_hci;
+		zephyr,entropy = &rng;
 	};
 
 	aliases {
@@ -46,6 +49,20 @@
 };
 
 &uart2 {
+	status = "okay";
+};
+
+&uart_hci {
+	status = "okay";
+};
+
+&uart_ahi {
+	status = "okay";
+	pinctrl-0 = <&pinctrl_ahi_trace>;
+	pinctrl-names = "default";
+};
+
+&dma2 {
 	status = "okay";
 };
 
