@@ -71,6 +71,7 @@
 #define _PPB_INT_RSVD_0 0xE0000000
 #define _PPB_INT_SCS    0xE000E000
 #define _PPB_INT_SCB    0xE000ED00
+#define _PPB_INT_SAU    0xE000EDD0
 #define _PPB_INT_RSVD_1 0xE002E000
 #else
 #error Unknown CPU

@@ -49,6 +49,25 @@ extern "C" {
 #define CPACR_CP11_RESERVED    (2UL << CPACR_CP11_Pos)
 #define CPACR_CP11_FULL_ACCESS (3UL << CPACR_CP11_Pos)
 
+#if defined(CONFIG_PM_SAU_SAVE_RESTORE)
+/**
+ * @brief Structure type to access the Security Attribution Unit (SAU).
+ * @note This provides a unified SAU interface independent of CMSE/TrustZone.
+ *       Always use _SAU for accessing SAU registers during PM operations.
+ */
+struct sau_regs {
+	volatile uint32_t ctrl;		/* Control Register */
+	const volatile uint32_t type;	/* Type Register */
+	volatile uint32_t rnr;		/* Region Number Register */
+	volatile uint32_t rbar;		/* Region Base Address Register */
+	volatile uint32_t rlar;		/* Region Limit Address Register */
+};
+
+/* Define SAU base address from memory map */
+#define _SAU_BASE_ADDR		(_PPB_INT_SAU)
+#define _SAU			((struct sau_regs *)_SAU_BASE_ADDR)
+#endif /* CONFIG_PM_SAU_SAVE_RESTORE */
+
 #ifdef CONFIG_PM_S2RAM
 
 struct __cpu_context {
