@@ -124,6 +124,22 @@
 			exit-latency-us = <60000>;
 			status = "disabled";
 		};
+		standby_s2ram: standby_s2ram {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-ram";
+			min-residency-us = <1000000>;
+			exit-latency-us = <10000>;
+			substate-id = <0>;
+			status = "disabled";
+		};
+		stop_s2ram: stop_s2ram {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-ram";
+			min-residency-us = <2000000>;
+			exit-latency-us = <20000>;
+			substate-id = <1>;
+			status = "disabled";
+		};
 	};
 
 	cpus {
@@ -135,7 +151,7 @@
 			d-cache-line-size = <32>;
 			i-cache-line-size = <32>;
 			reg = <0>;
-			cpu-power-states = <&subsys_off>;
+			cpu-power-states = <&subsys_off &standby_s2ram &stop_s2ram>;
 		};
 	};
 
