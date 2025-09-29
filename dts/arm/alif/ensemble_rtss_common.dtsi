@@ -143,7 +143,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm0 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
@@ -179,7 +179,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm1 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
@@ -215,7 +215,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm2 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
@@ -251,7 +251,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm3 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
@@ -287,7 +287,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm4 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
@@ -323,7 +323,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm5 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
@@ -359,7 +359,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm6 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
@@ -395,7 +395,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm7 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
@@ -431,7 +431,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm8 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
@@ -467,7 +467,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm9 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
@@ -503,7 +503,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm10 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
@@ -539,7 +539,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm11 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";

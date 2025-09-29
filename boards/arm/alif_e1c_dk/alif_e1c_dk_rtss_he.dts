@@ -21,15 +21,7 @@
 
 	aliases {
 		led0 = &aled0;
-		pwm-led0 = &pwm_ut2;
 		sw0 = &button0;
-	};
-	pwmleds {
-		compatible = "pwm-leds";
-		pwm_ut2: pwm_ut2 {
-			pwms = <&pwm2 1 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
-			label = "UT2 PWM";
-		};
 	};
 	buttons {
 		compatible = "gpio-keys";
@@ -47,14 +39,4 @@
 
 &uart2 {
 	status = "okay";
-};
-
-&utimer2 {
-	status = "okay";
-
-	pwm2: pwm {
-		pinctrl-0 = < &pinctrl_ut2 >;
-		pinctrl-names = "default";
-		status = "okay";
-	};
 };
