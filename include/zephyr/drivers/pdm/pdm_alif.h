@@ -57,7 +57,7 @@ struct PDM_CH_CONFIG {
 /**
  * @brief		PDM channel configurations
  * @param		dev	: Pointer to the device structure for the driver instance.
- * @param cnfg: Pointer to PDM_CH_CONFIG
+ * @param		cnfg	: Pointer to PDM_CH_CONFIG
  */
 void pdm_channel_config(const struct device *dev, struct PDM_CH_CONFIG *cnfg);
 
@@ -82,23 +82,23 @@ void pdm_set_ch_phase(const struct device *dev, uint8_t ch_num, uint32_t ch_phas
  * @brief	PDM channel gain control
  * @param	dev		: Pointer to the device structure for the driver instance.
  * @param	ch_num	: pdm channel
- * @param	ch_phase	: pdm channel gain control value
+ * @param	ch_gain	: pdm channel gain control value
  */
 void pdm_set_ch_gain(const struct device *dev, uint8_t ch_num, uint32_t ch_gain);
 
 /**
  * @brief	PDM channel Peak detector threshold
- * @param	dev	 : Pointer to the device structure for the driver instance.
- * @param	ch_num : pdm channel
- * @param	ch_phase : pdm channel Peak detector threshold value
+ * @param	dev			: Pointer to the device structure for the driver instance.
+ * @param	ch_num		: pdm channel
+ * @param	ch_peak_detect_th: pdm channel Peak detector threshold value
  */
 void pdm_set_peak_detect_th(const struct device *dev, uint8_t ch_num, uint32_t ch_peak_detect_th);
 
 /**
  * @brief	PDM channel Peak detector interval
- * @param	dev		: Pointer to the device structure for the driver instance.
- * @param	ch_num	: pdm channel
- * @param	ch_phase: pdm channel Peak detector interval value
+ * @param	dev			: Pointer to the device structure for the driver instance.
+ * @param	ch_num		: pdm channel
+ * @param	ch_peak_detect_itv: pdm channel Peak detector interval value
  */
 void pdm_set_peak_detect_itv(const struct device *dev, uint8_t ch_num, uint32_t ch_peak_detect_itv);
 

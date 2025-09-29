@@ -53,7 +53,7 @@ static inline int cmp_start_compare(const struct device *dev)
  * @brief Configure the comparator
  * Configure the comparator like polarity, filer taps and windowing.
  * @param dev	: Pointer to the device structure for the driver instance.
- * @param dev	: Pointer to the parameters structure.
+ * @param params	: Pointer to the parameters structure.
  * @retval 0 If successful.
  * @retval Negative errno code if failure.
  */
@@ -68,11 +68,10 @@ static inline int cmp_configure(const struct device *dev, struct cmp_params *par
 }
 
 /**
- * @brief	comparator windown control
- * set the windownig control for the driver.
+ * @brief	Comparator window control
+ * Set the windowing control for the driver.
  * @param dev	: Pointer to the device structure for the driver instance.
- * @param windowing : Enable or disabling of the window control
- * @return		: NONE
+ * @param window_ctrl : Enable or disable window control (bitfield)
  */
 __syscall void cmp_window_ctrl(const struct device *dev, uint32_t window_ctrl);
 
