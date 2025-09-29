@@ -4,7 +4,6 @@
 config INTEL_EMMC_HOST
 	bool "EMMC driver"
 	select SDHC_SUPPORTS_NATIVE_MODE
-	select SDHC_SUPPORTS_UHS
 	select EVENTS
 	default y
 	depends on DT_HAS_INTEL_EMMC_HOST_ENABLED

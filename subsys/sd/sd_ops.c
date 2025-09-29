@@ -570,13 +570,13 @@ int card_read_blocks(struct sd_card *card, uint8_t *rbuf, uint32_t start_block, 
 	if ((((uintptr_t)rbuf) & (CONFIG_SDHC_BUFFER_ALIGNMENT - 1)) != 0) {
 		/* lower bits of address are set, not aligned. Use internal buffer */
 		LOG_DBG("Unaligned buffer access to SD card may incur performance penalty");
-		if (sizeof(card->card_buffer) < card->block_size) {
+		if (CONFIG_SD_BUFFER_SIZE < card->block_size) {
 			LOG_ERR("Card buffer size needs to be increased for "
 				"unaligned writes to work");
 			k_mutex_unlock(&card->lock);
 			return -ENOBUFS;
 		}
-		rlen = sizeof(card->card_buffer) / card->block_size;
+		rlen = CONFIG_SD_BUFFER_SIZE / card->block_size;
 		sector = 0;
 		buf_offset = rbuf;
 		while (sector < num_blocks) {
@@ -735,13 +735,13 @@ int card_write_blocks(struct sd_card *card, const uint8_t *wbuf, uint32_t start_
 	if ((((uintptr_t)wbuf) & (CONFIG_SDHC_BUFFER_ALIGNMENT - 1)) != 0) {
 		/* lower bits of address are set, not aligned. Use internal buffer */
 		LOG_DBG("Unaligned buffer access to SD card may incur performance penalty");
-		if (sizeof(card->card_buffer) < card->block_size) {
+		if (CONFIG_SD_BUFFER_SIZE < card->block_size) {
 			LOG_ERR("Card buffer size needs to be increased for "
 				"unaligned writes to work");
 			k_mutex_unlock(&card->lock);
 			return -ENOBUFS;
 		}
-		wlen = sizeof(card->card_buffer) / card->block_size;
+		wlen = CONFIG_SD_BUFFER_SIZE / card->block_size;
 		sector = 0;
 		buf_offset = wbuf;
 		while (sector < num_blocks) {

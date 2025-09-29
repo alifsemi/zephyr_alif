@@ -80,11 +80,12 @@
 		reg = <0x48102000 0xF70>;
 		interrupt-parent = <&nvic>;
 		interrupts = <102 3>;
-		max-bus-freq = <50000000U>;
+		max-bus-freq = <25000000U>;
 		min-bus-freq = <400000>;
-		power-delay-ms = <500>;
+		power-delay-ms = <1000>;
 		pinctrl-0 = <&pinctrl_sdmmc>;
 		pinctrl-names = "default";
+		reset-gpios = <&gpio7 0 GPIO_ACTIVE_HIGH>;
 		mmc {
 			compatible = "zephyr,sdmmc-disk";
 			bus-width = <4>;

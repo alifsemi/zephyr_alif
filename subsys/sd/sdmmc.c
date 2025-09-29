@@ -649,7 +649,8 @@ int sdmmc_card_init(struct sd_card *card)
 	if (card->flags & SD_SDHC_FLAG) {
 		if (IS_ENABLED(CONFIG_SDHC_SUPPORTS_NATIVE_MODE)) {
 			/* High capacity card. See if host supports 1.8V */
-			if (card->host_props.host_caps.vol_180_support) {
+			if ((card->host_props.host_caps.vol_180_support) &&
+					(IS_ENABLED(CONFIG_SD_UHS_PROTOCOL))) {
 				ocr_arg |= SD_OCR_SWITCH_18_REQ_FLAG;
 			}
 		}

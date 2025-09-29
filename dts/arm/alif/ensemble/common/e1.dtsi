@@ -81,7 +81,7 @@
 		reg = <0x48102000 0xF70>;
 		interrupt-parent = <&nvic>;
 		interrupts = <102 3>;
-		max-bus-freq = <50000000U>;
+		max-bus-freq = <25000000U>;
 		min-bus-freq = <400000>;
 		power-delay-ms = <500>;
 		pinctrl-0 = <&pinctrl_sdmmc>;

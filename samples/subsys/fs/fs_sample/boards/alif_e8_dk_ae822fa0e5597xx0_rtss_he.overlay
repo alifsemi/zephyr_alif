@@ -7,7 +7,7 @@ ns: &ns {
 	status = "okay";
 };
 
-&gpio7 {
+&gpio14 {
 	status = "okay";
 };
 

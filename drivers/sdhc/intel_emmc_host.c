@@ -1241,7 +1241,6 @@ static void emmc_isr(const struct device *dev)
 {
 	struct emmc_data *emmc = dev->data;
 	volatile struct emmc_reg *regs = (struct emmc_reg *)DEVICE_MMIO_GET(dev);
-	uint16_t normal_int_stat = regs->normal_int_stat;
 
 	if (regs->normal_int_stat & EMMC_HOST_CMD_COMPLETE) {
 		regs->normal_int_stat |= EMMC_HOST_CMD_COMPLETE;
