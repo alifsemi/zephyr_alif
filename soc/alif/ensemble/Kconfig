@@ -27,6 +27,8 @@ config RTSS_HE
 	select HAS_ALIF_SE_SERVICES
 	select HAS_PM
 	select HAS_POWEROFF
+	select CORTEX_M_SYSTICK_RESET_BY_LPM if (PM && CORTEX_M_SYSTICK && \
+						 !CORTEX_M_SYSTICK_LPM_TIMER_NONE)
 
 config RTSS_HP
 	select ARM
@@ -47,6 +49,8 @@ config RTSS_HP
 	select HAS_ALIF_SE_SERVICES
 	select HAS_PM
 	select HAS_POWEROFF
+	select CORTEX_M_SYSTICK_RESET_BY_LPM if (PM && CORTEX_M_SYSTICK && \
+						 !CORTEX_M_SYSTICK_LPM_TIMER_NONE)
 
 config APSS
 	select ARM
