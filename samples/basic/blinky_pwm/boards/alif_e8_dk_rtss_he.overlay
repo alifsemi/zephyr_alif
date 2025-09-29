@@ -21,7 +21,7 @@
 	status = "okay";
 
 	pwm5: pwm5 {
-		pinctrl-0 = < &pinctrl_ut5 >;
+		pinctrl-0 = <&pinctrl_ut5>;
 		pinctrl-names = "default";
 		status = "okay";
 	};

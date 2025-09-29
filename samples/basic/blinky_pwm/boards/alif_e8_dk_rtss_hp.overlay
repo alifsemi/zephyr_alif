@@ -23,7 +23,7 @@
 	status = "okay";
 
 	pwm10: pwm10 {
-		pinctrl-0 = < &pinctrl_ut10 >;
+		pinctrl-0 = <&pinctrl_ut10>;
 		pinctrl-names = "default";
 		status = "okay";
 	};
