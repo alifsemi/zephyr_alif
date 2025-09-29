@@ -607,7 +607,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm0 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
@@ -643,7 +643,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm1 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
@@ -679,7 +679,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm2 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
@@ -715,7 +715,7 @@
 			status = "disabled";
 		};
 
-		pwm {
+		pwm3 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
 			status = "disabled";
