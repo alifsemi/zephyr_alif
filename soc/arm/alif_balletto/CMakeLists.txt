@@ -10,19 +10,15 @@ zephyr_sources_ifdef(CONFIG_PM_RTSS
   common/power_rtss.c
   )
 
-zephyr_sources_ifdef(CONFIG_ARM_SECURE_FIRMWARE common/tgu_M55.c)
-
 if(CMAKE_C_COMPILER_ID STREQUAL "ARMClang")
-if(CONFIG_ARM_SECURE_FIRMWARE)
   zephyr_linker_section_configure(SECTION ${CONFIG_NONSECURE0_REGION} INPUT ".alif_ns" )
   zephyr_linker_section_configure(SECTION ${CONFIG_NONSECURE0_REGION} INPUT ".alif_ns.*" )
-endif()
 if(CONFIG_OSPI0_XIP_REGION)
   zephyr_linker_section_configure(SECTION ${CONFIG_OSPI0_XIP_REGION} INPUT ".alif_extflash_OSPI0" )
   zephyr_linker_section_configure(SECTION ${CONFIG_OSPI0_XIP_REGION} INPUT ".alif_extflash_OSPI0.*" )
 endif()
 else()
-  zephyr_linker_sources_ifdef(CONFIG_ARM_SECURE_FIRMWARE SECTIONS common/alif_ns.ld)
+  zephyr_linker_sources(SECTIONS common/alif_ns.ld)
   zephyr_linker_sources(SECTIONS common/alif_ospi.ld)
 endif()
 

@@ -134,7 +134,7 @@ config FLASH_BASE_ADDRESS
 
 config  NONSECURE0_REGION
 	string
-	default "NS" if ARM_SECURE_FIRMWARE && $(dt_nodelabel_enabled,ns)
+	default "NON_SECURE0" if $(dt_nodelabel_enabled,ns)
 	help
 	    Provide config Non-Secure region
 

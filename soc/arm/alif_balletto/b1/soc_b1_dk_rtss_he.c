@@ -14,11 +14,6 @@
 #endif
 #include <zephyr/cache.h>
 
-#ifdef CONFIG_ARM_SECURE_FIRMWARE
-#include "partition_M55_HE.h"
-#include "tgu_M55.h"
-#endif
-
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 
@@ -218,11 +213,6 @@ static int balletto_b1_dk_rtss_he_init(void)
 	uint32_t reg_val = sys_read32(CGU_CLK_ENA);
 	reg_val |= ((1 << 20) | (1 << 23));
 	sys_write32(reg_val, CGU_CLK_ENA);
-#endif
-
-#ifdef CONFIG_ARM_SECURE_FIRMWARE
-	alif_tz_sau_setup();
-	alif_tgu_setup();
 #endif
 
 	return 0;
