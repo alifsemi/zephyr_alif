@@ -162,6 +162,13 @@ static int soc_init(void)
 	sys_set_bits(EXPMST_PERIPH_CLK_EN, BIT(16));
 #endif
 
+#if (DT_NODE_HAS_STATUS(DT_NODELABEL(pdm), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(lppdm), okay))
+	if (IS_ENABLED(CONFIG_SOC_SERIES_E8)) {
+		/* enable the HFOSCx2 clock */
+		sys_set_bits(CGU_CLK_ENA, BIT(24));
+	}
+#endif
+
 	return 0;
 }
 
