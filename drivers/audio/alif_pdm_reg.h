@@ -33,7 +33,6 @@
 #define PDM_CHANNEL_ENABLE        (0xFFU)       /* To check the which channel is enabled*/
 
 #define PDM_CLK_MODE              (16U)  /* PDM clock frequency mode  */
-#define PDM_MAX_FIR_COEFFICIENT   (18U)  /* PDM channel FIR length  */
 #define MAX_DATA_ITEMS            (8U)   /* Max data items      */
 #define MAX_NUM_CHANNELS          (8U)   /* Max number of channel   */
 #define MAX_QUEUE_LEN             (100U) /* Max Queue length      */
