@@ -1,0 +1,13 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/dts-v1/;
+#include "alif_b1_dk_rtss_he.dts"
+
+&pinctrl_lpuart {
+	group0 {
+		pinmux = <PIN_P2_0__LPUART_RX_A>,
+		<PIN_P7_1__LPUART_TX_B>;
+	};
+};
