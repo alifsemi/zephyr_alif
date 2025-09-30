@@ -8,4 +8,4 @@ zephyr_sources_ifdef(CONFIG_SOC_B1_FPGA_RTSS_HE soc_b1_fpga_rtss_he.c)
 zephyr_sources_ifdef(CONFIG_SOC_B1_DK_RTSS_HE soc_b1_dk_rtss_he.c)
 #endif
 
-set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/include/zephyr/arch/arm/cortex_m/scripts/linker.ld CACHE INTERNAL "")
+set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/soc/arm/alif_balletto/common/linker.ld CACHE INTERNAL "")
