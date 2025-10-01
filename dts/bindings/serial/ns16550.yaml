@@ -22,6 +22,10 @@ properties:
     type: int
     description: Size of FIFO
 
+  fifo-preserve:
+    type: boolean
+    description: Retain FIFO content when initializing the device
+
   io-mapped:
     type: boolean
     description: specify registers are IO mapped or memory mapped
