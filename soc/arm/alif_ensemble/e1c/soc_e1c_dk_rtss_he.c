@@ -10,9 +10,63 @@
 #include <zephyr/linker/linker-defs.h>
 #ifdef CONFIG_REBOOT
 #include <zephyr/sys/reboot.h>
-#include <se_service.h>
 #endif
+#include <se_service.h>
 #include <zephyr/cache.h>
+
+#define HOST_SYSTOP_PWR_REQ_LOGIC_ON_MEM_ON 0x12
+
+/**
+ * Set the RUN profile parameters for this application.
+ */
+static int pm_set_run_params(void)
+{
+	run_profile_t runp;
+
+	runp.power_domains =
+		PD_VBAT_AON_MASK | PD_SYST_MASK | PD_SSE700_AON_MASK | PD_DBSS_MASK | PD_SESS_MASK;
+	runp.dcdc_voltage = 825;
+	runp.dcdc_mode = DCDC_MODE_PFM_FORCED;
+	runp.aon_clk_src = CLK_SRC_LFXO;
+	runp.run_clk_src = CLK_SRC_PLL;
+	runp.cpu_clk_freq = CLOCK_FREQUENCY_160MHZ;
+	runp.phy_pwr_gating = LDO_PHY_MASK;
+	runp.ip_clock_gating = LP_PERIPH_MASK;
+	runp.vdd_ioflex_3V3 = IOFLEX_LEVEL_1V8;
+	runp.scaled_clk_freq = SCALED_FREQ_XO_HIGH_DIV_38_4_MHZ;
+
+	runp.memory_blocks = MRAM_MASK;
+	runp.memory_blocks |= SRAM2_MASK | SRAM3_MASK;
+	runp.memory_blocks |= SERAM_1_MASK | SERAM_2_MASK | SERAM_3_MASK | SERAM_4_MASK;
+	runp.memory_blocks |=
+		SRAM4_1_MASK | SRAM4_2_MASK | SRAM4_3_MASK | SRAM4_4_MASK; /* M55-HE ITCM */
+	runp.memory_blocks |= SRAM5_1_MASK | SRAM5_2_MASK | SRAM5_3_MASK | SRAM5_4_MASK |
+			      SRAM5_5_MASK; /* M55-HE DTCM */
+
+	return se_service_set_run_cfg(&runp);
+}
+
+/*
+ * This function will be invoked in the PRE_KERNEL_2 phase of the init
+ * routine to prevent sleep during startup.
+ */
+static int soc_run_profile(void)
+{
+	int ret;
+	uint32_t host_bsys_pwr_req = sys_read32(HOST_BSYS_PWR_REQ);
+
+	sys_write32(host_bsys_pwr_req | HOST_SYSTOP_PWR_REQ_LOGIC_ON_MEM_ON, HOST_BSYS_PWR_REQ);
+
+	ret = pm_set_run_params();
+	if (ret) {
+		return ret;
+	}
+
+	sys_write32(host_bsys_pwr_req, HOST_BSYS_PWR_REQ);
+
+	return 0;
+}
+SYS_INIT(soc_run_profile, PRE_KERNEL_1, 2); /*CONFIG_SE_SERVICE_INIT_PRIORITY + 1 */
 
 /**
  * @brief Perform basic hardware initialization at boot.
