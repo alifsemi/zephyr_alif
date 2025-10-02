@@ -792,7 +792,7 @@ static int video_cam_init(const struct device *dev)
 	}
 
 	if ((!IS_ENABLED(CONFIG_SOC_E7_DK_RTSS_HE) && !IS_ENABLED(CONFIG_SOC_E1C_DK_RTSS_HE) &&
-	     !IS_ENABLED(CONFIG_SOC_B1_DK_RTSS_HE)) &&
+	     !IS_ENABLED(CONFIG_SOC_B1_DK_RTSS_HE) && !IS_ENABLED(CONFIG_SOC_B1_DK_RTSS_HE_A5)) &&
 	    config->is_lpcam) {
 		LOG_ERR("LP-CAM only accessible from HE-core. Aborting");
 		return -ENODEV;
