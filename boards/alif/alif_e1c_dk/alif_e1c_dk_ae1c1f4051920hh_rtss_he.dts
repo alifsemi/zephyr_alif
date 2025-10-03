@@ -53,6 +53,10 @@
 	status = "okay";
 };
 
+&gpio5 {
+	status = "okay";
+};
+
 &uart2 {
 	status = "okay";
 };
