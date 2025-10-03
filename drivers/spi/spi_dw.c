@@ -43,6 +43,8 @@ LOG_MODULE_REGISTER(spi_dw);
 
 #ifdef CONFIG_SPI_DW_USE_DMA
 #include <zephyr/drivers/dma.h>
+#define SPI_DW_DMA_FULL_DUPLEX 2
+#define SPI_DW_DMA_SEMAPHORE_COUNT SPI_DW_DMA_FULL_DUPLEX
 #endif
 
 
@@ -68,21 +70,6 @@ static void completed(const struct device *dev, int error)
 	}
 
 out:
-#ifdef CONFIG_SPI_DW_USE_DMA
-	if (info->dma_tx.enabled || info->dma_rx.enabled) {
-		/* Disabling interrupts */
-		write_imr(info, DW_SPI_IMR_MASK);
-		/* Disabling the controller */
-		clear_bit_ssienr(info);
-
-		spi->dma_cb_status = error;
-		k_sem_give(&spi->dma_sem);
-		LOG_DBG("SPI:%p DMA transaction finished %s error",
-			    dev, error ? "with" : "without");
-		return;
-	}
-#endif
-
 	/* need to give time for FIFOs to drain before issuing more commands */
 	while (test_bit_sr_busy(info)) {
 	}
@@ -92,12 +79,24 @@ out:
 	/* Disabling the controller */
 	clear_bit_ssienr(info);
 
+#ifdef CONFIG_SPI_DW_USE_DMA
+	if (info->dma_rx.enabled || info->dma_tx.enabled) {
+		/* Disable DMA */
+		write_dmacr(info, 0);
+	}
+#endif
+
 	if (!spi_dw_is_slave(spi)) {
 		if (spi_cs_is_gpio(ctx->config)) {
 			spi_context_cs_control(ctx, false);
 		} else {
 			write_ser(info, 0);
 		}
+	} else {
+		uint32_t reg_data = read_ctrlr0(info);
+
+		reg_data &= (spi->dwc_ssi) ? ~DWC_SSI_SPI_CTRLR0_SLV_OE : ~DW_SPI_CTRLR0_SLV_OE;
+		write_ctrlr0(info, reg_data);
 	}
 
 	LOG_DBG("SPI transaction completed %s error",
@@ -201,124 +200,24 @@ static void pull_data(const struct device *dev)
 }
 
 #ifdef CONFIG_SPI_DW_USE_DMA
-static uint32_t spi_dw_dma_calc_dmardlr(const struct spi_dw_config *info, struct spi_dw_data *spi)
-{
-	uint32_t dw_spi_rxftlr_dflt = (info->fifo_depth * 1) / 2;
-	uint32_t burst_length =  dw_spi_rxftlr_dflt ? dw_spi_rxftlr_dflt : 1;
-	uint32_t total_burst_length = spi_context_max_continuous_chunk(&spi->ctx);
-
-	while (total_burst_length % burst_length) {
-		burst_length--;
-	}
-	return burst_length - 1;
-}
-
 static void spi_dw_dma_callback(const struct device *dma_dev, void *user_data,
 	uint32_t channel, int status)
 {
 	const struct device *dev = (const struct device *)user_data;
-	const struct spi_dw_config *info = dev->config;
 	struct spi_dw_data *spi = dev->data;
 
-	spi->dma_cb_status = status;
-
-	if (channel == info->dma_tx.ch && !spi_context_rx_buf_on(&spi->ctx))
-		k_sem_give(&spi->dma_sem);
-
-	if (channel == info->dma_rx.ch && spi_context_rx_buf_on(&spi->ctx))
-		k_sem_give(&spi->dma_sem);
-
+	/*
+	 * Always preserve the first error in dma_cb_status.
+	 * Always signal the waiting thread for both RX and TX completions.
+	 */
 	if (status < 0) {
-		LOG_ERR("SPI:%p dma:%p ch:%d callback gets error: %d", dev, dma_dev, channel,
-			status);
-	} else {
-		if (channel == info->dma_tx.ch) {
-			spi_context_update_tx(&spi->ctx,
-				spi->dfs,
-				spi_context_max_continuous_chunk(&spi->ctx));
-		}
-		if (channel == info->dma_rx.ch) {
-			spi_context_update_rx(&spi->ctx,
-				spi->dfs,
-				spi_context_max_continuous_chunk(&spi->ctx));
-		}
-		LOG_DBG("SPI:%p dma:%p ch:%d transaction completed: %d", dev, dma_dev, channel,
-			status);
+		LOG_ERR("SPI:%p dma:%p ch:%d callback error: %d", dev, dma_dev, channel, status);
 	}
-}
 
-static int spi_dw_start_dma_ch(const struct device *dev)
-{
-	const struct spi_dw_config *info = dev->config;
-	struct spi_dw_data *spi = dev->data;
-	struct dma_config dma_cfg = { 0 };
-	struct dma_block_config dma_block_cfg = { 0 };
-	int ret = 0;
-	uint32_t dw_spi_txftlr_dflt = (info->fifo_depth * 1) / 2;
-
-	dma_cfg.block_count = 1U;
-	dma_cfg.dma_callback = spi_dw_dma_callback;
-	dma_cfg.error_callback_en = 1U;
-	dma_cfg.user_data = (void *)dev;
-	dma_cfg.head_block = &dma_block_cfg;
-	dma_cfg.source_data_size = dma_cfg.dest_data_size = spi->dfs >> 1;
-	dma_block_cfg.block_size = spi->dfs *
-			spi_context_max_continuous_chunk(&spi->ctx);
-
-	if (spi_context_rx_buf_on(&spi->ctx)) {
-		dma_cfg.channel_direction = PERIPHERAL_TO_MEMORY;
-
-		dma_cfg.dest_burst_length = spi_dw_dma_calc_dmardlr(info, spi);
-		write_dmardlr(info, dma_cfg.dest_burst_length);
-		LOG_DBG("SPI:%p DMARDLR: %u", dev, dma_cfg.dest_burst_length);
-
-		dma_cfg.dma_slot = info->dma_rx.periph;
-		dma_cfg.source_burst_length = dma_cfg.dest_burst_length;
-
-		dma_block_cfg.source_address = info->regs + DW_SPI_REG_DR;
-		dma_block_cfg.dest_address = POINTER_TO_UINT(spi->ctx.rx_buf);
-		dma_block_cfg.dest_addr_adj = DMA_ADDR_ADJ_INCREMENT;
-		dma_block_cfg.source_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
-
-		ret = dma_config(info->dma_dev, info->dma_rx.ch, &dma_cfg);
-		if (ret < 0) {
-			LOG_ERR("SPI:%p dma_config %p failed %d\n", dev, info->dma_dev, ret);
-			return ret;
-		}
-
-		ret = dma_start(info->dma_dev, info->dma_rx.ch);
-		if (ret < 0) {
-			LOG_ERR("SPI:%p dma_start %p failed %d\n", dev, info->dma_dev, ret);
-			return ret;
-		}
+	if (spi->dma_cb_status == 0) {
+		spi->dma_cb_status = status;
 	}
-	if (spi_context_tx_buf_on(&spi->ctx)) {
-		dma_cfg.channel_direction = MEMORY_TO_PERIPHERAL;
-		dma_cfg.dest_burst_length = info->fifo_depth - dw_spi_txftlr_dflt - 1;
-		write_dmatdlr(info, dw_spi_txftlr_dflt);
-		LOG_DBG("SPI:%p DMATDLR: %u", dev, dma_cfg.dest_burst_length);
-
-		dma_cfg.dma_slot = info->dma_tx.periph;
-		dma_cfg.source_burst_length = dma_cfg.dest_burst_length;
-
-		dma_block_cfg.source_address = POINTER_TO_UINT(spi->ctx.tx_buf);
-		dma_block_cfg.dest_address = info->regs + DW_SPI_REG_DR;
-		dma_block_cfg.dest_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
-		dma_block_cfg.source_addr_adj = DMA_ADDR_ADJ_INCREMENT;
-
-		ret = dma_config(info->dma_dev, info->dma_tx.ch, &dma_cfg);
-		if (ret < 0) {
-			LOG_ERR("SPI:%p dma_config %p failed %d\n", dev, info->dma_dev, ret);
-			return ret;
-		}
-
-		ret = dma_start(info->dma_dev, info->dma_tx.ch);
-		if (ret < 0) {
-			LOG_ERR("SPI:%p dma_start %p failed %d\n", dev, info->dma_dev, ret);
-			return ret;
-		}
-	}
-	return ret;
+	k_sem_give(&spi->dma_sem);
 }
 
 static int spi_dw_dma_transceive(const struct device *dev,
@@ -327,81 +226,208 @@ static int spi_dw_dma_transceive(const struct device *dev,
 {
 	const struct spi_dw_config *info = dev->config;
 	struct spi_dw_data *spi = dev->data;
-	uint32_t reg_data;
-	int ret;
+	int ret = 0;
+	static uint32_t dummy_tx = 0xFF, dummy_rx;
+	size_t tx_idx = 0, rx_idx = 0;
+	size_t tx_off = 0, rx_off = 0;
 
-	reg_data = read_dmacr(info);
-	if (info->dma_tx.enabled && tx_bufs && tx_bufs->buffers) {
+	/* Determine buffer counts safely */
+	size_t tx_count = tx_bufs ? tx_bufs->count : 0;
+	size_t rx_count = rx_bufs ? rx_bufs->count : 0;
+	bool is_fullduplex = tx_count && rx_count;
+	bool is_tx_req = is_fullduplex || tx_count;
+	bool is_rx_req = is_fullduplex || rx_count;
+
+	uint32_t reg_data = read_dmacr(info);
+
+	if (info->dma_tx.enabled && tx_count) {
 		reg_data |= DW_SPI_DMACR_TDMAE;
 	}
-	if (info->dma_rx.enabled && rx_bufs && rx_bufs->buffers) {
+	if (info->dma_rx.enabled && rx_count) {
 		reg_data |= DW_SPI_DMACR_RDMAE;
 	}
 
-	/* Disabling the controller */
 	clear_bit_ssienr(info);
-
 	write_dmacr(info, reg_data);
-
-	/* Enabling the controller */
 	set_bit_ssienr(info);
 
-	ret = spi_dw_start_dma_ch(dev);
-	if (ret) {
-		goto dma_out;
+	/* Do a dummy write in case of rx only */
+	if (!spi_dw_is_slave(spi) && (!tx_bufs || !tx_bufs->buffers)) {
+		write_dr(info, 0x0);
 	}
 
-	k_sem_take(&spi->dma_sem, K_FOREVER);
+	while ((tx_idx < tx_count) || (rx_idx < rx_count)) {
+		/* Reset semaphore before each chunk transfer */
+		k_sem_reset(&spi->dma_sem);
+		const struct spi_buf *txb = (tx_bufs && tx_idx < tx_count) ?
+						&tx_bufs->buffers[tx_idx] : NULL;
+		const struct spi_buf *rxb = (rx_bufs && rx_idx < rx_count) ?
+						&rx_bufs->buffers[rx_idx] : NULL;
+		size_t tx_len = txb ? txb->len - tx_off : 0;
+		size_t rx_len = rxb ? rxb->len - rx_off : 0;
+		size_t tx_words = tx_len / spi->dfs;
+		size_t rx_words = rx_len / spi->dfs;
+		size_t chunk = (tx_words && rx_words) ?
+					MIN(tx_words, rx_words) : (tx_words ? tx_words : rx_words);
 
-	if (spi->dma_cb_status < 0) {
+		if (chunk == 0) {
+			if (tx_len == 0 && txb) {
+				tx_idx++;
+				tx_off = 0;
+			}
+			if (rx_len == 0 && rxb) {
+				rx_idx++;
+				rx_off = 0;
+			}
+			continue;
+		}
 
-		if (spi_context_rx_buf_on(&spi->ctx)) {
-			ret = dma_stop(info->dma_dev, info->dma_rx.ch);
+		const void *tx_ptr = (txb && txb->buf) ?
+					(uint8_t *)txb->buf + tx_off : (uint8_t *)&dummy_tx;
+		void *rx_ptr = (rxb && rxb->buf) ?
+					(uint8_t *)rxb->buf + rx_off : (uint8_t *)&dummy_rx;
+
+		/* Setup DMA for this chunk */
+		struct dma_config dma_cfg = { 0 };
+		struct dma_block_config dma_block_cfg = { 0 };
+
+		dma_cfg.block_count = 1U;
+		dma_cfg.dma_callback = spi_dw_dma_callback;
+		dma_cfg.error_callback_en = 1U;
+		dma_cfg.user_data = (void *)dev;
+		dma_cfg.head_block = &dma_block_cfg;
+		dma_cfg.source_data_size = dma_cfg.dest_data_size = spi->dfs >> 1;
+		dma_block_cfg.block_size = chunk * spi->dfs;
+
+		if (info->dma_rx.enabled && is_rx_req) {
+			uint32_t dma_rdlr;
+
+			if (rx_ptr == &dummy_rx) {
+				dma_rdlr = 0;
+			} else {
+				uint32_t dw_spi_rxftlr_dflt = (info->fifo_depth * 1) / 2;
+				uint32_t burst_length =  dw_spi_rxftlr_dflt ?
+								dw_spi_rxftlr_dflt : 1;
+				/* Adjust burst length to be a factor of chunk size */
+				while (chunk % burst_length) {
+					burst_length--;
+				}
+
+				dma_rdlr = burst_length - 1;
+			}
+			write_dmardlr(info, dma_rdlr);
+			dma_cfg.dest_burst_length = dma_rdlr;
+			dma_cfg.source_burst_length = dma_rdlr;
+			dma_cfg.channel_direction = PERIPHERAL_TO_MEMORY;
+			dma_cfg.dma_slot = info->dma_rx.periph;
+			dma_block_cfg.source_address = info->regs + DW_SPI_REG_DR;
+			dma_block_cfg.dest_address = (uintptr_t)rx_ptr;
+			dma_block_cfg.dest_addr_adj = (rx_ptr == &dummy_rx) ?
+						DMA_ADDR_ADJ_NO_CHANGE : DMA_ADDR_ADJ_INCREMENT;
+			dma_block_cfg.source_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
+			ret = dma_config(info->dma_dev, info->dma_rx.ch, &dma_cfg);
 			if (ret < 0) {
-				LOG_ERR("SPI:%p dma stop %p failed for rx %d\n",
-					    dev, info->dma_dev, ret);
+				LOG_ERR("SPI:%p dma_config %p failed %d\n",
+					dev, info->dma_dev, ret);
+				goto dma_out;
+			}
+			ret = dma_start(info->dma_dev, info->dma_rx.ch);
+			if (ret < 0) {
+				LOG_ERR("SPI:%p dma_start %p failed %d\n", dev, info->dma_dev, ret);
+				goto dma_out;
 			}
 		}
-		if (spi_context_tx_buf_on(&spi->ctx)) {
-			ret = dma_stop(info->dma_dev, info->dma_tx.ch);
+
+		if (info->dma_tx.enabled && is_tx_req) {
+			uint32_t dw_spi_txftlr_dflt = (info->fifo_depth * 1) / 2;
+
+			write_dmatdlr(info, dw_spi_txftlr_dflt);
+			dma_cfg.channel_direction = MEMORY_TO_PERIPHERAL;
+			dma_cfg.dma_slot = info->dma_tx.periph;
+			if (tx_ptr == &dummy_tx) {
+				dma_cfg.source_burst_length = dma_cfg.dest_burst_length = 0;
+			} else {
+				uint32_t burst_length =  dw_spi_txftlr_dflt ?
+								dw_spi_txftlr_dflt : 1;
+				/* Adjust burst length to be a factor of chunk size */
+				while (chunk % burst_length) {
+					burst_length--;
+				}
+				dma_cfg.source_burst_length = burst_length - 1;
+				dma_cfg.dest_burst_length = dma_cfg.source_burst_length;
+			}
+			dma_block_cfg.source_address = (uintptr_t)tx_ptr;
+			dma_block_cfg.dest_address = info->regs + DW_SPI_REG_DR;
+			dma_block_cfg.dest_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
+			dma_block_cfg.source_addr_adj = (tx_ptr == &dummy_tx) ?
+						DMA_ADDR_ADJ_NO_CHANGE : DMA_ADDR_ADJ_INCREMENT;
+			ret = dma_config(info->dma_dev, info->dma_tx.ch, &dma_cfg);
 			if (ret < 0) {
-				LOG_ERR("SPI:%p dma stop %p failed for tx %d\n",
-					    dev, info->dma_dev, ret);
+				LOG_ERR("SPI:%p dma_config %p failed %d\n",
+					dev, info->dma_dev, ret);
+				goto dma_out;
+			}
+			ret = dma_start(info->dma_dev, info->dma_tx.ch);
+			if (ret < 0) {
+				LOG_ERR("SPI:%p dma_start %p failed %d\n",
+					dev, info->dma_dev, ret);
+				goto dma_out;
 			}
 		}
 
-		ret = spi->dma_cb_status;
-	} else {
-		/*
-		 *  Need to give time for FIFOs to drain before
-		 *  issuing more commands
-		 */
-		while (test_bit_sr_busy(info)) {
+		/* Wait for DMA completion(s) and check for errors after each */
+		uint8_t expected_completions = (is_tx_req && is_rx_req) ?
+							SPI_DW_DMA_FULL_DUPLEX : 1;
+
+		for (uint8_t i = 0; i < expected_completions; i++) {
+			k_sem_take(&spi->dma_sem, K_FOREVER);
+			/*
+			 * Check for IRQ error first (ctx->sync_status),
+			 * then DMA error (spi->dma_cb_status)
+			 */
+			if (spi->ctx.sync_status < 0) {
+				ret = spi->ctx.sync_status;
+				break;
+			} else if (spi->dma_cb_status < 0) {
+				ret = spi->dma_cb_status;
+				break;
+			}
 		}
-#ifdef CONFIG_SPI_SLAVE
-		if (spi_context_is_slave(&spi->ctx)) {
-			return spi->ctx.recv_frames;
+		if (ret < 0) {
+			goto dma_out;
 		}
-#endif /* CONFIG_SPI_SLAVE */
+
+		tx_off += chunk * spi->dfs;
+		rx_off += chunk * spi->dfs;
+
+		/* Update spi->ctx for TX and RX after each chunk (chunk is in words) */
+		if (is_tx_req) {
+			spi_context_update_tx(&spi->ctx, spi->dfs, chunk);
+		}
+		if (is_rx_req) {
+			spi_context_update_rx(&spi->ctx, spi->dfs, chunk);
+		}
+
+		if (tx_off >= (txb ? txb->len : 0)) {
+			tx_idx++;
+			tx_off = 0;
+		}
+		if (rx_off >= (rxb ? rxb->len : 0)) {
+			rx_idx++;
+			rx_off = 0;
+		}
 	}
 
 dma_out:
-	/* Disabling interrupts */
-	write_imr(info, DW_SPI_IMR_MASK);
-
-	/* Disabling the controller */
-	clear_bit_ssienr(info);
-
-	/* Disabling the DMA */
-	write_dmacr(info, 0);
-
-	if (!spi_dw_is_slave(spi)) {
-		spi_context_cs_control(&spi->ctx, false);
+	if (info->dma_rx.enabled && ret < 0) {
+		dma_stop(info->dma_dev, info->dma_rx.ch);
+	}
+	if (info->dma_tx.enabled && ret < 0) {
+		dma_stop(info->dma_dev, info->dma_tx.ch);
 	}
 
-	spi_context_complete(&spi->ctx, dev, spi->dma_cb_status);
+	completed(dev, ret);
 	spi->dma_cb_status = 0;
-
 	return ret;
 }
 #endif
@@ -713,18 +739,13 @@ static int transceive(const struct device *dev,
 		write_dr(info, 0x0);
 	}
 
-#ifdef CONFIG_SPI_SLAVE
-	if (spi_context_is_slave(&spi->ctx) && !ret) {
-		ret = spi->ctx.recv_frames;
-	}
-#endif /* CONFIG_SPI_SLAVE */
-
 #ifdef CONFIG_SPI_DW_USE_DMA
 	if (info->dma_tx.enabled || info->dma_rx.enabled) {
 		ret = spi_dw_dma_transceive(dev, tx_bufs, rx_bufs);
-	} else
+	}
 #endif
-	{
+
+	if (!ret) {
 		ret = spi_context_wait_for_completion(&spi->ctx);
 	}
 
@@ -778,7 +799,7 @@ void spi_dw_isr(const struct device *dev)
 {
 	const struct spi_dw_config *info = dev->config;
 	uint32_t int_status;
-	int error;
+	int error = 0;
 
 	int_status = read_isr(info);
 
@@ -787,10 +808,25 @@ void spi_dw_isr(const struct device *dev)
 
 	if (int_status & DW_SPI_ISR_ERRORS_MASK) {
 		error = -EIO;
+#ifdef CONFIG_SPI_DW_USE_DMA
+		struct spi_dw_data *spi = dev->data;
+
+		if (info->dma_rx.enabled || info->dma_tx.enabled) {
+			/* Only set sync_status and signal thread context,
+			 * do not call dma_stop here
+			 */
+			spi->ctx.sync_status = error;
+			clear_interrupts(info);
+			/* Disabling interrupts */
+			write_imr(info, DW_SPI_IMR_MASK);
+			k_sem_give(&spi->dma_sem);
+			LOG_ERR("SPI %p int_status 0x%x - (tx: %d, rx: %d)", dev, int_status,
+				read_dmatdlr(info), read_dmardlr(info));
+			return;
+		}
+#endif
 		goto out;
 	}
-
-	error = 0;
 
 	if (int_status & DW_SPI_ISR_RXFIS) {
 		pull_data(dev);
@@ -842,7 +878,7 @@ int spi_dw_init(const struct device *dev)
 		}
 	}
 
-	k_sem_init(&spi->dma_sem, 0, 1);
+	k_sem_init(&spi->dma_sem, 0, SPI_DW_DMA_SEMAPHORE_COUNT);
 #endif
 
 	err = spi_context_cs_configure_all(&spi->ctx);
