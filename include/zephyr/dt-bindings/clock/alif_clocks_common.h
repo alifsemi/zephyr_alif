@@ -76,6 +76,7 @@
 #define ALIF_VBAT_CLKCTL_MODULE        0x4U
 #define ALIF_M55HE_CLKCTL_MODULE       0x5U
 #define ALIF_M55HP_CLKCTL_MODULE       0x6U
+#define ALIF_CGU_CLKCTL_MODULE         0x7U
 
 /* register offset for PER_MST_CLKCTL module */
 #define ALIF_CAMERA_PIXCLK_CTRL_REG    0x0U
@@ -131,5 +132,13 @@
 
 /* register offset for M55HP_CFG_LKCTL module */
 #define ALIF_HP_CLK_ENA_REG            0x10U
+
+/* register offset for CGU module */
+#define ALIF_OSC_CTRL_REG              0x00U
+#define ALIF_PLL_LOCK_CTRL_REG         0x04U
+#define ALIF_PLL_CLK_CTRL_REG          0x08U
+#define ALIF_ESCLK_SEL_REG             0x10U
+#define ALIF_CLK_ENA_REG               0x14U
+#define ALIF_CGU_IRQ_REG               0x20U
 
 #endif /* ZEPHYR_INCLUDE_ZEPHYR_DT_BINDINGS_CLOCK_ALIF_CLOCKS_COMMON_H_ */
