@@ -12,7 +12,6 @@ config MRAM_FLASH_ALIF
 
 menuconfig OSPI_FLASH_IS25WX
 	bool "OSPI Flash IS25WX 128/256/512 driver for Alif DevKit"
-	default y
 	depends on DT_HAS_ISSI_XSPI_FLASH_CONTROLLER_ENABLED
 	select FLASH_HAS_DRIVER_ENABLED
 	select FLASH_HAS_PAGE_LAYOUT
