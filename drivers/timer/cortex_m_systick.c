@@ -510,7 +510,9 @@ void sys_clock_idle_exit(void)
 			last_load = CYC_PER_TICK;
 			SysTick->LOAD = last_load - 1;
 			SysTick->VAL = 0; /* resets timer to last_load */
-			SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+			SysTick->CTRL |= (SysTick_CTRL_ENABLE_Msk |
+					  SysTick_CTRL_TICKINT_Msk |
+					  SysTick_CTRL_CLKSOURCE_Msk);
 		}
 	}
 }
