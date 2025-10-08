@@ -16,7 +16,7 @@
 		compatible = "ns16550";
 		reg = <0x4901e000 0x100>;
 		clocks = <&clockctrl ALIF_UART6_SYST_PCLK>;
-		interrupts = <130 0>;
+		interrupts = <130 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		pinctrl-0 = < &pinctrl_uart6 >;
@@ -28,7 +28,7 @@
 		compatible = "ns16550";
 		reg = <0x4901f000 0x100>;
 		clocks = <&clockctrl ALIF_UART7_SYST_PCLK>;
-		interrupts = <131 0>;
+		interrupts = <131 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		pinctrl-0 = < &pinctrl_uart7 >;
@@ -41,10 +41,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x4900A000 0x1000>;
 		ngpios = <8>;
-		interrupts = <259 0>, <260 0>,
-			     <261 0>, <262 0>,
-			     <263 0>, <264 0>,
-			     <265 0>, <266 0>;
+		interrupts = <259 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <260 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <261 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <262 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <263 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <264 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <265 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <266 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio10 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -56,10 +60,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x4900B000 0x1000>;
 		ngpios = <8>;
-		interrupts = <267 0>, <268 0>,
-			     <269 0>, <270 0>,
-			     <271 0>, <272 0>,
-			     <273 0>, <274 0>;
+		interrupts = <267 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <268 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <269 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <270 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <271 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <272 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <273 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <274 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio11 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -71,10 +79,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x4900C000 0x1000>;
 		ngpios = <8>;
-		interrupts = <275 0>, <276 0>,
-			     <277 0>, <278 0>,
-			     <279 0>, <280 0>,
-			     <281 0>, <282 0>;
+		interrupts = <275 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <276 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <277 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <278 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <279 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <280 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <281 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <282 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio12 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -86,10 +98,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x4900D000 0x1000>;
 		ngpios = <8>;
-		interrupts = <283 0>, <284 0>,
-			     <285 0>, <286 0>,
-			     <287 0>, <288 0>,
-			     <289 0>, <290 0>;
+		interrupts = <283 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <284 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <285 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <286 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <287 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <288 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <289 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <290 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio13 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -101,10 +117,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x4900E000 0x1000>;
 		ngpios = <8>;
-		interrupts = <291 0>, <292 0>,
-			     <293 0>, <294 0>,
-			     <295 0>, <296 0>,
-			     <297 0>, <298 0>;
+		interrupts = <291 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <292 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <293 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <294 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <295 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <296 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <297 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <298 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio14 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -119,7 +139,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_i2s2>;
 		reg = <0x49016000 0x1000>;
-		interrupts = <143 0>;
+		interrupts = <143 ALIF_DEFAULT_IRQ_PRIORITY>;
 		status = "disabled";
 	};
 
@@ -130,7 +150,7 @@
 		reg = <0x49017000 0x1000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_i2s3>;
-		interrupts = <144 0>;
+		interrupts = <144 ALIF_DEFAULT_IRQ_PRIORITY>;
 		status = "disabled";
 	};
 
@@ -142,7 +162,7 @@
 		pinctrl-0 = <&pinctrl_ospi1>;
 		pinctrl-names = "default";
 		interrupt-parent = <&nvic>;
-		interrupts = <97 0>;
+		interrupts = <97 ALIF_DEFAULT_IRQ_PRIORITY>;
 		aes-reg = <0x83003000 0x100>;
 		bus-speed = <10000000>;
 		clock-frequency = <400000000>;

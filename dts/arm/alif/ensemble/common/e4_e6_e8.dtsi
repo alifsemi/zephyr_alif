@@ -21,7 +21,7 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x4300A000 0x1000>;
 		ngpios = <8>;
-		interrupts = <476 0>;
+		interrupts = <476 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio16 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -33,7 +33,7 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x4300B000 0x1000>;
 		ngpios = <8>;
-		interrupts = <477 0>;
+		interrupts = <477 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio17 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -51,7 +51,7 @@
 		pinctrl-0 = <&pinctrl_lpi2c1>;
 		pinctrl-names = "default";
 		interrupt-parent = <&nvic>;
-		interrupts = <51 3>;
+		interrupts = <51 ALIF_DEFAULT_IRQ_PRIORITY>;
 		tx_threshold = <16>;
 		rx_threshold = <0>;
 		status = "disabled";
@@ -61,9 +61,14 @@
 		compatible = "alif,utimer";
 		reg = <0x4300D000 0x1000 0x4300C000 0x24>;
 		reg-names = "timer", "global";
-		interrupts = <351 3>, <352 3>,
-				<353 3>, <354 3>, <355 3>,
-				<356 3>, <357 3>, <358 3>;
+		interrupts = <351 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <352 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <353 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <354 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <355 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <356 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <357 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <358 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "comp_capt_a", "comp_capt_b",
 				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
 				"comp_b_buf2", "underflow", "overflow";

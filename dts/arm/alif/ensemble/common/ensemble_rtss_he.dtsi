@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <alif/common/alif_common.dtsi>
+
 &{/soc} {
 	itcm: itcm@0 {
 		compatible = "alif,itcm";
@@ -25,7 +27,7 @@
 		pinctrl-names = "default";
 		reg = <0x43000000 0x1000>;
 		interrupt-parent = <&nvic>;
-		interrupts = <46 0>;
+		interrupts = <46 ALIF_DEFAULT_IRQ_PRIORITY>;
 		clocks = <&rtss_he_clk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
@@ -40,7 +42,11 @@
 		dma-channels = <4>;
 		#dma-cells = <2>;
 		interrupt-parent = <&nvic>;
-		interrupts = <0 3>, <1 3>, <2 3>, <3 3>, <32 3>;
+		interrupts = <0 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <1 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <2 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <3 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <32 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "channel0", "channel1",
 						  "channel2", "channel3",
 						  "abort";
@@ -52,7 +58,7 @@
 		reg = <0x43008000 0x100>;
 		/* 160Mhz baud clock */
 		clock-frequency = <160000000>;
-		interrupts = <45 0>;
+		interrupts = <45 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		pinctrl-0 = < &pinctrl_lpuart >;
@@ -64,7 +70,7 @@
 	lppdm: lppdm@43002000 {
 		compatible = "alif,alif-pdm";
 		reg = <0x43002000 0x1000>;
-		interrupts = <49 0>;
+		interrupts = <49 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "warning_intr";
 		pinctrl-0 = <&pinctrl_lppdm>;
 		pinctrl-names = "default";
@@ -86,25 +92,25 @@
 	apss_rtsshe_mhu0_r: mhu@40000000 {
 		compatible = "arm,mhuv2";
 		reg = < 0x40000000 0x1000 >;
-		interrupts = < 33 3 >;
+		interrupts = < 33 ALIF_DEFAULT_IRQ_PRIORITY >;
 		interrupt-names = "rx";
 	};
 	rtsshe_apss_mhu0_s: mhu@40010000 {
 		compatible = "arm,mhuv2";
 		reg = < 0x40010000 0x1000 >;
-		interrupts = < 34 3 >;
+		interrupts = < 34 ALIF_DEFAULT_IRQ_PRIORITY >;
 		interrupt-names = "tx";
 	};
 	apss_rtsshe_mhu1_r: mhu@40020000 {
 		compatible = "arm,mhuv2";
 		reg = < 0x40020000 0x1000 >;
-		interrupts = < 35 3 >;
+		interrupts = < 35 ALIF_DEFAULT_IRQ_PRIORITY >;
 		interrupt-names = "rx";
 	};
 	rtsshe_apss_mhu1_s: mhu@40030000 {
 		compatible = "arm,mhuv2";
 		reg = < 0x40030000 0x1000 >;
-		interrupts = < 36 3 >;
+		interrupts = < 36 ALIF_DEFAULT_IRQ_PRIORITY >;
 		interrupt-names = "tx";
 	};
 };

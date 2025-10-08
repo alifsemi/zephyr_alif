@@ -9,6 +9,7 @@
 #include <zephyr/dt-bindings/timer/alif_utimer.h>
 #include <zephyr/dt-bindings/pwm/pwm.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
+#include <alif/common/alif_common.dtsi>
 
 &{/soc} {
 	clockctrl: clock-controller@4903f000 {
@@ -69,7 +70,7 @@
 	rtc0: lprtc@42000000 {
 		compatible = "snps,dw-apb-rtc";
 		reg = <0x42000000 0x1000>;
-		interrupts = <58 0>;
+		interrupts = <58 ALIF_DEFAULT_IRQ_PRIORITY>;
 		clock-frequency = <32768>;
 		prescaler = <0>;
 		load-value = <0>;
@@ -80,7 +81,7 @@
 		compatible = "intel,emmc-host";
 		reg = <0x48102000 0xF70>;
 		interrupt-parent = <&nvic>;
-		interrupts = <102 3>;
+		interrupts = <102 ALIF_DEFAULT_IRQ_PRIORITY>;
 		max-bus-freq = <25000000U>;
 		min-bus-freq = <400000>;
 		power-delay-ms = <500>;
@@ -102,56 +103,56 @@
 		seservice0r: mhu@40040000 {
 			compatible = "arm,mhuv2";
 			reg = < 0x40040000 0x1000 >;
-			interrupts = < 37 0 >;
+			interrupts = < 37 ALIF_DEFAULT_IRQ_PRIORITY >;
 			interrupt-names = "rx";
 		};
 
 		seservice0s: mhu@40050000 {
 			compatible = "arm,mhuv2";
 			reg = < 0x40050000 0x1000 >;
-			interrupts = < 38 0 >;
+			interrupts = < 38 ALIF_DEFAULT_IRQ_PRIORITY >;
 			interrupt-names = "tx";
 		};
 
 		seservice1r: mhu@40060000 {
 			compatible = "arm,mhuv2";
 			reg = < 0x40060000 0x1000 >;
-			interrupts = < 39 0 >;
+			interrupts = < 39 ALIF_DEFAULT_IRQ_PRIORITY >;
 			interrupt-names = "rx";
 		};
 
 		seservice1s: mhu@40070000 {
 			compatible = "arm,mhuv2";
 			reg = < 0x40070000 0x1000 >;
-			interrupts = < 40 0 >;
+			interrupts = < 40 ALIF_DEFAULT_IRQ_PRIORITY >;
 			interrupt-names = "tx";
 		};
 
 		rtsshp_rtsshe_mhu0_r: mhu@40080000 {
 			compatible = "arm,mhuv2";
 			reg = < 0x40080000 0x1000 >;
-			interrupts = < 41 0 >;
+			interrupts = < 41 ALIF_DEFAULT_IRQ_PRIORITY >;
 			interrupt-names = "rx";
 		};
 
 		rtsshe_rtsshp_mhu0_s: mhu@40090000 {
 			compatible = "arm,mhuv2";
 			reg = < 0x40090000 0x1000 >;
-			interrupts = < 42 0 >;
+			interrupts = < 42 ALIF_DEFAULT_IRQ_PRIORITY >;
 			interrupt-names = "tx";
 		};
 
 		rtsshp_rtsshe_mhu1_r: mhu@400a0000 {
 			compatible = "arm,mhuv2";
 			reg = < 0x400A0000 0x1000 >;
-			interrupts = < 43 0 >;
+			interrupts = < 43 ALIF_DEFAULT_IRQ_PRIORITY >;
 			interrupt-names = "rx";
 		};
 
 		rtsshe_rtsshp_mhu1_s: mhu@400b0000 {
 			compatible = "arm,mhuv2";
 			reg = < 0x400B0000 0x1000 >;
-			interrupts = < 44 0 >;
+			interrupts = < 44 ALIF_DEFAULT_IRQ_PRIORITY >;
 			interrupt-names = "tx";
 		};
 	};
@@ -159,104 +160,104 @@
 	hwsem0: hwsem@4902e000 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E000 0x10>;
-		interrupts = < 105 0 >;
+		interrupts = < 105 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem1: hwsem@4902e010 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E010 0x10>;
-		interrupts = < 106 0 >;
+		interrupts = < 106 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem2: hwsem@4902e020 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E020 0x10>;
-		interrupts = < 107 0 >;
+		interrupts = < 107 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem3: hwsem@4902e030 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E030 0x10>;
-		interrupts = < 108 0 >;
+		interrupts = < 108 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem4: hwsem@4902e040 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E040 0x10>;
-		interrupts = < 109 0 >;
+		interrupts = < 109 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem5: hwsem@4902e050 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E050 0x10>;
-		interrupts = < 110 0 >;
+		interrupts = < 110 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem6: hwsem@4902e060 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E060 0x10>;
-		interrupts = < 111 0 >;
+		interrupts = < 111 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem7: hwsem@4902e070 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E070 0x10>;
-		interrupts = < 112 0 >;
+		interrupts = < 112 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem8: hwsem@4902e080 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E080 0x10>;
-		interrupts = < 113 0 >;
+		interrupts = < 113 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem9: hwsem@4902e090 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E090 0x10>;
-		interrupts = < 114 0 >;
+		interrupts = < 114 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem10: hwsem@4902e0a0 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E0A0 0x10>;
-		interrupts = < 115 0 >;
+		interrupts = < 115 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem11: hwsem@4902e0b0 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E0B0 0x10>;
-		interrupts = < 116 0 >;
+		interrupts = < 116 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem12: hwsem@4902e0c0 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E0C0 0x10>;
-		interrupts = < 117 0 >;
+		interrupts = < 117 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem13: hwsem@4902e0d0 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E0D0 0x10>;
-		interrupts = < 118 0 >;
+		interrupts = < 118 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem14: hwsem@4902e0e0 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E0E0 0x10>;
-		interrupts = < 119 0 >;
+		interrupts = < 119 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	hwsem15: hwsem@4902e0f0 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E0F0 0x10>;
-		interrupts = < 120 0 >;
+		interrupts = < 120 ALIF_DEFAULT_IRQ_PRIORITY >;
 	};
 
 	uart0: uart@49018000 {
 		compatible = "ns16550";
 		reg = <0x49018000 0x100>;
 		clocks = <&clockctrl ALIF_UART0_SYST_PCLK>;
-		interrupts = <124 0>;
+		interrupts = <124 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		pinctrl-0 = < &pinctrl_uart0 >;
@@ -269,7 +270,7 @@
 		compatible = "ns16550";
 		reg = <0x49019000 0x100>;
 		clocks = <&clockctrl ALIF_UART1_SYST_PCLK>;
-		interrupts = <125 0>;
+		interrupts = <125 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		pinctrl-0 = < &pinctrl_uart1 >;
@@ -282,7 +283,7 @@
 		compatible = "ns16550";
 		reg = <0x4901a000 0x100>;
 		clocks = <&clockctrl ALIF_UART2_SYST_PCLK>;
-		interrupts = <126 0>;
+		interrupts = <126 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		pinctrl-0 = < &pinctrl_uart2 >;
@@ -295,7 +296,7 @@
 		compatible = "ns16550";
 		reg = <0x4901b000 0x100>;
 		clocks = <&clockctrl ALIF_UART3_SYST_PCLK>;
-		interrupts = <127 0>;
+		interrupts = <127 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		pinctrl-0 = < &pinctrl_uart3 >;
@@ -308,7 +309,7 @@
 		compatible = "ns16550";
 		reg = <0x4901c000 0x100>;
 		clocks = <&clockctrl ALIF_UART4_SYST_PCLK>;
-		interrupts = <128 0>;
+		interrupts = <128 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		pinctrl-0 = < &pinctrl_uart4 >;
@@ -321,7 +322,7 @@
 		compatible = "ns16550";
 		reg = <0x4901d000 0x100>;
 		clocks = <&clockctrl ALIF_UART5_SYST_PCLK>;
-		interrupts = <129 0>;
+		interrupts = <129 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		pinctrl-0 = < &pinctrl_uart5 >;
@@ -339,7 +340,7 @@
 		pinctrl-names = "default";
 		reg = <0x48103000 0x1000>;
 		interrupt-parent = <&nvic>;
-		interrupts = <137 0>;
+		interrupts = <137 ALIF_DEFAULT_IRQ_PRIORITY>;
 		clocks = <&syst_hclk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
@@ -356,7 +357,7 @@
 		pinctrl-names = "default";
 		reg = <0x48104000 0x1000>;
 		interrupt-parent = <&nvic>;
-		interrupts = <138 0>;
+		interrupts = <138 ALIF_DEFAULT_IRQ_PRIORITY>;
 		clocks = <&syst_hclk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
@@ -373,7 +374,7 @@
 		pinctrl-names = "default";
 		reg = <0x48105000 0x1000>;
 		interrupt-parent = <&nvic>;
-		interrupts = <139 0>;
+		interrupts = <139 ALIF_DEFAULT_IRQ_PRIORITY>;
 		clocks = <&syst_hclk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
@@ -390,7 +391,7 @@
 		pinctrl-names = "default";
 		reg = <0x48106000 0x1000>;
 		interrupt-parent = <&nvic>;
-		interrupts = <140 0>;
+		interrupts = <140 ALIF_DEFAULT_IRQ_PRIORITY>;
 		clocks = <&syst_hclk>;
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
@@ -405,7 +406,11 @@
 		dma-channels = <4>;
 		#dma-cells = <2>;
 		interrupt-parent = <&nvic>;
-		interrupts = <299 0>, <300 0>, <301 0>, <302 0>, <331 0>;
+		interrupts = <299 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <300 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <301 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <302 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <331 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "channel0", "channel1",
 						  "channel2", "channel3",
 						  "abort";
@@ -414,7 +419,7 @@
 	timer0: timer@42001000 {
 		compatible = "snps,dw-timers";
 		reg = <0x42001000 0x14>;
-		interrupts = <60 0>;
+		interrupts = <60 ALIF_DEFAULT_IRQ_PRIORITY>;
 		clocks = <&clockctrl ALIF_LPTIMER0_S32K_CLK>;
 		status = "disabled";
 	};
@@ -422,7 +427,7 @@
 	timer1: timer@42001014 {
 		compatible = "snps,dw-timers";
 		reg = <0x42001014 0x14>;
-		interrupts = <61 0>;
+		interrupts = <61 ALIF_DEFAULT_IRQ_PRIORITY>;
 		clocks = <&clockctrl ALIF_LPTIMER1_S32K_CLK>;
 		status = "disabled";
 	};
@@ -430,7 +435,7 @@
 	timer2: timer@42001028 {
 		compatible = "snps,dw-timers";
 		reg = <0x42001028 0x14>;
-		interrupts = <62 0>;
+		interrupts = <62 ALIF_DEFAULT_IRQ_PRIORITY>;
 		clocks = <&clockctrl ALIF_LPTIMER2_S32K_CLK>;
 		status = "disabled";
 	};
@@ -438,7 +443,7 @@
 	timer3: timer@4200103c {
 		compatible = "snps,dw-timers";
 		reg = <0x4200103C 0x14>;
-		interrupts = <63 0>;
+		interrupts = <63 ALIF_DEFAULT_IRQ_PRIORITY>;
 		clocks = <&clockctrl ALIF_LPTIMER3_S32K_CLK>;
 		status = "disabled";
 	};
@@ -447,9 +452,14 @@
 		compatible = "alif,utimer";
 		reg = <0x48001000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
-		interrupts = <377 3>, <378 3>,
-				<379 3>, <380 3>, <381 3>,
-				<382 3>, <383 3>, <384 3>;
+		interrupts = <377 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <378 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <379 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <380 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <381 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <382 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <383 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <384 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "comp_capt_a", "comp_capt_b",
 				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
 				"comp_b_buf2", "underflow", "overflow";
@@ -483,9 +493,14 @@
 		compatible = "alif,utimer";
 		reg = <0x48002000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
-		interrupts = <385 3>, <386 3>,
-				<387 3>, <388 3>, <389 3>,
-				<390 3>, <391 3>, <392 3>;
+		interrupts = <385 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <386 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <387 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <388 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <389 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <390 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <391 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <392 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "comp_capt_a", "comp_capt_b",
 				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
 				"comp_b_buf2", "underflow", "overflow";
@@ -519,9 +534,14 @@
 		compatible = "alif,utimer";
 		reg = <0x48003000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
-		interrupts = <393 3>, <394 3>,
-				<395 3>, <396 3>, <397 3>,
-				<398 3>, <399 3>, <400 3>;
+		interrupts = <393 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <394 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <395 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <396 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <397 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <398 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <399 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <400 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "comp_capt_a", "comp_capt_b",
 				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
 				"comp_b_buf2", "underflow", "overflow";
@@ -555,9 +575,14 @@
 		compatible = "alif,utimer";
 		reg = <0x48004000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
-		interrupts = <401 3>, <402 3>,
-				<403 3>, <404 3>, <405 3>,
-				<406 3>, <407 3>, <408 3>;
+		interrupts = <401 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <402 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <403 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <404 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <405 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <406 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <407 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <408 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "comp_capt_a", "comp_capt_b",
 				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
 				"comp_b_buf2", "underflow", "overflow";
@@ -591,9 +616,14 @@
 		compatible = "alif,utimer";
 		reg = <0x48005000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
-		interrupts = <409 3>, <410 3>,
-				<411 3>, <412 3>, <413 3>,
-				<414 3>, <415 3>, <416 3>;
+		interrupts = <409 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <410 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <411 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <412 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <413 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <414 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <415 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <416 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "comp_capt_a", "comp_capt_b",
 				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
 				"comp_b_buf2", "underflow", "overflow";
@@ -627,9 +657,14 @@
 		compatible = "alif,utimer";
 		reg = <0x48006000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
-		interrupts = <417 3>, <418 3>,
-				<419 3>, <420 3>, <421 3>,
-				<422 3>, <423 3>, <424 3>;
+		interrupts = <417 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <418 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <419 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <420 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <421 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <422 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <423 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <424 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "comp_capt_a", "comp_capt_b",
 				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
 				"comp_b_buf2", "underflow", "overflow";
@@ -663,9 +698,14 @@
 		compatible = "alif,utimer";
 		reg = <0x48007000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
-		interrupts = <425 3>, <426 3>,
-				<427 3>, <428 3>, <429 3>,
-				<430 3>, <431 3>, <432 3>;
+		interrupts = <425 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <426 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <427 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <428 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <429 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <430 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <431 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <432 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "comp_capt_a", "comp_capt_b",
 				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
 				"comp_b_buf2", "underflow", "overflow";
@@ -699,9 +739,14 @@
 		compatible = "alif,utimer";
 		reg = <0x48008000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
-		interrupts = <433 3>, <434 3>,
-				<435 3>, <436 3>, <437 3>,
-				<438 3>, <439 3>, <440 3>;
+		interrupts = <433 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <434 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <435 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <436 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <437 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <438 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <439 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <440 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "comp_capt_a", "comp_capt_b",
 				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
 				"comp_b_buf2", "underflow", "overflow";
@@ -735,9 +780,14 @@
 		compatible = "alif,utimer";
 		reg = <0x48009000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
-		interrupts = <441 3>, <442 3>,
-				<443 3>, <444 3>, <445 3>,
-				<446 3>, <447 3>, <448 3>;
+		interrupts = <441 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <442 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <443 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <444 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <445 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <446 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <447 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <448 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "comp_capt_a", "comp_capt_b",
 				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
 				"comp_b_buf2", "underflow", "overflow";
@@ -771,9 +821,14 @@
 		compatible = "alif,utimer";
 		reg = <0x4800A000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
-		interrupts = <449 3>, <450 3>,
-				<451 3>, <452 3>, <453 3>,
-				<454 3>, <455 3>, <456 3>;
+		interrupts = <449 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <450 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <451 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <452 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <453 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <454 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <455 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <456 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "comp_capt_a", "comp_capt_b",
 				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
 				"comp_b_buf2", "underflow", "overflow";
@@ -807,9 +862,14 @@
 		compatible = "alif,utimer";
 		reg = <0x4800B000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
-		interrupts = <457 3>, <458 3>,
-				<459 3>, <460 3>, <461 3>,
-				<462 3>, <463 3>, <464 3>;
+		interrupts = <457 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <458 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <459 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <460 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <461 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <462 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <463 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <464 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "comp_capt_a", "comp_capt_b",
 				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
 				"comp_b_buf2", "underflow", "overflow";
@@ -843,9 +903,14 @@
 		compatible = "alif,utimer";
 		reg = <0x4800C000 0x1000 0x48000000 0x24>;
 		reg-names = "timer", "global";
-		interrupts = <465 3>, <466 3>,
-				<467 3>, <468 3>, <469 3>,
-				<470 3>, <471 3>, <472 3>;
+		interrupts = <465 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <466 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <467 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <468 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <469 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <470 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <471 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <472 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "comp_capt_a", "comp_capt_b",
 				"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
 				"comp_b_buf2", "underflow", "overflow";
@@ -907,10 +972,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x49000000 0x1000>;
 		ngpios = <8>;
-		interrupts =	<179 0>, <180 0>,
-				<181 0>, <182 0>,
-				<183 0>, <184 0>,
-				<185 0>, <186 0>;
+		interrupts = <179 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <180 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <181 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <182 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <183 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <184 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <185 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <186 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio0 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -922,10 +991,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x49001000 0x1000>;
 		ngpios = <8>;
-		interrupts =	<187 0>, <188 0>,
-				<189 0>, <190 0>,
-				<191 0>, <192 0>,
-				<193 0>, <194 0>;
+		interrupts = <187 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <188 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <189 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <190 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <191 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <192 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <193 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <194 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio1 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -937,10 +1010,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x49002000 0x1000>;
 		ngpios = <8>;
-		interrupts =	<195 0>, <196 0>,
-				<197 0>, <198 0>,
-				<199 0>, <200 0>,
-				<201 0>, <202 0>;
+		interrupts = <195 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <196 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <197 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <198 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <199 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <200 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <201 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <202 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio2 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -952,10 +1029,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x49003000 0x1000>;
 		ngpios = <8>;
-		interrupts =	<203 0>, <204 0>,
-				<205 0>, <206 0>,
-				<207 0>, <208 0>,
-				<209 0>, <210 0>;
+		interrupts = <203 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <204 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <205 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <206 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <207 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <208 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <209 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <210 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio3 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -967,10 +1048,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x49004000 0x1000>;
 		ngpios = <8>;
-		interrupts =	<211 0>, <212 0>,
-				<213 0>, <214 0>,
-				<215 0>, <216 0>,
-				<217 0>, <218 0>;
+		interrupts = <211 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <212 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <213 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <214 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <215 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <216 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <217 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <218 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio4 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -982,10 +1067,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x49005000 0x1000>;
 		ngpios = <8>;
-		interrupts =	<219 0>, <220 0>,
-				<221 0>, <222 0>,
-				<223 0>, <224 0>,
-				<225 0>, <226 0>;
+		interrupts = <219 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <220 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <221 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <222 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <223 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <224 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <225 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <226 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio5 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -997,10 +1086,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x49006000 0x1000>;
 		ngpios = <8>;
-		interrupts =	<227 0>, <228 0>,
-				<229 0>, <230 0>,
-				<231 0>, <232 0>,
-				<233 0>, <234 0>;
+		interrupts = <227 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <228 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <229 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <230 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <231 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <232 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <233 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <234 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio6 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -1012,10 +1105,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x49007000 0x1000>;
 		ngpios = <8>;
-		interrupts =	<235 0>, <236 0>,
-				<237 0>, <238 0>,
-				<239 0>, <240 0>,
-				<241 0>, <242 0>;
+		interrupts = <235 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <236 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <237 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <238 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <239 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <240 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <241 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <242 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio7 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -1027,10 +1124,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x49008000 0x1000>;
 		ngpios = <8>;
-		interrupts =	<243 0>, <244 0>,
-				<245 0>, <246 0>,
-				<247 0>, <248 0>,
-				<249 0>, <250 0>;
+		interrupts = <243 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <244 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <245 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <246 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <247 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <248 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <249 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <250 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio8 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -1042,10 +1143,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x49009000 0x1000>;
 		ngpios = <8>;
-		interrupts = <251 0>, <252 0>,
-			     <253 0>, <254 0>,
-			     <255 0>, <256 0>,
-			     <257 0>, <258 0>;
+		interrupts = <251 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <252 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <253 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <254 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <255 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <256 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <257 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <258 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_gpio9 >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -1057,10 +1162,14 @@
 		compatible = "snps,designware-gpio";
 		reg = <0x42002000 0x1000>;
 		ngpios = <8>;
-		interrupts = <171 0>, <172 0>,
-			     <173 0>, <174 0>,
-			     <175 0>, <176 0>,
-			     <177 0>, <178 0>;
+		interrupts = <171 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <172 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <173 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <174 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <175 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <176 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <177 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <178 ALIF_DEFAULT_IRQ_PRIORITY>;
 		pinctrl-0 = < &pinctrl_lpgpio >;
 		pinctrl-names = "default";
 		gpio-controller;
@@ -1085,9 +1194,9 @@
 	pdm: pdm@4902d000 {
 		compatible = "alif,alif-pdm";
 		reg = <0x4902d000 0x1000>;
-		interrupts = <145 0>,
-			     <146 0>,
-			     <147 0>;
+		interrupts = <145 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <146 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <147 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "warning_intr",
 				  "error_intr",
 				  "audio_det_intr";
@@ -1115,7 +1224,7 @@
 		pinctrl-0 = < &pinctrl_i2c0 >;
 		pinctrl-names = "default";
 		interrupt-parent = <&nvic>;
-		interrupts = <132 3>;
+		interrupts = <132 ALIF_DEFAULT_IRQ_PRIORITY>;
 		tx_threshold = <16>;
 		rx_threshold = <0>;
 		status = "disabled";
@@ -1137,7 +1246,7 @@
 		pinctrl-0 = < &pinctrl_i2c1 >;
 		pinctrl-names = "default";
 		interrupt-parent = <&nvic>;
-		interrupts = <133 3>;
+		interrupts = <133 ALIF_DEFAULT_IRQ_PRIORITY>;
 		tx_threshold = <16>;
 		rx_threshold = <0>;
 		status = "disabled";
@@ -1150,7 +1259,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_lpi2c0>;
 		reg = <0x43009000 0x100>;
-		interrupts = <47 0>;
+		interrupts = <47 ALIF_DEFAULT_IRQ_PRIORITY>;
 		status = "disabled";
 	};
 
@@ -1161,7 +1270,7 @@
 		reg = <0x49014000 0x1000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_i2s0>;
-		interrupts = <141 0>;
+		interrupts = <141 ALIF_DEFAULT_IRQ_PRIORITY>;
 		status = "disabled";
 	};
 
@@ -1172,7 +1281,7 @@
 		reg = <0x49015000 0x1000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_i2s1>;
-		interrupts = <142 0>;
+		interrupts = <142 ALIF_DEFAULT_IRQ_PRIORITY>;
 		status = "disabled";
 	};
 
@@ -1183,7 +1292,7 @@
 		reg = <0x43001000 0x1000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_lpi2s>;
-		interrupts = <48 0>;
+		interrupts = <48 ALIF_DEFAULT_IRQ_PRIORITY>;
 		status = "disabled";
 	};
 
@@ -1193,7 +1302,7 @@
 		pinctrl-0 = <&pinctrl_ospi0>;
 		pinctrl-names = "default";
 		interrupt-parent = <&nvic>;
-		interrupts = <96 0>;
+		interrupts = <96 ALIF_DEFAULT_IRQ_PRIORITY>;
 		aes-reg = <0x83001000 0x100>;
 		cs-pin = <0>;
 		status = "disabled";
