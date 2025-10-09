@@ -65,6 +65,12 @@ static uint8_t temp_rx_buf[64];
 /* Wait for specific message from HCI */
 static K_SEM_DEFINE(hci_tx_sem, 0, 1);
 
+/* Stop flag to signal rx thread */
+static atomic_t stop_flag = ATOMIC_INIT(0);
+
+/* hci_alif_rx_thread id */
+static k_tid_t tid;
+
 #define MY_RING_BUF_BYTES 256
 RING_BUF_DECLARE(hci_ring_buf, MY_RING_BUF_BYTES);
 
@@ -257,7 +263,7 @@ static void hci_alif_rx_thread(void *p1, void *p2, void *p3)
 
 	LOG_DBG("started");
 
-	while (1) {
+	while (!atomic_get(&stop_flag)) {
 		LOG_DBG("rx.buf %p", rx.buf);
 
 		/* We can only do the allocation if we know the initial
@@ -300,6 +306,8 @@ static void hci_alif_rx_thread(void *p1, void *p2, void *p3)
 			buf = net_buf_get(&rx.fifo, K_NO_WAIT);
 		} while (buf);
 	}
+
+	LOG_DBG("Ending HCI Alif RX Thread");
 }
 
 static size_t hci_alif_discard(const struct device *uart, size_t len)
@@ -628,6 +636,8 @@ static void hci_uart_async_callback(const struct device *dev, struct uart_event 
 		/* Buffer has been released */
 		break;
 
+#endif /* ALIF_HCI_DMA_RX_ENABLED */
+
 	case UART_RX_DISABLED:
 		/* RX has been disabled */
 		break;
@@ -636,7 +646,6 @@ static void hci_uart_async_callback(const struct device *dev, struct uart_event 
 		/* RX has been stopped due to error */
 		LOG_ERR("UART RX stopped due to error: %d", evt->data.rx_stop.reason);
 		break;
-#endif
 
 	default:
 		LOG_ERR("Unknown UART event: %d", evt->type);
@@ -693,9 +702,29 @@ int __weak bt_hci_transport_setup(const struct device *dev)
 
 static int hci_alif_close(void)
 {
-	int ret = stop_using_es0();
+	int err;
 
-	if (-2 == ret) {
+	/* Signal the BLE thread to exit the loop */
+	atomic_set(&stop_flag, 1);
+
+	/* Call k_thread_join() to ensure the rx thread is fully terminated */
+	err = k_thread_join(&alif_rx_thread_data, K_MSEC(50));
+
+	if (err) {
+
+		/* Aborting thread */
+		k_thread_abort(tid);
+
+		err = k_thread_join(&alif_rx_thread_data, K_FOREVER);
+		if (err) {
+			LOG_ERR("Error aborting hci_alif_rx_thread");
+			return err;
+		}
+	}
+
+	err = stop_using_es0();
+
+	if (-2 == err) {
 		return -EIO;
 	}
 	return 0;
@@ -748,7 +777,9 @@ static bool hci_uart_tx_dma_driver_check(void)
 static int hci_alif_open(void)
 {
 	int ret;
-	k_tid_t tid;
+
+	/* Clear the stop_flag to allow entering the hci_alif_rx_thread loop */
+	atomic_clear(&stop_flag);
 
 	ret = take_es0_into_use();
 	if (ret < 0) {
