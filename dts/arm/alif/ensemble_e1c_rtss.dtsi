@@ -12,15 +12,15 @@
 #include <mem.h>
 / {
 	soc {
-		clock: clock-controller@4903f000 {
+		clock: clock-controller@4902f000 {
 			compatible = "alif,clk";
-			reg =  <0x4903F000 0xB0
-				0x4902F000 0xBC
+			reg =  <0x4902F000 0xBC
+				0x4903F000 0xB0
 				0x1A604000 0x44
 				0x1A609000 0x14
 				0x43007000 0x2C>;
-			reg-names = "master_clkctrl",
-				     "slave_clkctrl",
+			reg-names = "slave_clkctrl",
+				     "master_clkctrl",
 				     "aon_clkctrl",
 				     "vbat_clkctrl",
 				     "m55he_clkctrl";
