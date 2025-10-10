@@ -23,8 +23,10 @@ try:
 except ImportError:
     MISSING_REQUIREMENTS = True
 
+DEFAULT_JLINK_GDB_SERVER = 'JLinkGDBServerCL.exe' if sys.platform == 'win32' else 'JLinkGDBServer'
 DEFAULT_JLINK_EXE = 'JLink.exe' if sys.platform == 'win32' else 'JLinkExe'
 DEFAULT_JLINK_GDB_PORT = 2331
+
 
 def is_ip(ip):
     try:
@@ -33,10 +35,12 @@ def is_ip(ip):
         return False
     return True
 
+
 class ToggleAction(argparse.Action):
 
     def __call__(self, parser, args, ignored, option):
         setattr(args, self.dest, not option.startswith('--no-'))
+
 
 class JLinkBinaryRunner(ZephyrBinaryRunner):
     '''Runner front-end for the J-Link GDB server.'''
@@ -46,7 +50,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
                  dt_flash=True, erase=True, reset=False,
                  iface='swd', speed='auto',
                  loader=None,
-                 gdbserver='JLinkGDBServer',
+                 gdbserver=DEFAULT_JLINK_GDB_SERVER,
                  gdb_host='',
                  gdb_port=DEFAULT_JLINK_GDB_PORT,
                  tui=False, tool_opt=[]):
@@ -236,8 +240,8 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
 
         server_cmd = ([self.gdbserver] +
                       ['-select',
-                                           ('ip' if is_ip(self.dev_id) else 'usb') +
-                                           (f'={self.dev_id}' if self.dev_id else ''),
+                       ('ip' if is_ip(self.dev_id) else 'usb') +
+                       (f'={self.dev_id}' if self.dev_id else ''),
                        '-port', str(self.gdb_port),
                        '-if', self.iface,
                        '-speed', self.speed,
@@ -293,7 +297,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         ]
 
         if self.erase:
-            lines.append('erase') # Erase all flash sectors
+            lines.append('erase')  # Erase all flash sectors
 
         # Get the build artifact to flash
         if self.file is not None:
@@ -336,9 +340,9 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         lines.append(flash_cmd)
 
         if self.reset:
-            lines.append('r') # Reset and halt the target
+            lines.append('r')  # Reset and halt the target
 
-        lines.append('g') # Start the CPU
+        lines.append('g')  # Start the CPU
 
         # Reset the Debug Port CTRL/STAT register
         # Under normal operation this is done automatically, but if other
@@ -349,7 +353,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         lines.append('writeDP 1 0')
         lines.append('readDP 1')
 
-        lines.append('q') # Close the connection and quit
+        lines.append('q')  # Close the connection and quit
 
         self.logger.debug('JLink commander script:\n' +
                           '\n'.join(lines))
