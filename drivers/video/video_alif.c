@@ -114,6 +114,8 @@ static int32_t fourcc_to_csi_data_type(uint32_t fourcc)
 		return CSI2_DT_RAW14;
 	case VIDEO_PIX_FMT_Y16:
 		return CSI2_DT_RAW16;
+	case VIDEO_PIX_FMT_RGB565:
+		return CSI2_DT_RGB565;
 	}
 	return -ENOTSUP;
 }
