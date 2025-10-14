@@ -22,7 +22,8 @@ def zephyr_init() {
             cp /media/share/jenkins_share/zephyrproject_zephyr_alif.tar.gz .
             tar xf zephyrproject_zephyr_alif.tar.gz
             cd zephyrproject/zephyr
-            #west update
+            west forall -c "git clean -fdx"
+            west update
             west zephyr-export
             pip install -r scripts/requirements.txt
             cd ../..
@@ -32,10 +33,8 @@ def zephyr_init() {
             . venv/bin/activate
             eval `ssh-agent -s`
             west init zephyrproject -m https://github.com/alifsemi/zephyr_alif.git
-            cd zephyrproject/
-            west update
-            cd zephyr
-            ssh-add /home/alif-fi/.ssh/id_ed25519_alif-ci
+            cd zephyrproject/zephyr
+            west forall -c "git clean -fdx"
             west update
             west zephyr-export
             pip install -r scripts/requirements.txt
