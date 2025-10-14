@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-identifier: alif_e7_dk_ae722f80f55d5xx_apss
+identifier: alif_e7_dk/ae722f80f55d5xx/apss
 name: Alif DevKit Ensemble E7 AE722f80f55d5XX APSS MPU
 type: mcu
 arch: arm

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-identifier: alif_b1_dk_ab1c1f4m51820hh_rtss_he
+identifier: alif_b1_dk/ab1c1f4m51820hh/rtss_he
 name: Alif DevKit Balletto B1 RTSS-HE MCU
 type: mcu
 arch: arm

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-identifier: alif_e8_dk_ae822fa0e5597xx0_rtss_he
+identifier: alif_e8_dk/ae822fa0e5597xx0/rtss_he
 name: Alif DevKit Ensemble E8 AE822FA0E5597XX0 RTSS-HE MCU
 type: mcu
 arch: arm
