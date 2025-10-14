@@ -52,6 +52,9 @@ struct bt_conn *default_conn;
 /* Connection context for BR/EDR legacy pairing in sec mode 3 */
 static struct bt_conn *pairing_conn;
 
+/* for new connections we try to update the connection parameters */
+static struct bt_le_conn_param default_connection_param;
+
 static struct bt_le_oob oob_local;
 #if defined(CONFIG_BT_SMP) || defined(CONFIG_BT_CLASSIC)
 static struct bt_le_oob oob_remote;
@@ -832,8 +835,19 @@ static bool le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
 static void le_param_updated(struct bt_conn *conn, uint16_t interval,
 			     uint16_t latency, uint16_t timeout)
 {
+	int err;
+
 	bt_shell_print("LE conn param updated: int 0x%04x lat %d to %d",
 		       interval, latency, timeout);
+
+	if (default_connection_param.interval_min > interval) {
+		err = bt_conn_le_param_update(conn, &default_connection_param);
+		if (err) {
+			bt_shell_error("conn update failed (err %d).", err);
+		} else {
+			bt_shell_error("conn automatic update initiated.");
+		}
+	}
 }
 
 #if defined(CONFIG_BT_SMP)
@@ -3565,6 +3579,17 @@ static int cmd_conn_update(const struct shell *sh, size_t argc, char *argv[])
 	return err;
 }
 
+static int cmd_conn_update_default(const struct shell *sh, size_t argc, char *argv[])
+{
+	default_connection_param.interval_min = strtoul(argv[1], NULL, 16);
+	default_connection_param.interval_max = strtoul(argv[2], NULL, 16);
+	default_connection_param.latency = strtoul(argv[3], NULL, 16);
+	default_connection_param.timeout = strtoul(argv[4], NULL, 16);
+
+	shell_print(sh, "configuring default connection param change");
+	return 0;
+}
+
 #if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
 static uint16_t tx_time_calc(uint8_t phy, uint16_t max_len)
 {
@@ -5056,6 +5081,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(bt_cmds,
 	SHELL_CMD_ARG(info, NULL, HELP_ADDR_LE, cmd_info, 1, 2),
 	SHELL_CMD_ARG(conn-update, NULL, "<min> <max> <latency> <timeout>",
 		      cmd_conn_update, 5, 0),
+	SHELL_CMD_ARG(conn-update-default, NULL, "<min> <max> <latency> <timeout>",
+		      cmd_conn_update_default, 5, 0),
 #if defined(CONFIG_BT_USER_DATA_LEN_UPDATE)
 	SHELL_CMD_ARG(data-len-update, NULL, "<tx_max_len> [tx_max_time]",
 		      cmd_conn_data_len_update, 2, 1),
