@@ -14,12 +14,17 @@
 	#size-cells = <1>;
 };
 
+&ieee802154 {
+	status = "okay";
+};
+
 &{/} {
 	chosen {
 		zephyr,console = &uart2;
 		zephyr,shell-uart = &uart2;
 		zephyr,bt-uart = &uart_hci;
 		zephyr,hci-uart = &uart_hci;
+		zephyr,uart-mcumgr = &uart2;
 		zephyr,entropy = &rng;
 	};
 
@@ -53,13 +58,21 @@
 };
 
 &uart_hci {
+	clock-frequency = <160000000>;
+	dmas = <&dma2 HCI_UART_DMA_RX_CH HCI_UART_DMA_RX_REQ>,
+	       <&dma2 HCI_UART_DMA_TX_CH HCI_UART_DMA_TX_REQ>;
+	dma-names = "rx", "tx";
 	status = "okay";
 };
 
 &uart_ahi {
-	status = "okay";
+	clock-frequency = <160000000>;
 	pinctrl-0 = <&pinctrl_ahi_trace>;
 	pinctrl-names = "default";
+	dmas = <&dma2 AHI_UART_DMA_RX_CH AHI_UART_DMA_RX_REQ>,
+	       <&dma2 AHI_UART_DMA_TX_CH AHI_UART_DMA_TX_REQ>;
+	dma-names = "rx", "tx";
+	status = "okay";
 };
 
 &dma2 {

@@ -20,10 +20,8 @@ config HAS_ALIF_BLE_ROM_IMAGE
 if HAS_ALIF_BLE_ROM_IMAGE
 choice ALIF_BLE_ROM_IMAGE_VERSION
 	prompt "Choose ROM code version"
-	default ALIF_BLE_ROM_IMAGE_V1_0
+	default ALIF_BLE_ROM_IMAGE_V1_2
 
-	config ALIF_BLE_ROM_IMAGE_V1_0
-		bool "ROM code version 1.0"
 	config ALIF_BLE_ROM_IMAGE_V1_2
 		bool "ROM code version 1.2"
 endchoice
@@ -43,11 +41,11 @@ config BT_BUF_ACL_RX_SIZE
 
 config BT_BUF_EVT_RX_COUNT
 	default 20 if (BT_MESH && !(BT_BUF_EVT_DISCARDABLE_COUNT > 0))
-	default 11
+	default 10
 	range 10 255
 
 config BT_BUF_ACL_TX_COUNT
-	default 10
+	default 6
 	range 6 255
 
 endif # BT

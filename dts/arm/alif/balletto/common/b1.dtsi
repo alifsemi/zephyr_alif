@@ -12,6 +12,15 @@
 #include <mem.h>
 #include <alif/common/alif_common.dtsi>
 
+#define HCI_UART_DMA_RX_CH  0
+#define HCI_UART_DMA_RX_REQ 26
+#define HCI_UART_DMA_TX_CH  1
+#define HCI_UART_DMA_TX_REQ 27
+#define AHI_UART_DMA_RX_CH  2
+#define AHI_UART_DMA_RX_REQ 2
+#define AHI_UART_DMA_TX_CH  3
+#define AHI_UART_DMA_TX_REQ 3
+
 &{/soc} {
 	clockctrl: clock-controller@4903f000 {
 		compatible = "alif,clockctrl";
@@ -63,17 +72,17 @@
 		zephyr,memory-region = "ITCM";
 	};
 
-	dtcm: dtcm@2000a000 {
-		compatible = "alif,dtcm", "zephyr,memory-region";
-		global_base = <0x5880a000>;
-		zephyr,memory-region = "DTCM";
-	};
-
 	reserved_dtcm: dtcm@20000000 {
 		compatible = "alif,dtcm", "zephyr,memory-region";
 		global_base = <0x58800000>;
 		reg = <0x20000000 DT_SIZE_K(40)>;
 		zephyr,memory-region = "RESERVED_DTCM";
+	};
+
+	dtcm: dtcm@2000a000 {
+		compatible = "alif,dtcm", "zephyr,memory-region";
+		global_base = <0x5880a000>;
+		zephyr,memory-region = "DTCM";
 	};
 
 	sdhc: sdhc@48102000 {
@@ -119,6 +128,7 @@
 			reg = < 0x40060000 0x1000 >;
 			interrupts = < 39 ALIF_DEFAULT_IRQ_PRIORITY >;
 			interrupt-names = "rx";
+			status = "disabled";
 		};
 
 		seservice1s: mhu@40070000 {
@@ -126,6 +136,7 @@
 			reg = < 0x40070000 0x1000 >;
 			interrupts = < 40 ALIF_DEFAULT_IRQ_PRIORITY >;
 			interrupt-names = "tx";
+			status = "disabled";
 		};
 	};
 
@@ -531,6 +542,7 @@
 		current-speed = <3000000>;
 		dlf = <5>;
 		hw-flow-control;
+		rts-ctrl;
 		status = "disabled";
 	};
 
@@ -1015,6 +1027,14 @@
 		compatible = "alif,secure-enclave-trng";
 	};
 
+	power-states {
+		off: off {
+			compatible = "zephyr,power-state";
+			power-state-name = "soft-off";
+			min-residency-us = < 300000000 >;
+		};
+	};
+
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -1025,6 +1045,7 @@
 			d-cache-line-size = <32>;
 			i-cache-line-size = <32>;
 			reg = <0>;
+			cpu-power-states = <&off>;
 		};
 	};
 };

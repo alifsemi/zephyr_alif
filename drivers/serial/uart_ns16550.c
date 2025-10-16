@@ -1435,7 +1435,7 @@ static void uart_ns16550_isr(const struct device *dev)
 	}
 #endif
 	if (dev_data->rts_ctrl) {
-		const struct uart_ns16550_device_config *const config = dev->config;
+		const struct uart_ns16550_dev_config *const config = dev->config;
 		const uint8_t IIR_status = ns16550_inbyte(config, IIR(dev));
 
 		if ((IIR_status & 0xf) == IIR_MSTAT) {
@@ -1554,7 +1554,7 @@ static int uart_ns16550_line_ctrl_get(const struct device *dev,
 				      uint32_t ctrl, uint32_t *val)
 {
 	struct uart_ns16550_dev_data *data = dev->data;
-	const struct uart_ns16550_device_config *const dev_cfg = dev->config;
+	const struct uart_ns16550_dev_config *const dev_cfg = dev->config;
 	uint32_t mdc, msr = 0U;
 	k_spinlock_key_t key;
 
