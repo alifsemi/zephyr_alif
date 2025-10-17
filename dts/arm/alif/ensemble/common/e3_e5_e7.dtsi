@@ -19,6 +19,7 @@
 		interrupts = <130 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
+		dlf = <4>;
 		pinctrl-0 = < &pinctrl_uart6 >;
 		pinctrl-names = "default";
 		fifo-size = <32>;
@@ -31,6 +32,7 @@
 		interrupts = <131 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
+		dlf = <4>;
 		pinctrl-0 = < &pinctrl_uart7 >;
 		pinctrl-names = "default";
 		fifo-size = <32>;

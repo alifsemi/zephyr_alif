@@ -61,6 +61,7 @@
 		interrupts = <45 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
+		dlf = <13>;
 		pinctrl-0 = < &pinctrl_lpuart >;
 		pinctrl-names = "default";
 		fifo-size = <32>;

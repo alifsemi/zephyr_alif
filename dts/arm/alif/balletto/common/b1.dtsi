@@ -174,6 +174,7 @@
 		interrupts = <124 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
+		dlf = <11>;
 		pinctrl-0 = < &pinctrl_uart0 >;
 		pinctrl-names = "default";
 		fifo-size = <32>;
@@ -187,6 +188,7 @@
 		interrupts = <125 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
+		dlf = <11>;
 		pinctrl-0 = < &pinctrl_uart1 >;
 		pinctrl-names = "default";
 		fifo-size = <32>;
@@ -200,6 +202,7 @@
 		interrupts = <126 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
+		dlf = <11>;
 		pinctrl-0 = < &pinctrl_uart2 >;
 		pinctrl-names = "default";
 		fifo-size = <32>;
@@ -213,6 +216,7 @@
 		interrupts = <127 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
+		dlf = <11>;
 		pinctrl-0 = < &pinctrl_uart3 >;
 		pinctrl-names = "default";
 		fifo-size = <32>;
@@ -226,6 +230,7 @@
 		interrupts = <128 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
+		dlf = <11>;
 		pinctrl-0 = < &pinctrl_uart4 >;
 		pinctrl-names = "default";
 		fifo-size = <32>;
@@ -239,6 +244,7 @@
 		interrupts = <129 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
+		dlf = <11>;
 		pinctrl-0 = < &pinctrl_uart5 >;
 		pinctrl-names = "default";
 		fifo-size = <32>;
@@ -501,6 +507,7 @@
 		interrupts = <45 ALIF_DEFAULT_IRQ_PRIORITY>;
 		reg-shift = <2>;
 		current-speed = <115200>;
+		dlf = <13>;
 		pinctrl-0 = < &pinctrl_lpuart >;
 		pinctrl-names = "default";
 		fifo-size = <32>;
