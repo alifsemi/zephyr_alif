@@ -99,4 +99,41 @@ config POWER_DOMAIN_SOC_PM_STATE
 	  Generic power domain control to turn on/off devices when the
 	  PM subsystem transitions in and out certain power states.
 
+config POWER_DOMAIN_ALIF
+	bool "Alif SoC power domain driver"
+	default y
+	depends on DT_HAS_ALIF_POWER_DOMAIN_ENABLED
+	depends on SOC_FAMILY_ENSEMBLE || SOC_FAMILY_BALLETTO
+	select DEVICE_DEPS
+	select PM_DEVICE
+	help
+	  Power domain driver for Alif Semiconductor SoCs (Ensemble and Balletto families).
+	  This driver manages power domains (PD_SYST, PD_SSE700_AON, etc.) through SE
+	  Services aiPM interface. It provides reference counting for power domain requests,
+	  integrates with PM subsystem for S2RAM/SOFT_OFF transitions, and ensures proper
+	  power domain state management across sleep/wake cycles. Uses Zephyr's PM device
+	  framework to automatically manage peripherals on power domains.
+
+	  Note: This automatically enables PM_DEVICE, which in turn enables
+	  PM_DEVICE_POWER_DOMAIN (default y), allowing peripherals to use the
+	  power-domains device tree property.
+
+if POWER_DOMAIN_ALIF
+
+config POWER_DOMAIN_ALIF_INIT_PRIORITY
+	int "Alif power domain init priority"
+	default 47
+	help
+	  Alif power domain initialization priority. Must be initialized at PRE_KERNEL_1
+	  level after MHU driver (priority 40) and SE services (priority 45), but before
+	  peripheral drivers (which default to priority 50 at PRE_KERNEL_1).
+
+	  Initialization order:
+	    Priority 40: MHU driver (CONFIG_KERNEL_INIT_PRIORITY_DEFAULT)
+	    Priority 45: SE services (CONFIG_SE_SERVICE_INIT_PRIORITY)
+	    Priority 47: Power domain driver (this config)
+	    Priority 50: Peripherals (CONFIG_SERIAL_INIT_PRIORITY, etc.)
+
+endif #POWER_DOMAIN_ALIF
+
 endif
