@@ -68,6 +68,24 @@ static inline void pm_state_notify(bool entering_state)
 	k_spin_unlock(&pm_notifier_lock, pm_notifier_key);
 }
 
+/*
+ * Function called to notify before devices are resumed
+ */
+static inline void pm_state_notify_pre_resume(void)
+{
+	struct pm_notifier *notifier;
+	k_spinlock_key_t pm_notifier_key;
+	uint8_t id = _current_cpu->id;
+
+	pm_notifier_key = k_spin_lock(&pm_notifier_lock);
+	SYS_SLIST_FOR_EACH_CONTAINER(&pm_notifiers, notifier, _node) {
+		if (notifier->pre_device_resume) {
+			notifier->pre_device_resume(z_cpus_pm_state[id].state);
+		}
+	}
+	k_spin_unlock(&pm_notifier_lock, pm_notifier_key);
+}
+
 static inline int32_t ticks_expiring_sooner(int32_t ticks1, int32_t ticks2)
 {
 	/*
@@ -108,6 +126,13 @@ void pm_system_resume(void)
 	 * and it may schedule another thread.
 	 */
 	if (atomic_test_and_clear_bit(z_post_ops_required, id)) {
+		/*
+		 * Notify applications before devices are resumed.
+		 * This allows restoring system configuration (e.g., clock frequencies)
+		 * before peripherals resume and reconfigure.
+		 */
+		pm_state_notify_pre_resume();
+
 #ifdef CONFIG_PM_DEVICE_SYSTEM_MANAGED
 		if (atomic_add(&_cpus_active, 1) == 0) {
 			if ((z_cpus_pm_state[id].state != PM_STATE_RUNTIME_IDLE) &&
