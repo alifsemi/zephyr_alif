@@ -11,6 +11,23 @@
 #include <zephyr/dt-bindings/i2c/i2c.h>
 #include <alif/common/alif_common.dtsi>
 
+&{/} {
+	/* Individual power domain devices - one per domain */
+	pd_syst: power-domain-syst {
+		compatible = "alif,power-domain";
+		domain-id = <ALIF_PD_SYST>;
+		#power-domain-cells = <0>;
+		status = "okay";
+	};
+
+	pd_sse700_aon: power-domain-sse700-aon {
+		compatible = "alif,power-domain";
+		domain-id = <ALIF_PD_SSE700_AON>;
+		#power-domain-cells = <0>;
+		status = "okay";
+	};
+};
+
 &{/soc} {
 
 	ethosu0: ethosu55@400e1000 {

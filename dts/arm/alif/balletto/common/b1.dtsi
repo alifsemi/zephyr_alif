@@ -21,6 +21,23 @@
 #define AHI_UART_DMA_TX_CH  3
 #define AHI_UART_DMA_TX_REQ 3
 
+&{/} {
+	/* Individual power domain devices - one per domain */
+	pd_syst: power-domain-syst {
+		compatible = "alif,power-domain";
+		domain-id = <ALIF_PD_SYST>;
+		#power-domain-cells = <0>;
+		status = "okay";
+	};
+
+	pd_sse700_aon: power-domain-sse700-aon {
+		compatible = "alif,power-domain";
+		domain-id = <ALIF_PD_SSE700_AON>;
+		#power-domain-cells = <0>;
+		status = "okay";
+	};
+};
+
 &{/soc} {
 	clockctrl: clock-controller@4903f000 {
 		compatible = "alif,clockctrl";

@@ -10,6 +10,24 @@
 #include <zephyr/dt-bindings/i2c/i2c.h>
 #include <mem.h>
 #include <alif/common/alif_common.dtsi>
+#include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
+
+&{/} {
+	/* Individual power domain devices - one per domain */
+	pd_syst: power-domain-syst {
+		compatible = "alif,power-domain";
+		domain-id = <ALIF_PD_SYST>;
+		#power-domain-cells = <0>;
+		status = "okay";
+	};
+
+	pd_sse700_aon: power-domain-sse700-aon {
+		compatible = "alif,power-domain";
+		domain-id = <ALIF_PD_SSE700_AON>;
+		#power-domain-cells = <0>;
+		status = "okay";
+	};
+};
 
 &{/soc} {
 	clockctrl: clock-controller@4903f000 {
