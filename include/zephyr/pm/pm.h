@@ -62,6 +62,17 @@ struct pm_notifier {
 	void (*state_entry)(enum pm_state state);
 	/**
 	 * Application defined function for doing any target specific operations
+	 * before devices are resumed.
+	 *
+	 * This callback is invoked before pm_resume_devices() is called,
+	 * allowing the application to restore system configuration (e.g.,
+	 * clock frequencies) before peripherals resume.
+	 * This ensures peripherals can configure themselves with correct
+	 * timing parameters.
+	 */
+	void (*pre_device_resume)(enum pm_state state);
+	/**
+	 * Application defined function for doing any target specific operations
 	 * for power state exit.
 	 */
 	void (*state_exit)(enum pm_state state);
