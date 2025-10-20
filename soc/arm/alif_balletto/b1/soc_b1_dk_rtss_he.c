@@ -48,6 +48,11 @@ static int pm_set_run_params(void)
 	runp.memory_blocks |= SRAM5_1_MASK | SRAM5_2_MASK | SRAM5_3_MASK | SRAM5_4_MASK |
 			      SRAM5_5_MASK; /* M55-HE DTCM */
 
+	if (IS_ENABLED(CONFIG_MIPI_DSI)) {
+		runp.phy_pwr_gating |= MIPI_TX_DPHY_MASK | MIPI_RX_DPHY_MASK | MIPI_PLL_DPHY_MASK;
+		runp.ip_clock_gating |= CDC200_MASK | MIPI_DSI_MASK | GPU_MASK;
+	}
+
 	return se_service_set_run_cfg(&runp);
 }
 
@@ -286,9 +291,6 @@ static int balletto_b1_dk_rtss_he_init(void)
 	}
 
 	if (IS_ENABLED(CONFIG_MIPI_DSI)) {
-		/* Enable TX-DPHY and D-PLL Power and Disable Isolation.*/
-		sys_clear_bits(VBAT_PWR_CTRL, BIT(0) | BIT(1) | BIT(8) | BIT(9) | BIT(12));
-
 		/* Enable HFOSC (38.4 MHz) and CFG (100 MHz) clock.*/
 		sys_set_bits(CGU_CLK_ENA, BIT(21) | BIT(23));
 	}
