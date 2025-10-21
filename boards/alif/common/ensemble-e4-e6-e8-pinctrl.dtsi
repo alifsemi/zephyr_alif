@@ -1033,19 +1033,19 @@
 		};
 	};
 
-	pinctrl_i3c0:pinctrl_i3c0 {
+	pinctrl_i3c0: pinctrl_i3c0 {
 		group0 {
-			pinmux = < PIN_P7_6__I3C_SDA_D >,
-				< PIN_P7_7__I3C_SCL_D >;
-			read-enable = < 0x1 >;
+			pinmux = <PIN_P7_6__I3C_SDA_D>,
+				<PIN_P7_7__I3C_SCL_D>;
+			read-enable = <0x1>;
 		};
 	};
 
-	pinctrl_lpi3c0:pinctrl_lpi3c0 {
+	pinctrl_lpi3c0: pinctrl_lpi3c0 {
 		group0 {
-			pinmux = < PIN_P7_6__LPI3C_SDA_B >,
-				< PIN_P7_7__LPI3C_SCL_B >;
-			read-enable = < 0x1 >;
+			pinmux = <PIN_P7_6__LPI3C_SDA_B>,
+				<PIN_P7_7__LPI3C_SCL_B>;
+			read-enable = <0x1>;
 		};
 	};
 
