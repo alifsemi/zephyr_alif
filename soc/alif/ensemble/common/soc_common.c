@@ -167,7 +167,11 @@ static int soc_init(void)
 		sys_set_bits(CGU_CLK_ENA, BIT(24));
 	}
 #endif
-
+	/* I3C settings */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(i3c0), okay)
+	/* I3C Flex GPIO */
+	sys_write32(0x1, VBAT_GPIO_CTRL_EN);
+#endif
 	return 0;
 }
 
