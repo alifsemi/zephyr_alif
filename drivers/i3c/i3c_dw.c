@@ -10,6 +10,7 @@
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/sys/util.h>
 #include <assert.h>
+#include <zephyr/drivers/pinctrl.h>
 
 #define NANO_SEC        1000000000ULL
 #define BYTES_PER_DWORD 4
@@ -357,6 +358,8 @@ struct dw_i3c_config {
 	struct i3c_driver_config common;
 	const struct device *clock;
 	uint32_t regs;
+
+	const struct pinctrl_dev_config *pcfg;
 
 	/* Initial clk configuration */
 	/* Maximum OD high clk pulse length */
@@ -2223,6 +2226,12 @@ static int dw_i3c_init(const struct device *dev)
 		return ret;
 	}
 
+	ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+	if (ret != 0) {
+		LOG_ERR("Unable to configure pins err:%d", ret);
+		return ret;
+	}
+
 #ifdef CONFIG_I3C_USE_IBI
 	k_sem_init(&data->ibi_sts_sem, 0, 1);
 #endif
@@ -2353,6 +2362,7 @@ static DEVICE_API(i3c, dw_i3c_api) = {
 	static struct i3c_device_desc dw_i3c_device_array_##n[] = I3C_DEVICE_ARRAY_DT_INST(n);     \
 	static struct i3c_i2c_device_desc dw_i3c_i2c_device_array_##n[] =                          \
 		I3C_I2C_DEVICE_ARRAY_DT_INST(n);                                                   \
+		PINCTRL_DT_INST_DEFINE(n);                                                         \
 	static struct dw_i3c_data dw_i3c_data_##n = {                                              \
 		.common.ctrl_config.scl.i3c =                                                      \
 			DT_INST_PROP_OR(n, i3c_scl_hz, I3C_BUS_TYP_I3C_SCL_RATE),                  \
@@ -2361,6 +2371,7 @@ static DEVICE_API(i3c, dw_i3c_api) = {
 	static const struct dw_i3c_config dw_i3c_cfg_##n = {                                       \
 		.regs = DT_INST_REG_ADDR(n),                                                       \
 		.clock = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),                                    \
+		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),                                         \
 		.od_thigh_max_ns = DT_INST_PROP(n, od_thigh_max_ns),                               \
 		.od_tlow_min_ns = DT_INST_PROP(n, od_tlow_min_ns),                                 \
 		.irq_config_func = &i3c_dw_irq_config_##n,                                         \
