@@ -168,7 +168,7 @@ static int soc_init(void)
 	}
 #endif
 	/* I3C settings */
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(i3c0), okay)
+#if (DT_NODE_HAS_STATUS(DT_NODELABEL(i3c0), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(lpi3c0), okay))
 	/* I3C Flex GPIO */
 	sys_write32(0x1, VBAT_GPIO_CTRL_EN);
 #endif

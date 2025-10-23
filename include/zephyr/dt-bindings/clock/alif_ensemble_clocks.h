@@ -257,6 +257,10 @@
 #define ALIF_LPSPI_CLK              \
 	ALIF_CLK_CFG(M55HE_CFG, HE_CLK_ENA, 16U, 1U, 0U, 0U, 0U)
 
+/* LPI3C clock */
+#define ALIF_LPI3C_CLK              \
+	ALIF_CLK_CFG(M55HE_CFG, HE_CLK_ENA, 14U, 1U, 0U, 0U, 0U)
+
 /* LPI2C1 clock */
 #define ALIF_LPI2C1_CLK              \
 	ALIF_CLK_CFG(M55HE_CFG, HE_CLK_ENA, 13U, 1U, 0U, 0U, 0U)

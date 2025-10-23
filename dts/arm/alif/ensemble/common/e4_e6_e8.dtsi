@@ -157,4 +157,21 @@
 			status = "disabled";
 		};
 	};
+
+	lpi3c0: lpi3c0@43006000 {
+		compatible      = "snps,designware-i3c";
+		#address-cells  = <3>;
+		#size-cells     = <0>;
+		reg             = <0x43006000 0x1000>;
+		interrupt-parent= <&nvic>;
+		interrupts      = <50 3>;
+		clocks          = <&clockctrl ALIF_LPI3C_CLK>;
+		pinctrl-0       = <&pinctrl_lpi3c0>;
+		pinctrl-names   = "default";
+		od-thigh-min-ns = <41>;
+		i3c-scl-hz      = <12500000>;
+		i2c-scl-hz      = <400000>;
+		status          = "disabled";
+	};
+
 };
