@@ -10,6 +10,14 @@ config SOC_SERIES
 config ROM_START_OFFSET
 	default 0x800 if BOOTLOADER_MCUBOOT
 
+# Disable null pointer exception detection by default for Balletto B1.
+# The Ceva Waves BLE ROM patcher dereferences address 0x00000000 (ITCM base)
+# when no patch is present (__ble_patch_info_start weak symbol resolves to NULL).
+# Enabling MPU-based null pointer detection would trap this access and cause a fault.
+choice NULL_POINTER_EXCEPTION_DETECTION
+	default NULL_POINTER_EXCEPTION_DETECTION_NONE
+endchoice
+
 source "soc/arm/alif_balletto/b1/Kconfig.defconfig.b*"
 
 endif # SOC_SERIES_BALLETTO_B1
