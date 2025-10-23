@@ -365,12 +365,6 @@ struct dw_i3c_config {
 
 	const struct pinctrl_dev_config *pcfg;
 
-	/* Initial clk configuration */
-	/* Maximum OD high clk pulse length */
-	uint32_t od_thigh_max_ns;
-	/* Minimum OD low clk pulse length */
-	uint32_t od_tlow_min_ns;
-
 	void (*irq_config_func)();
 };
 
@@ -1377,7 +1371,7 @@ static int i3c_dw_irq(const struct device *dev)
 	return 0;
 }
 
-static int init_scl_timing(const struct device *dev)
+static int dw_i3c_init_scl_timing(const struct device *dev, struct i3c_config_controller *ctrl_cfg)
 {
 	const struct dw_i3c_config *config = dev->config;
 	struct dw_i3c_data *data = dev->data;
@@ -1388,66 +1382,80 @@ static int init_scl_timing(const struct device *dev)
 		return -EINVAL;
 	}
 
-	/* I3C_OD */
-	hcnt = DIV_ROUND_UP(config->od_thigh_max_ns * (uint64_t)core_rate, I3C_PERIOD_NS) - 1;
-	hcnt = CLAMP(hcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
+	if (!ctrl_cfg->is_secondary) {
+		__ASSERT((ctrl_cfg != NULL), "Controller configuration should not be NULL");
 
-	lcnt = DIV_ROUND_UP(config->od_tlow_min_ns * (uint64_t)core_rate, I3C_PERIOD_NS);
-	lcnt = CLAMP(lcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
+		if (ctrl_cfg->scl_od_min.low_ns < I3C_OD_TLOW_MIN_NS) {
+			LOG_ERR("%s: Open Drain Low Period is out of range", dev->name);
+			return -EINVAL;
+		}
 
-	scl_timing = SCL_I3C_TIMING_HCNT(hcnt) | SCL_I3C_TIMING_LCNT(lcnt);
-	sys_write32(scl_timing, config->regs + SCL_I3C_OD_TIMING);
+		/* I3C_OD */
+		hcnt = DIV_ROUND_UP(ctrl_cfg->scl_od_min.high_ns * (uint64_t)core_rate,
+				I3C_PERIOD_NS) - 1;
+		hcnt = CLAMP(hcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
 
-	/* Set bus free timing to match tlow setting for OD clk config. */
-	sys_write32(BUS_I3C_MST_FREE(lcnt), config->regs + BUS_FREE_TIMING);
+		lcnt = DIV_ROUND_UP(ctrl_cfg->scl_od_min.low_ns * (uint64_t)core_rate,
+				I3C_PERIOD_NS);
+		lcnt = CLAMP(lcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
 
-	/* I3C_PP */
-	hcnt = DIV_ROUND_UP(I3C_BUS_THIGH_MAX_NS * (uint64_t)core_rate, I3C_PERIOD_NS) - 1;
-	hcnt = CLAMP(hcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
+		scl_timing = SCL_I3C_TIMING_HCNT(hcnt) | SCL_I3C_TIMING_LCNT(lcnt);
+		sys_write32(scl_timing, config->regs + SCL_I3C_OD_TIMING);
 
-	lcnt = DIV_ROUND_UP(core_rate, data->common.ctrl_config.scl.i3c) - hcnt;
-	lcnt = CLAMP(lcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
-
-	scl_timing = SCL_I3C_TIMING_HCNT(hcnt) | SCL_I3C_TIMING_LCNT(lcnt);
-	sys_write32(scl_timing, config->regs + SCL_I3C_PP_TIMING);
-
-	/* I3C */
-	lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR1_SCL_RATE) - hcnt;
-	scl_timing = SCL_EXT_LCNT_1(lcnt);
-	lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR2_SCL_RATE) - hcnt;
-	scl_timing |= SCL_EXT_LCNT_2(lcnt);
-	lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR3_SCL_RATE) - hcnt;
-	scl_timing |= SCL_EXT_LCNT_3(lcnt);
-	lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR4_SCL_RATE) - hcnt;
-	scl_timing |= SCL_EXT_LCNT_4(lcnt);
-	sys_write32(scl_timing, config->regs + SCL_EXT_LCNT_TIMING);
-
-	/* I2C FM+ */
-	lcnt = DIV_ROUND_UP(I3C_BUS_I2C_FMP_TLOW_MIN_NS * (uint64_t)core_rate, I3C_PERIOD_NS);
-	hcnt = DIV_ROUND_UP(core_rate, I3C_BUS_I2C_FM_PLUS_SCL_RATE) - lcnt;
-	scl_timing = SCL_I2C_FMP_TIMING_HCNT(hcnt) | SCL_I2C_FMP_TIMING_LCNT(lcnt);
-	sys_write32(scl_timing, config->regs + SCL_I2C_FMP_TIMING);
-
-	/* I2C FM */
-	lcnt = DIV_ROUND_UP(I3C_BUS_I2C_FM_TLOW_MIN_NS * (uint64_t)core_rate, I3C_PERIOD_NS);
-	hcnt = DIV_ROUND_UP(core_rate, I3C_BUS_I2C_FM_SCL_RATE) - lcnt;
-	scl_timing = SCL_I2C_FM_TIMING_HCNT(hcnt) | SCL_I2C_FM_TIMING_LCNT(lcnt);
-	sys_write32(scl_timing, config->regs + SCL_I2C_FM_TIMING);
-
-	if (data->mode != I3C_BUS_MODE_PURE) {
+		/* Set bus free timing to match tlow setting for OD clk config. */
 		sys_write32(BUS_I3C_MST_FREE(lcnt), config->regs + BUS_FREE_TIMING);
-		sys_write32(sys_read32(config->regs + DEVICE_CTRL) | DEV_CTRL_I2C_SLAVE_PRESENT,
-			    config->regs + DEVICE_CTRL);
-	}
-	/* I3C Bus Available Time */
-	scl_timing = DIV_ROUND_UP(I3C_BUS_AVAILABLE_TIME_NS * (uint64_t)core_rate,
-					I3C_PERIOD_NS);
-	sys_write32(BUS_I3C_AVAIL_TIME(scl_timing), config->regs + BUS_FREE_TIMING);
 
-	/* I3C Bus Idle Time */
-	scl_timing =
-		DIV_ROUND_UP(I3C_BUS_IDLE_TIME_NS * (uint64_t)core_rate, I3C_PERIOD_NS);
-	sys_write32(BUS_I3C_IDLE_TIME(scl_timing), config->regs + BUS_IDLE_TIMING);
+		/* I3C_PP */
+		hcnt = DIV_ROUND_UP(I3C_BUS_THIGH_MAX_NS * (uint64_t)core_rate, I3C_PERIOD_NS) - 1;
+		hcnt = CLAMP(hcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
+
+		lcnt = DIV_ROUND_UP(core_rate, data->common.ctrl_config.scl.i3c) - hcnt;
+		lcnt = CLAMP(lcnt, SCL_I3C_TIMING_CNT_MIN, SCL_I3C_TIMING_CNT_MAX);
+
+		scl_timing = SCL_I3C_TIMING_HCNT(hcnt) | SCL_I3C_TIMING_LCNT(lcnt);
+		sys_write32(scl_timing, config->regs + SCL_I3C_PP_TIMING);
+
+		/* I3C */
+		lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR1_SCL_RATE) - hcnt;
+		scl_timing = SCL_EXT_LCNT_1(lcnt);
+		lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR2_SCL_RATE) - hcnt;
+		scl_timing |= SCL_EXT_LCNT_2(lcnt);
+		lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR3_SCL_RATE) - hcnt;
+		scl_timing |= SCL_EXT_LCNT_3(lcnt);
+		lcnt = DIV_ROUND_UP(core_rate, I3C_BUS_SDR4_SCL_RATE) - hcnt;
+		scl_timing |= SCL_EXT_LCNT_4(lcnt);
+		sys_write32(scl_timing, config->regs + SCL_EXT_LCNT_TIMING);
+
+		/* I2C FM+ */
+		lcnt = DIV_ROUND_UP(I3C_BUS_I2C_FMP_TLOW_MIN_NS * (uint64_t)core_rate,
+				I3C_PERIOD_NS);
+		hcnt = DIV_ROUND_UP(core_rate, I3C_BUS_I2C_FM_PLUS_SCL_RATE) - lcnt;
+		scl_timing = SCL_I2C_FMP_TIMING_HCNT(hcnt) | SCL_I2C_FMP_TIMING_LCNT(lcnt);
+		sys_write32(scl_timing, config->regs + SCL_I2C_FMP_TIMING);
+
+		/* I2C FM */
+		lcnt = DIV_ROUND_UP(I3C_BUS_I2C_FM_TLOW_MIN_NS * (uint64_t)core_rate,
+				I3C_PERIOD_NS);
+		hcnt = DIV_ROUND_UP(core_rate, I3C_BUS_I2C_FM_SCL_RATE) - lcnt;
+		scl_timing = SCL_I2C_FM_TIMING_HCNT(hcnt) | SCL_I2C_FM_TIMING_LCNT(lcnt);
+		sys_write32(scl_timing, config->regs + SCL_I2C_FM_TIMING);
+
+		if (data->mode != I3C_BUS_MODE_PURE) {
+			sys_write32(BUS_I3C_MST_FREE(lcnt), config->regs + BUS_FREE_TIMING);
+			sys_write32(sys_read32(config->regs + DEVICE_CTRL) |
+				DEV_CTRL_I2C_SLAVE_PRESENT, config->regs + DEVICE_CTRL);
+		}
+	} else {
+		/* I3C Bus Available Time */
+		scl_timing = DIV_ROUND_UP(I3C_BUS_AVAILABLE_TIME_NS * (uint64_t)core_rate,
+						I3C_PERIOD_NS);
+		sys_write32(BUS_I3C_AVAIL_TIME(scl_timing), config->regs + BUS_FREE_TIMING);
+
+		/* I3C Bus Idle Time */
+		scl_timing =
+			DIV_ROUND_UP(I3C_BUS_IDLE_TIME_NS * (uint64_t)core_rate, I3C_PERIOD_NS);
+		sys_write32(BUS_I3C_IDLE_TIME(scl_timing), config->regs + BUS_IDLE_TIMING);
+	}
 
 	return 0;
 }
@@ -2037,9 +2045,16 @@ static int dw_i3c_configure(const struct device *dev, enum i3c_config_type type,
 	const struct dw_i3c_config *dev_config = dev->config;
 
 	if (type == I3C_CONFIG_CONTROLLER) {
-		/* struct i3c_config_controller *ctrl_cfg = config; */
-		/* TODO: somehow determine i3c rate? snps is complicated */
-		return -ENOTSUP;
+		struct dw_i3c_data *data = dev->data;
+		int ret;
+
+		ret = dw_i3c_init_scl_timing(dev, config);
+		if (ret != 0) {
+			return ret;
+		}
+		(void)memcpy(&data->common.ctrl_config,
+			config, sizeof(data->common.ctrl_config));
+
 	} else if (type == I3C_CONFIG_TARGET) {
 		struct i3c_config_target *target_cfg = config;
 		uint32_t val;
@@ -2285,7 +2300,7 @@ static int dw_i3c_init(const struct device *dev)
 		ctrl_config->is_secondary = false;
 	}
 
-	ret = init_scl_timing(dev);
+	ret = dw_i3c_init_scl_timing(dev, ctrl_config);
 	if (ret != 0) {
 		return ret;
 	}
@@ -2371,6 +2386,8 @@ static DEVICE_API(i3c, dw_i3c_api) = {
 		.common.ctrl_config.scl.i3c =                                                      \
 			DT_INST_PROP_OR(n, i3c_scl_hz, I3C_BUS_TYP_I3C_SCL_RATE),                  \
 		.common.ctrl_config.scl.i2c = DT_INST_PROP_OR(n, i2c_scl_hz, 0),                   \
+		.common.ctrl_config.scl_od_min.high_ns = DT_INST_PROP(n, od_thigh_min_ns),         \
+		.common.ctrl_config.scl_od_min.low_ns = DT_INST_PROP(n, od_tlow_min_ns),           \
 	};                                                                                         \
 	static const struct dw_i3c_config dw_i3c_cfg_##n = {                                       \
 		.regs = DT_INST_REG_ADDR(n),                                                       \
@@ -2379,8 +2396,6 @@ static DEVICE_API(i3c, dw_i3c_api) = {
 				((clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, clkid)),           \
 				((clock_control_subsys_t)0)),                                      \
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),                                         \
-		.od_thigh_max_ns = DT_INST_PROP(n, od_thigh_max_ns),                               \
-		.od_tlow_min_ns = DT_INST_PROP(n, od_tlow_min_ns),                                 \
 		.irq_config_func = &i3c_dw_irq_config_##n,                                         \
 		.common.dev_list.i3c = dw_i3c_device_array_##n,                                    \
 		.common.dev_list.num_i3c = ARRAY_SIZE(dw_i3c_device_array_##n),                    \
