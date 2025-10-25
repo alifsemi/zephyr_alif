@@ -56,14 +56,15 @@
 	lpuart: uart@43008000 {
 		compatible = "ns16550";
 		reg = <0x43008000 0x100>;
-		/* 160Mhz baud clock */
-		clock-frequency = <160000000>;
 		interrupts = <45 ALIF_DEFAULT_IRQ_PRIORITY>;
+		clocks = <&clockctrl ALIF_LPUART_CLK>;
+		power-domains = <&pd_sse700_aon>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		dlf = <13>;
-		pinctrl-0 = < &pinctrl_lpuart >;
-		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_lpuart>;
+		pinctrl-1 = <&pinctrl_lpuart_sleep>;
+		pinctrl-names = "default", "sleep";
 		fifo-size = <32>;
 		status = "disabled";
 	};

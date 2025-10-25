@@ -137,6 +137,8 @@ static uint32_t alif_get_input_clock(uint32_t clock_name)
 	case ALIF_UART6_SYST_PCLK:
 	case ALIF_UART7_SYST_PCLK:
 		return ALIF_CLOCK_SYST_PCLK_FREQ;
+	case ALIF_LPUART_CLK:
+		return ALIF_CLOCK_SYST_CORE_FREQ;
 	case ALIF_I3C_CLK:
 		return ALIF_CLOCK_SYST_PCLK_FREQ;
 #if CONFIG_COUNTER_SNPS_DW

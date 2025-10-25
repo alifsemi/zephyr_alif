@@ -10,6 +10,7 @@
 #include <zephyr/dt-bindings/pwm/pwm.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
 #include <alif/common/alif_common.dtsi>
+#include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
 
 &{/} {
 	/* Individual power domain devices - one per domain */
@@ -286,11 +287,13 @@
 		reg = <0x49018000 0x100>;
 		clocks = <&clockctrl ALIF_UART0_SYST_PCLK>;
 		interrupts = <124 ALIF_DEFAULT_IRQ_PRIORITY>;
+		power-domains = <&pd_syst>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		dlf = <4>;
-		pinctrl-0 = < &pinctrl_uart0 >;
-		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_uart0>;
+		pinctrl-1 = <&pinctrl_uart0_sleep>;
+		pinctrl-names = "default", "sleep";
 		fifo-size = <32>;
 		status = "disabled";
 	};
@@ -300,11 +303,13 @@
 		reg = <0x49019000 0x100>;
 		clocks = <&clockctrl ALIF_UART1_SYST_PCLK>;
 		interrupts = <125 ALIF_DEFAULT_IRQ_PRIORITY>;
+		power-domains = <&pd_syst>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		dlf = <4>;
-		pinctrl-0 = < &pinctrl_uart1 >;
-		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_uart1>;
+		pinctrl-1 = <&pinctrl_uart1_sleep>;
+		pinctrl-names = "default", "sleep";
 		fifo-size = <32>;
 		status = "disabled";
 	};
@@ -314,11 +319,13 @@
 		reg = <0x4901a000 0x100>;
 		clocks = <&clockctrl ALIF_UART2_SYST_PCLK>;
 		interrupts = <126 ALIF_DEFAULT_IRQ_PRIORITY>;
+		power-domains = <&pd_syst>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		dlf = <4>;
-		pinctrl-0 = < &pinctrl_uart2 >;
-		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_uart2>;
+		pinctrl-1 = <&pinctrl_uart2_sleep>;
+		pinctrl-names = "default", "sleep";
 		fifo-size = <32>;
 		status = "disabled";
 	};
@@ -328,11 +335,13 @@
 		reg = <0x4901b000 0x100>;
 		clocks = <&clockctrl ALIF_UART3_SYST_PCLK>;
 		interrupts = <127 ALIF_DEFAULT_IRQ_PRIORITY>;
+		power-domains = <&pd_syst>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		dlf = <4>;
-		pinctrl-0 = < &pinctrl_uart3 >;
-		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_uart3>;
+		pinctrl-1 = <&pinctrl_uart3_sleep>;
+		pinctrl-names = "default", "sleep";
 		fifo-size = <32>;
 		status = "disabled";
 	};
@@ -342,11 +351,13 @@
 		reg = <0x4901c000 0x100>;
 		clocks = <&clockctrl ALIF_UART4_SYST_PCLK>;
 		interrupts = <128 ALIF_DEFAULT_IRQ_PRIORITY>;
+		power-domains = <&pd_syst>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		dlf = <4>;
-		pinctrl-0 = < &pinctrl_uart4 >;
-		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_uart4>;
+		pinctrl-1 = <&pinctrl_uart4_sleep>;
+		pinctrl-names = "default", "sleep";
 		fifo-size = <32>;
 		status = "disabled";
 	};
@@ -356,11 +367,13 @@
 		reg = <0x4901d000 0x100>;
 		clocks = <&clockctrl ALIF_UART5_SYST_PCLK>;
 		interrupts = <129 ALIF_DEFAULT_IRQ_PRIORITY>;
+		power-domains = <&pd_syst>;
 		reg-shift = <2>;
 		current-speed = <115200>;
 		dlf = <4>;
-		pinctrl-0 = < &pinctrl_uart5 >;
-		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_uart5>;
+		pinctrl-1 = <&pinctrl_uart5_sleep>;
+		pinctrl-names = "default", "sleep";
 		fifo-size = <32>;
 		status = "disabled";
 	};
