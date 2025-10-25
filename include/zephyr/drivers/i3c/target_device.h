@@ -54,7 +54,7 @@ struct i3c_config_target {
 	/**
 	 * I3C target static address.
 	 *
-	 * Used used when operating as a secondary controller
+	 * Used when operating as a secondary controller
 	 * or as a target device.
 	 */
 	uint8_t static_addr;
