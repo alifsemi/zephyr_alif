@@ -28,10 +28,26 @@
 		};
 	};
 
+	pinctrl_uart4_sleep: uart4_sleep {
+		group0 {
+			pinmux = <PIN_P12_1__GPIO>, <PIN_P12_2__GPIO>;
+			read_enable = <0x1>;
+			driver_state_control = <2>; /* pull-down */
+		};
+	};
+
 	pinctrl_uart0: pinctrl_uart0 {
 		group0 {
 			pinmux = < PIN_P0_0__UART0_RX_A >,
 				 < PIN_P0_1__UART0_TX_A >;
+		};
+	};
+
+	pinctrl_uart0_sleep: uart0_sleep {
+		group0 {
+			pinmux = <PIN_P0_0__GPIO>, <PIN_P0_1__GPIO>;
+			read_enable = <0x1>;
+			driver_state_control = <2>; /* pull-down */
 		};
 	};
 
@@ -42,10 +58,26 @@
 		};
 	};
 
+	pinctrl_uart1_sleep: uart1_sleep {
+		group0 {
+			pinmux = <PIN_P0_4__GPIO>, <PIN_P0_5__GPIO>;
+			read_enable = <0x1>;
+			driver_state_control = <2>; /* pull-down */
+		};
+	};
+
 	pinctrl_uart2: pinctrl_uart2 {
 		group0 {
 			pinmux = < PIN_P1_0__UART2_RX_A >,
 				 < PIN_P1_1__UART2_TX_A >;
+		};
+	};
+
+	pinctrl_uart2_sleep: uart2_sleep {
+		group0 {
+			pinmux = <PIN_P1_0__GPIO>, <PIN_P1_1__GPIO>;
+			read_enable = <0x1>;
+			driver_state_control = <2>; /* pull-down */
 		};
 	};
 
@@ -56,10 +88,26 @@
 		};
 	};
 
+	pinctrl_uart3_sleep: uart3_sleep {
+		group0 {
+			pinmux = <PIN_P1_2__GPIO>, <PIN_P1_3__GPIO>;
+			read_enable = <0x1>;
+			driver_state_control = <2>; /* pull-down */
+		};
+	};
+
 	pinctrl_uart5: pinctrl_uart5 {
 		group0 {
 			pinmux = < PIN_P3_4__UART5_RX_A >,
 				 < PIN_P3_5__UART5_TX_A >;
+		};
+	};
+
+	pinctrl_uart5_sleep: uart5_sleep {
+		group0 {
+			pinmux = <PIN_P3_4__GPIO>, <PIN_P3_5__GPIO>;
+			read_enable = <0x1>;
+			driver_state_control = <2>; /* pull-down */
 		};
 	};
 
@@ -70,6 +118,14 @@
 		};
 	};
 
+	pinctrl_uart6_sleep: uart6_sleep {
+		group0 {
+			pinmux = <PIN_P10_5__GPIO>, <PIN_P10_6__GPIO>;
+			read_enable = <0x1>;
+			driver_state_control = <2>; /* pull-down */
+		};
+	};
+
 	pinctrl_uart7: pinctrl_uart7 {
 		group0 {
 			pinmux = < PIN_P9_3__UART7_RX_B >,
@@ -77,10 +133,26 @@
 		};
 	};
 
+	pinctrl_uart7_sleep: uart7_sleep {
+		group0 {
+			pinmux = <PIN_P9_3__GPIO>, <PIN_P9_4__GPIO>;
+			read_enable = <0x1>;
+			driver_state_control = <2>; /* pull-down */
+		};
+	};
+
 	pinctrl_lpuart: pinctrl_lpuart {
 		group0 {
 			pinmux = < PIN_P7_6__LPUART_RX_A >,
 				 < PIN_P7_7__LPUART_TX_A >;
+		};
+	};
+
+	pinctrl_lpuart_sleep: lpuart_sleep {
+		group0 {
+			pinmux = <PIN_P7_6__GPIO>, <PIN_P7_7__GPIO>;
+			read_enable = <0x1>;
+			driver_state_control = <2>; /* pull-down */
 		};
 	};
 
