@@ -1,0 +1,16 @@
+#
+# Copyright 2025 Alif Semiconductor.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+name: alif-dk
+
+boards:
+  /alif_(b1|e1c)_dk/.*/rtss_he/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: alif_b1_e1c_dk.overlay
+
+  /alif_(e3|e4|e7|e8)_dk/.*/rtss_(hp|he)/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: alif_e3_e4_e7_e8_dk.overlay

@@ -1,0 +1,12 @@
+#
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+sample:
+  name: BMI323 Sensor Sample
+tests:
+  sample.sensor.bmi323:
+    tags: i3c sensors
+    depends_on: i3c
