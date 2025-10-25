@@ -400,6 +400,13 @@ struct uart_ns16550_dev_data {
 	bool tx_stream_on;
 #endif
 
+#if defined(CONFIG_PM_DEVICE)
+	uint8_t ier_cache;	/**< IER cache for suspend/resume */
+#if defined(CONFIG_UART_NS16550_LINE_CTRL)
+	uint8_t mdc_cache;	/**< MDC cache for suspend/resume */
+#endif
+#endif
+
 #if defined(CONFIG_UART_ASYNC_API)
 	uint64_t phys_addr;
 	struct uart_ns16550_async_data async;
@@ -752,28 +759,15 @@ static int uart_ns16550_configure(const struct device *dev,
 
 	/*
 	 * Program FIFO: enabled, mode 0 (set for compatibility with quark),
-	 * RX generates the interrupt at 8th byte (FIFO is 1/2 full)
-	 * TX generates the interrupt when FIFO is empty
-	 * Clear TX and RX FIFO if system is not resuming
+	 * generate the interrupt at 8th byte
+	 * Clear TX and RX FIFO
 	 */
-	int fifo_clr_mask = FCR_RCVRCLR | FCR_XMITCLR;
-#if defined(CONFIG_PM_DEVICE)
-	static uint32_t resuming __attribute__((noinit));
-	static const int resume_magic = 0x45454545;
-
-	/* Keep FIFOs' content */
-	if (resuming == resume_magic) {
-		fifo_clr_mask = 0;
-	}
-
-	/* Preserved when memory is kept in retention */
-	resuming = resume_magic;
-#endif
-	uint32_t fcr_reg = FCR_FIFO | FCR_MODE0 | FCR_FIFO_8 | fifo_clr_mask;
+	ns16550_outbyte(dev_cfg, FCR(dev),
+			FCR_FIFO | FCR_MODE0 | FCR_FIFO_8 | FCR_RCVRCLR | FCR_XMITCLR
 #ifdef CONFIG_UART_NS16550_VARIANT_NS16750
-	fcr_reg |= FCR_FIFO_64;
+			| FCR_FIFO_64
 #endif
-	ns16550_outbyte(dev_cfg, FCR(dev), fcr_reg);
+			);
 
 	if (!dev_data->fifo_size) {
 		if ((ns16550_inbyte(dev_cfg, IIR(dev)) & IIR_FE) == IIR_FE) {
@@ -803,10 +797,8 @@ static int uart_ns16550_configure(const struct device *dev,
 	}
 #endif
 
-	if (fifo_clr_mask) {
-		/* clear the port, dont empty if fifo has valid data after wakeup*/
-		(void)ns16550_read_char(dev, &c);
-	}
+	/* clear the port */
+	(void)ns16550_read_char(dev, &c);
 
 	/* disable interrupts  */
 	ns16550_outbyte(dev_cfg, IER(dev), 0x00);
@@ -1983,6 +1975,151 @@ static void uart_ns16550_async_tx_timeout(struct k_work *work)
 
 #endif /* CONFIG_UART_ASYNC_API */
 
+#if defined(CONFIG_PM_DEVICE)
+/**
+ * @brief UART suspend helper
+ *
+ * Saves UART state and prepares hardware for power down.
+ *
+ * @param dev UART device struct
+ *
+ * @return 0 if successful, negative errno otherwise
+ */
+static int uart_ns16550_suspend(const struct device *dev)
+{
+	const struct uart_ns16550_dev_config *dev_cfg = dev->config;
+	struct uart_ns16550_dev_data *data = dev->data;
+	int ret = 0;
+
+	/* Save current interrupt enable state */
+	data->ier_cache = ns16550_inbyte(dev_cfg, IER(dev));
+
+#if defined(CONFIG_UART_NS16550_LINE_CTRL)
+	/* Save modem control register state */
+	data->mdc_cache = ns16550_inbyte(dev_cfg, MDC(dev));
+#endif
+
+	/* Wait for transmit FIFO to be empty */
+	while ((ns16550_inbyte(dev_cfg, LSR(dev)) & LSR_TEMT) == 0) {
+		/* Wait for the UART to be idle */
+		arch_nop();
+	}
+
+#if defined(CONFIG_UART_NS16550_LINE_CTRL)
+	/* Set break condition to signal suspend */
+	ret = uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 1);
+	if (ret != 0) {
+		return ret;
+	}
+
+#if defined(CONFIG_PINCTRL)
+	if (dev_cfg->pincfg == NULL) {
+		ret = uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 0);
+		if (ret != 0) {
+			return ret;
+		}
+	}
+#endif
+#endif
+
+	/* Disable all interrupts */
+	ns16550_outbyte(dev_cfg, IER(dev), 0x00);
+
+#if defined(CONFIG_PINCTRL)
+	/* Apply sleep pin configuration if available */
+	if (dev_cfg->pincfg != NULL) {
+		ret = pinctrl_apply_state(dev_cfg->pincfg, PINCTRL_STATE_SLEEP);
+		if (ret < 0 && ret != -ENOENT) {
+			/* Ignore -ENOENT (sleep state not defined) */
+			return ret;
+		}
+	}
+#endif
+
+	return 0;
+}
+
+/**
+ * @brief UART resume helper
+ *
+ * Restores UART state after power on.
+ *
+ * @param dev UART device struct
+ *
+ * @return 0 if successful, negative errno otherwise
+ */
+static int uart_ns16550_resume(const struct device *dev)
+{
+	const struct uart_ns16550_dev_config *dev_cfg = dev->config;
+	struct uart_ns16550_dev_data *data = dev->data;
+	int ret;
+
+	/*
+	 * Reconfigure UART hardware (baud rate, parity, stop bits, etc.)
+	 * Note: uart_ns16550_configure() will restore pinctrl to PINCTRL_STATE_DEFAULT
+	 */
+	ret = uart_ns16550_configure(dev, &data->uart_config);
+	if (ret != 0) {
+		return ret;
+	}
+
+#if defined(CONFIG_UART_NS16550_LINE_CTRL)
+	/* Restore modem control register (includes RTS/DTR state from cache) */
+	ns16550_outbyte(dev_cfg, MDC(dev), data->mdc_cache);
+
+	/* Clear break condition */
+	ret = uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 0);
+	if (ret != 0) {
+		return ret;
+	}
+#endif
+
+	/* Restore interrupt enable state */
+	ns16550_outbyte(dev_cfg, IER(dev), data->ier_cache);
+
+	return 0;
+}
+
+/**
+ * @brief UART PM device action handler
+ *
+ * Handles power management state transitions for the UART device.
+ * Coordinates with power domain via PM framework.
+ *
+ * @param dev UART device struct
+ * @param action PM device action
+ *
+ * @return 0 if successful, negative errno otherwise
+ */
+static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	int ret = 0;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		/* Device is powered - restore UART state */
+		ret = uart_ns16550_resume(dev);
+		break;
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		/* Save UART state and prepare for power down */
+		ret = uart_ns16550_suspend(dev);
+		break;
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Power domain handling is automatic via PM framework */
+		break;
+
+	default:
+		ret = -ENOTSUP;
+		break;
+	}
+
+	return ret;
+}
+#endif /* CONFIG_PM_DEVICE */
+
 static DEVICE_API(uart, uart_ns16550_driver_api) = {
 	.poll_in = uart_ns16550_poll_in,
 	.poll_out = uart_ns16550_poll_out,
@@ -2160,44 +2297,6 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 #define DEV_DATA_ASYNC(n)
 #endif /* CONFIG_UART_ASYNC_API */
 
-#ifdef CONFIG_PM_DEVICE
-
-static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_action action)
-{
-	LOG_DBG("PM Device action %d", action);
-
-	switch (action) {
-	case PM_DEVICE_ACTION_TURN_ON:
-#ifdef CONFIG_UART_NS16550_LINE_CTRL
-		/* Clear break condition */
-		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 0);
-#endif
-		break;
-	case PM_DEVICE_ACTION_RESUME:
-#ifdef CONFIG_UART_NS16550_LINE_CTRL
-		/* Clear break condition */
-		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 0);
-		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 1);
-#endif
-		break;
-	case PM_DEVICE_ACTION_TURN_OFF:
-	case PM_DEVICE_ACTION_SUSPEND:
-#ifdef CONFIG_UART_NS16550_LINE_CTRL
-		/* Set break condition */
-		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 1);
-		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 0);
-#endif
-		break;
-	default:
-		LOG_WRN("Unsupported power state change");
-		return -ENOTSUP;
-	}
-
-	return 0;
-}
-
-#endif
-
 /* Note: DT_SAME_NODE cannot be used here since it returns wrong value for
  *       COND_CODE_1 macro and check will fail.
  */
@@ -2222,7 +2321,7 @@ static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_actio
 				.sys_clk_freq = 0,                                   \
 				.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),  \
 				.clock_subsys = (clock_control_subsys_t) DT_INST_PHA(\
-								0, clocks, clkid),   \
+								n, clocks, clkid),   \
 			)                                                            \
 		)                                                                    \
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, pcp),                            \
@@ -2266,9 +2365,9 @@ static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_actio
 	static struct uart_ns16550_dev_data uart_ns16550_dev_data_##n = {            \
 		UART_NS16550_COMMON_DEV_DATA_INITIALIZER(n)                          \
 	};                                                                           \
-	IF_ENABLED(CONFIG_PM_DEVICE,                                                 \
-		   (PM_DEVICE_DT_INST_DEFINE(n, uart_ns16550_pm_action);))           \
-	DEVICE_DT_INST_DEFINE(n, uart_ns16550_init, PM_DEVICE_DT_INST_GET(n),       \
+	PM_DEVICE_DT_INST_DEFINE(n, uart_ns16550_pm_action);                         \
+	DEVICE_DT_INST_DEFINE(n, uart_ns16550_init,                                  \
+			      PM_DEVICE_DT_INST_GET(n),                              \
 			      &uart_ns16550_dev_data_##n, &uart_ns16550_dev_cfg_##n, \
 			      UART_KERNEL_INIT_LEVEL(n),                             \
 			      CONFIG_SERIAL_INIT_PRIORITY,                           \
@@ -2287,9 +2386,9 @@ static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_actio
 	static struct uart_ns16550_dev_data uart_ns16550_dev_data_##n = {            \
 		UART_NS16550_COMMON_DEV_DATA_INITIALIZER(n)                          \
 	};                                                                           \
-	IF_ENABLED(CONFIG_PM_DEVICE,                                                 \
-		   (PM_DEVICE_DT_INST_DEFINE(n, uart_ns16550_pm_action);))           \
-	DEVICE_DT_INST_DEFINE(n, uart_ns16550_init, PM_DEVICE_DT_INST_GET(n),       \
+	PM_DEVICE_DT_INST_DEFINE(n, uart_ns16550_pm_action);                         \
+	DEVICE_DT_INST_DEFINE(n, uart_ns16550_init,                                  \
+			      PM_DEVICE_DT_INST_GET(n),                              \
 			      &uart_ns16550_dev_data_##n, &uart_ns16550_dev_cfg_##n, \
 			      UART_KERNEL_INIT_LEVEL(n),                             \
 			      CONFIG_SERIAL_INIT_PRIORITY,                           \
