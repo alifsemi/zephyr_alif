@@ -57,6 +57,10 @@ typedef int (*pm_s2ram_system_off_fn_t)(void);
  */
 int arch_pm_s2ram_suspend(pm_s2ram_system_off_fn_t system_off);
 
+void pm_s2ram_save_ext_regs(void);
+
+void pm_s2ram_restore_ext_regs(void);
+
 /**
  * @}
  */
