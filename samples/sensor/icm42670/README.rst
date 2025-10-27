@@ -14,7 +14,7 @@ startup.
 Wiring
 *******
 
-This sample uses an external breakout for the sensor.  A devicetree
+No wiring needed as this is an on-board sensor. A devicetree
 overlay must be provided to identify the I3C  bus and GPIO (if required) used to
 control the sensor.
 
@@ -23,9 +23,6 @@ Building and Running
 
 After providing a devicetree overlay that specifies the sensor location,
 build this sample app using:
-
-Integrated CAN controller
-=========================
 
 For Alif boards:
 
