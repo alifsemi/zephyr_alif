@@ -148,9 +148,9 @@ manifest:
       path: modules/hal/adi
       groups:
         - hal
-    - name: hal_alif_2.0
-      revision: 6428f0118a439add2f4d657515fb08b233d2f1ee
-      path: modules/hal/alif_2.0
+    - name: hal_alif
+      revision: da5f04d061588bdc36598695ac8b0a53ab4c6e59
+      path: modules/hal/alif
       remote: alif
       groups:
         - hal
