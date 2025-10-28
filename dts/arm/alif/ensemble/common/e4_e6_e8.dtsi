@@ -17,6 +17,16 @@
 
 &{/soc} {
 
+	ethosu1: ethosu85@49042000 {
+		compatible = "arm,ethos-u";
+		reg = <0x49042000 0x1000>;
+		interrupts = <366 3>;
+		interrupt-parent = <&nvic>;
+		secure-enable;
+		privilege-enable;
+		status = "disabled";
+	};
+
 	gpio16: gpio@4300a000 {
 		compatible = "snps,designware-gpio";
 		reg = <0x4300A000 0x1000>;
