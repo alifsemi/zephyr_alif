@@ -97,7 +97,7 @@
 #define UDC_K_HEAP_DEFINE(name, size)						\
 	COND_CODE_1(CONFIG_UDC_BUF_FORCE_NOCACHE,				\
 		    (UDC_HEAP_DEFINE(name, size, __nocache)),			\
-		    (UDC_HEAP_DEFINE(name, size, __noinit)))
+		    (UDC_HEAP_DEFINE(name, size, __noinit_named(kheap_buf_##name))))
 
 extern const struct net_buf_data_cb net_buf_dma_cb;
 /** @endcond */
