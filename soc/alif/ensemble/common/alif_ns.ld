@@ -9,6 +9,8 @@ GROUP_START(NON_SECURE0)
 			KEEP(*(.alif_ns))
 			KEEP(*(".alif_ns.*"))
 			KEEP(*(.noinit.*kheap_buf_video_buffer_pool))
+			KEEP(*(.bss.net_buf_data_cdc_acm_ep_pool))
+			KEEP(*(.noinit.*kheap_buf_net_buf_mem_pool_udc_ep_pool))
 	} GROUP_LINK_IN(NON_SECURE0)
 
 GROUP_END(NON_SECURE0)
