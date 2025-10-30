@@ -103,6 +103,8 @@ SECTIONS
     {
 
 #include <zephyr/linker/rel-sections.ld>
+/* Included Alif non secure region ld script */
+#include "alif_ns.ld"
 #ifdef CONFIG_LLEXT
 #include <zephyr/linker/llext-sections.ld>
 #endif
