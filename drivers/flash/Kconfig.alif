@@ -7,6 +7,7 @@ config MRAM_FLASH_ALIF
 	depends on DT_HAS_ALIF_MRAM_FLASH_CONTROLLER_ENABLED
 	select FLASH_HAS_DRIVER_ENABLED
 	select FLASH_HAS_PAGE_LAYOUT
+	select FLASH_HAS_NO_EXPLICIT_ERASE
 	help
 	 Enables MRAM flash driver on Alif SoCs.
 
