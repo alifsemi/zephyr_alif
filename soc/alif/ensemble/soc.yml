@@ -14,6 +14,7 @@ family:
             cpuclusters:
               - name: rtss_he
               - name: rtss_hp
+              - name: apss
       - name: e4
         socs:
           - name: ae402fa0e5597xx0

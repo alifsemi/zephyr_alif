@@ -4,4 +4,8 @@
 
 zephyr_include_directories(.)
 
-set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/include/zephyr/arch/arm/cortex_m/scripts/linker.ld CACHE INTERNAL "")
+if(CONFIG_APSS)
+  set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/soc/alif/ensemble/common/linker_a.ld CACHE INTERNAL "")
+else()
+  set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/soc/alif/ensemble/common/linker.ld CACHE INTERNAL "")
+endif()

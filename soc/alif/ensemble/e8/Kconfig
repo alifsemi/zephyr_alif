@@ -11,6 +11,9 @@ config SOC_AE822FA0E5597XX0_RTSS_HE
 config SOC_AE822FA0E5597XX0_RTSS_HP
 		select RTSS_HP
 
+config SOC_AE822FA0E5597XX0_APSS
+		select APSS
+
 config ANALOG_ALIASING
 	bool "Enable Analog Aliasing"
 	help
