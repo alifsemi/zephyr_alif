@@ -20,6 +20,7 @@
 		zephyr,sram = &dtcm;
 		zephyr,console = &uart4;
 		zephyr,shell-uart = &uart4;
+		zephyr,uart-mcumgr = &uart4;
 	};
 
 	aliases {
