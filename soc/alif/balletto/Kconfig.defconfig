@@ -3,6 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 if SOC_FAMILY_BALLETTO
+
+# Disable null pointer exception detection by default for Balletto B1.
+# The Alif BLE ROM patcher dereferences address 0x00000000 (ITCM base)
+# when no patch is present (__ble_patch_info_start weak symbol resolves to NULL).
+# Enabling MPU-based null pointer detection would trap this access and cause a fault.
+choice NULL_POINTER_EXCEPTION_DETECTION
+	default NULL_POINTER_EXCEPTION_DETECTION_NONE
+endchoice
+
 rsource "*/Kconfig.defconfig"
 endif # SOC_FAMILY_BALLETTO
 
