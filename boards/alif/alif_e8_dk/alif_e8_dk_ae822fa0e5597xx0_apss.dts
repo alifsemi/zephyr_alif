@@ -1,0 +1,300 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+
+#include <arm64/armv8-a.dtsi>
+#include <mem.h>
+#include <zephyr/dt-bindings/interrupt-controller/arm-gic.h>
+#include <zephyr/dt-bindings/pinctrl/ensemble-pinctrl.h>
+#include <zephyr/dt-bindings/clock/alif_ensemble_clocks.h>
+
+/ {
+	compatible = "arm,alif-e8-dk-ae822fa0e5597xx0-apss";
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	chosen {
+		zephyr,sram = &sram0;
+		zephyr,console = &uart4;
+		zephyr,shell-uart = &uart4;
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a32";
+			reg = <0x0>;
+		};
+	};
+
+	soc {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		interrupt-parent = <&gic>;
+
+		arch_timer: timer@1a230000 {
+			compatible = "arm,armv8-timer";
+			reg = <0x1a230000 0x1000>;
+			interrupt-parent = <&gic>;
+			interrupts = <GIC_PPI 13 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+				     <GIC_PPI 14 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+				     <GIC_PPI 11 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+				     <GIC_PPI 10 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			label = "arch_timer";
+			status = "okay";
+		};
+
+		sram0: sram@2000000 {
+			compatible = "mmio-sram";
+			reg = <0x2000000 0x400000>;
+			label = "sram0";
+			status = "okay";
+		};
+
+		gic: interrupt-controller@1c010000 {
+			compatible = "arm,gic-v2", "arm,gic";
+			reg = <0x1c010000 0x1000>,
+			      <0x1c02f000 0x2000>;
+			interrupt-controller;
+			#interrupt-cells = <4>;
+			label = "gic";
+			status = "okay";
+		};
+
+		clockctrl: clock-controller@4903f000 {
+			compatible = "alif,clockctrl";
+			reg = <0x4903F000 0xB0
+				0x4902F000 0xBC
+				0x1A604000 0x44
+				0x1A609000 0x14
+				0x43007000 0x2C
+				0x400F0000 0x14>;
+			reg-names = "clkctl_per_mst",
+				    "clkctl_per_slv",
+				    "aon",
+				    "vbat",
+				    "m55he_cfg",
+				    "m55hp_cfg";
+			#clock-cells = <1>;
+			status = "okay";
+		};
+
+		pinctrl: pin-controller@1a603000 {
+			compatible = "alif,pinctrl";
+			reg = <0x1A603000 0x00001000>, <0x42007000 0x00001000>;
+			reg-names = "pinctrl", "lpgpio_pinctrl";
+
+			pinctrl_uart0: pinctrl_uart0 {
+				group0 {
+					pinmux = <PIN_P0_0__UART0_RX_A>,
+						 <PIN_P0_1__UART0_TX_A>;
+				};
+			};
+
+			pinctrl_uart1: pinctrl_uart1 {
+				group0 {
+					pinmux = <PIN_P0_4__UART1_RX_A>,
+						 <PIN_P0_5__UART1_TX_A>;
+				};
+			};
+
+			pinctrl_uart2: pinctrl_uart2 {
+				group0 {
+					pinmux = <PIN_P1_0__UART2_RX_A>,
+						 <PIN_P1_1__UART2_TX_A>;
+				};
+			};
+
+			pinctrl_uart3: pinctrl_uart3 {
+				group0 {
+					pinmux = <PIN_P1_2__UART3_RX_A>,
+						 <PIN_P1_3__UART3_TX_A>;
+				};
+			};
+
+			pinctrl_uart4: pinctrl_uart4 {
+				group1 {
+					pinmux = <PIN_P12_1__UART4_RX_B>,
+						 <PIN_P12_2__UART4_TX_B>;
+				};
+			};
+
+			pinctrl_uart5: pinctrl_uart5 {
+				group0 {
+					pinmux = <PIN_P3_4__UART5_RX_A>,
+						 <PIN_P3_5__UART5_TX_A>;
+				};
+			};
+
+			pinctrl_uart6: pinctrl_uart6 {
+				group0 {
+					pinmux = <PIN_P10_5__UART6_RX_A>,
+						 <PIN_P10_6__UART6_TX_A>;
+				};
+			};
+
+			pinctrl_uart7: pinctrl_uart7 {
+				group0 {
+					pinmux = <PIN_P9_3__UART7_RX_B>,
+						 <PIN_P9_4__UART7_TX_B>;
+				};
+			};
+		};
+
+		uart0: uart@49018000 {
+			compatible = "ns16550";
+			reg = <0x49018000 0x100>;
+			clocks = <&clockctrl ALIF_UART0_SYST_PCLK>;
+			interrupts = <GIC_SPI 113 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			reg-shift = <2>;
+			current-speed = <115200>;
+			pinctrl-0 = <&pinctrl_uart0>;
+			pinctrl-names = "default";
+			fifo-size = <32>;
+			status = "disabled";
+		};
+
+		uart1: uart@49019000 {
+			compatible = "ns16550";
+			reg = <0x49019000 0x100>;
+			clocks = <&clockctrl ALIF_UART1_SYST_PCLK>;
+			interrupts = <GIC_SPI 114 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			reg-shift = <2>;
+			current-speed = <115200>;
+			pinctrl-0 = <&pinctrl_uart1>;
+			pinctrl-names = "default";
+			fifo-size = <32>;
+			status = "disabled";
+		};
+
+		uart2: uart@4901a000 {
+			compatible = "ns16550";
+			reg = <0x4901a000 0x100>;
+			clocks = <&clockctrl ALIF_UART2_SYST_PCLK>;
+			interrupts = <GIC_SPI 115 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			reg-shift = <2>;
+			current-speed = <115200>;
+			pinctrl-0 = <&pinctrl_uart2>;
+			pinctrl-names = "default";
+			fifo-size = <32>;
+			status = "disabled";
+		};
+
+		uart3: uart@4901b000 {
+			compatible = "ns16550";
+			reg = <0x4901b000 0x100>;
+			clocks = <&clockctrl ALIF_UART3_SYST_PCLK>;
+			interrupts = <GIC_SPI 116 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			reg-shift = <2>;
+			current-speed = <115200>;
+			pinctrl-0 = <&pinctrl_uart3>;
+			pinctrl-names = "default";
+			fifo-size = <32>;
+			status = "disabled";
+		};
+
+		uart4: uart@4901c000 {
+			compatible = "ns16550";
+			reg = <0x4901c000 0x100>;
+			clocks = <&clockctrl ALIF_UART4_SYST_PCLK>;
+			interrupts = <GIC_SPI 117 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			reg-shift = <2>;
+			current-speed = <115200>;
+			fifo-size = <32>;
+			pinctrl-0 = <&pinctrl_uart4>;
+			pinctrl-names = "default";
+			status = "okay";
+		};
+
+		uart5: uart@4901d000 {
+			compatible = "ns16550";
+			reg = <0x4901d000 0x100>;
+			clocks = <&clockctrl ALIF_UART5_SYST_PCLK>;
+			interrupts = <GIC_SPI 118 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			reg-shift = <2>;
+			current-speed = <115200>;
+			pinctrl-0 = <&pinctrl_uart5>;
+			pinctrl-names = "default";
+			fifo-size = <32>;
+			status = "disabled";
+		};
+
+		uart6: uart@4901e000 {
+			compatible = "ns16550";
+			reg = <0x4901e000 0x100>;
+			clocks = <&clockctrl ALIF_UART6_SYST_PCLK>;
+			interrupts = <GIC_SPI 119 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			reg-shift = <2>;
+			current-speed = <115200>;
+			pinctrl-0 = <&pinctrl_uart6>;
+			pinctrl-names = "default";
+			fifo-size = <32>;
+			status = "disabled";
+		};
+
+		uart7: uart@4901f000 {
+			compatible = "ns16550";
+			reg = <0x4901f000 0x100>;
+			clocks = <&clockctrl ALIF_UART7_SYST_PCLK>;
+			interrupts = <GIC_SPI 120 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+			reg-shift = <2>;
+			current-speed = <115200>;
+			pinctrl-0 = <&pinctrl_uart7>;
+			pinctrl-names = "default";
+			fifo-size = <32>;
+			status = "disabled";
+		};
+	};
+};
+
+&{/} {
+	clocks {
+		lfrc: lfrc {
+			compatible = "fixed-clock";
+			clock-frequency = <32000>;
+			status = "okay";
+			#clock-cells = <0>;
+		};
+		lfxo: lfxo {
+			compatible = "fixed-clock";
+			clock-frequency = <32768>;
+			status = "okay";
+			#clock-cells = <0>;
+		};
+		hfrc: hfrc {
+			compatible = "fixed-clock";
+			clock-frequency = <76800000>;
+			status = "okay";
+			#clock-cells = <0>;
+		};
+		hfxo: hfxo {
+			compatible = "fixed-clock";
+			clock-frequency = <38400000>;
+			status = "okay";
+			#clock-cells = <0>;
+		};
+		pll_clk1: pll_clk1 {
+			compatible = "alif,clock";
+			clock-frequency = <800000000>;
+			status = "okay";
+			#clock-cells = <0>;
+		};
+		syst_aclk: axi_clk {
+			compatible = "alif,clock";
+			clock-frequency = <400000000>;
+			status = "okay";
+			#clock-cells = <0>;
+		};
+		syst_hclk: ahb_clk {
+			compatible = "alif,clock";
+			clock-frequency = <200000000>;
+			status = "okay";
+			#clock-cells = <0>;
+		};
+	};
+};
