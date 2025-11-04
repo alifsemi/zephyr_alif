@@ -1,0 +1,15 @@
+# Copyright (c) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Bluetooth HCI for Alif Balletto B1
+
+compatible: "alif,bt-hci-uart"
+
+include: bt-hci.yaml
+
+properties:
+  bt-hci-name:
+    default: "BT Alif"
+  bt-hci-bus:
+    default: "uart"
+

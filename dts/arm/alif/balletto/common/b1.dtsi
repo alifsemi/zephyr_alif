@@ -531,6 +531,11 @@
 		hw-flow-control;
 		rts-ctrl;
 		status = "disabled";
+
+		alif_hci_uart: alif_hci_uart {
+			compatible = "alif,bt-hci-uart";
+			status = "okay";
+		};
 	};
 
 	uart_ahi: uart@4300b000 {
@@ -978,6 +983,7 @@
 		zephyr,code-partition = &slot0_partition;
 		zephyr,sram = &dtcm;
 		zephyr,dtcm = &dtcm;
+		zephyr,bt-hci = &alif_hci_uart;
 		zephyr,bt-uart = &uart_hci;
 		zephyr,hci-uart = &uart_hci;
 		zephyr,ahi-uart = &uart_ahi;

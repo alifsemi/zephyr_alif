@@ -21,49 +21,19 @@
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/hci.h>
-#include <zephyr/drivers/bluetooth/hci_driver.h>
+#include <zephyr/drivers/bluetooth.h>
 
 #define LOG_LEVEL CONFIG_BT_HCI_DRIVER_LOG_LEVEL
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(bt_driver);
+LOG_MODULE_REGISTER(alif_bt_driver);
 
 #include "common/bt_str.h"
 
 #include "../util.h"
 
 #include "es0_power_manager.h"
-#include "dma_event_router.h"
-#include <zephyr/sys/ring_buffer.h>
 
-#define H4_NONE 0x00
-#define H4_CMD  0x01
-#define H4_ACL  0x02
-#define H4_SCO  0x03
-#define H4_EVT  0x04
-#define H4_ISO  0x05
-
-/* Define appropriate timeouts */
-#define TX_TIMEOUT_US 200 /* 200us */
-#define RX_TIMEOUT_US 0   /* No delay */
-
-/* UART DMA request numbers from board-specific overlay */
-#define DMA_UART_TX_GROUP 0 /* DMA group for UART TX */
-#define DMA_UART_RX_GROUP 0 /* DMA group for UART RX */
-
-static K_KERNEL_STACK_DEFINE(alif_rx_thread_stack, CONFIG_BT_RX_STACK_SIZE);
-static struct k_thread alif_rx_thread_data;
-
-/* Disable RX dma because it not work optimal way */
-#define ALIF_HCI_DMA_RX_ENABLED 0
-
-#if ALIF_HCI_DMA_RX_ENABLED
-static bool pingpong;
-#endif
-#define BUFF_SIZE 32
-static uint8_t temp_rx_buf[64];
-
-/* Wait for specific message from HCI */
-static K_SEM_DEFINE(hci_tx_sem, 0, 1);
+#define DT_DRV_COMPAT alif_bt_hci_uart
 
 /* Stop flag to signal rx thread */
 static atomic_t stop_flag = ATOMIC_INIT(0);
@@ -71,180 +41,185 @@ static atomic_t stop_flag = ATOMIC_INIT(0);
 /* hci_alif_rx_thread id */
 static k_tid_t tid;
 
-#define MY_RING_BUF_BYTES 256
-RING_BUF_DECLARE(hci_ring_buf, MY_RING_BUF_BYTES);
+struct hci_alif_data {
+	struct {
+		struct net_buf *buf;
+		struct k_fifo   fifo;
 
-static struct {
-	struct net_buf *buf;
-	struct k_fifo fifo;
+		uint16_t        remaining;
+		uint16_t        discard;
 
-	uint16_t remaining;
-	uint16_t discard;
+		bool            have_hdr;
+		bool            discardable;
 
-	bool have_hdr;
-	bool discardable;
+		uint8_t         hdr_len;
 
-	uint8_t hdr_len;
+		uint8_t         type;
+		union {
+			struct bt_hci_evt_hdr evt;
+			struct bt_hci_acl_hdr acl;
+			struct bt_hci_iso_hdr iso;
+			uint8_t hdr[4];
+		};
+	} rx;
 
-	uint8_t type;
-	union {
-		struct bt_hci_evt_hdr evt;
-		struct bt_hci_acl_hdr acl;
-		struct bt_hci_iso_hdr iso;
-		uint8_t hdr[4];
-	};
-} rx = {
-	.fifo = Z_FIFO_INITIALIZER(rx.fifo),
+	struct {
+		uint8_t         type;
+		struct net_buf *buf;
+		struct k_fifo   fifo;
+	} tx;
+
+	bt_hci_recv_t recv;
 };
 
-static struct {
-	uint8_t type;
-	struct net_buf *buf;
-	struct k_fifo fifo;
-} tx = {
-	.fifo = Z_FIFO_INITIALIZER(tx.fifo),
+struct hci_alif_config {
+	const struct device *uart;
+	k_thread_stack_t *rx_thread_stack;
+	size_t rx_thread_stack_size;
+	struct k_thread *rx_thread;
 };
 
-static bool hci_uart_dma_rx_enabled;
-static bool hci_uart_dma_tx_enabled;
-/* Static tx buffer */
-static uint8_t hci_tx_buf[256];
-
-static const struct device *const hci_alif_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_bt_uart));
-
-static inline void hci_alif_get_type(void)
+static inline void hci_alif_get_type(const struct device *dev)
 {
-	/* Get packet type */
-	int read = ring_buf_get(&hci_ring_buf, &rx.type, 1);
+	const struct hci_alif_config *cfg = dev->config;
+	struct hci_alif_data *h4 = dev->data;
 
-	if (read != 1) {
-		rx.type = H4_NONE;
+	/* Get packet type */
+	if (uart_fifo_read(cfg->uart, &h4->rx.type, 1) != 1) {
+		LOG_WRN("Unable to read H:4 packet type");
+		h4->rx.type = BT_HCI_H4_NONE;
 		return;
 	}
 
-	switch (rx.type) {
-	case H4_EVT:
-		rx.remaining = sizeof(rx.evt);
-		rx.hdr_len = rx.remaining;
+	switch (h4->rx.type) {
+	case BT_HCI_H4_EVT:
+		h4->rx.remaining = sizeof(h4->rx.evt);
+		h4->rx.hdr_len = h4->rx.remaining;
 		break;
-	case H4_ACL:
-		rx.remaining = sizeof(rx.acl);
-		rx.hdr_len = rx.remaining;
+	case BT_HCI_H4_ACL:
+		h4->rx.remaining = sizeof(h4->rx.acl);
+		h4->rx.hdr_len = h4->rx.remaining;
 		break;
-	case H4_ISO:
-		/* TODO: Figure out a way to use shared memory for ISO */
+	case BT_HCI_H4_ISO:
 		if (IS_ENABLED(CONFIG_BT_ISO)) {
-			rx.remaining = sizeof(rx.iso);
-			rx.hdr_len = rx.remaining;
+			h4->rx.remaining = sizeof(h4->rx.iso);
+			h4->rx.hdr_len = h4->rx.remaining;
 			break;
 		}
 		__fallthrough;
 	default:
-		LOG_ERR("Unknown H:4 type 0x%02x", rx.type);
-		rx.type = H4_NONE;
+		LOG_ERR("Unknown H:4 type 0x%02x", h4->rx.type);
+		h4->rx.type = BT_HCI_H4_NONE;
 	}
 }
 
-static void hci_alif_read_hdr(void)
+static void hci_alif_read_hdr(const struct device *dev)
 {
-	int bytes_read = rx.hdr_len - rx.remaining;
+	const struct hci_alif_config *cfg = dev->config;
+	struct hci_alif_data *h4 = dev->data;
+	int bytes_read = h4->rx.hdr_len - h4->rx.remaining;
 	int ret;
 
-	ret = ring_buf_get(&hci_ring_buf, rx.hdr + bytes_read, rx.remaining);
-
+	ret = uart_fifo_read(cfg->uart, h4->rx.hdr + bytes_read, h4->rx.remaining);
 	if (unlikely(ret < 0)) {
 		LOG_ERR("Unable to read from UART (ret %d)", ret);
 	} else {
-		rx.remaining -= ret;
+		h4->rx.remaining -= ret;
 	}
 }
 
-static inline void get_acl_hdr(void)
+static inline void get_acl_hdr(const struct device *dev)
 {
-	hci_alif_read_hdr();
+	struct hci_alif_data *h4 = dev->data;
 
-	if (!rx.remaining) {
-		struct bt_hci_acl_hdr *hdr = &rx.acl;
+	hci_alif_read_hdr(dev);
 
-		rx.remaining = sys_le16_to_cpu(hdr->len);
-		LOG_DBG("Got ACL header. Payload %u bytes", rx.remaining);
-		rx.have_hdr = true;
+	if (!h4->rx.remaining) {
+		struct bt_hci_acl_hdr *hdr = &h4->rx.acl;
+
+		h4->rx.remaining = sys_le16_to_cpu(hdr->len);
+		LOG_DBG("Got ACL header. Payload %u bytes", h4->rx.remaining);
+		h4->rx.have_hdr = true;
 	}
 }
 
-static inline void get_iso_hdr(void)
+static inline void get_iso_hdr(const struct device *dev)
 {
-	hci_alif_read_hdr();
+	struct hci_alif_data *h4 = dev->data;
 
-	if (!rx.remaining) {
-		struct bt_hci_iso_hdr *hdr = &rx.iso;
+	hci_alif_read_hdr(dev);
 
-		rx.remaining = bt_iso_hdr_len(sys_le16_to_cpu(hdr->len));
-		LOG_DBG("Got ISO header. Payload %u bytes", rx.remaining);
-		rx.have_hdr = true;
+	if (!h4->rx.remaining) {
+		struct bt_hci_iso_hdr *hdr = &h4->rx.iso;
+
+		h4->rx.remaining = bt_iso_hdr_len(sys_le16_to_cpu(hdr->len));
+		LOG_DBG("Got ISO header. Payload %u bytes", h4->rx.remaining);
+		h4->rx.have_hdr = true;
 	}
 }
 
-static inline void get_evt_hdr(void)
+static inline void get_evt_hdr(const struct device *dev)
 {
-	struct bt_hci_evt_hdr *hdr = &rx.evt;
+	struct hci_alif_data *h4 = dev->data;
 
-	hci_alif_read_hdr();
+	struct bt_hci_evt_hdr *hdr = &h4->rx.evt;
 
-	if (rx.hdr_len == sizeof(*hdr) && rx.remaining < sizeof(*hdr)) {
-		switch (rx.evt.evt) {
+	hci_alif_read_hdr(dev);
+
+	if (h4->rx.hdr_len == sizeof(*hdr) && h4->rx.remaining < sizeof(*hdr)) {
+		switch (h4->rx.evt.evt) {
 		case BT_HCI_EVT_LE_META_EVENT:
-			rx.remaining++;
-			rx.hdr_len++;
+			h4->rx.remaining++;
+			h4->rx.hdr_len++;
 			break;
-#if defined(CONFIG_BT_BREDR)
+#if defined(CONFIG_BT_CLASSIC)
 		case BT_HCI_EVT_INQUIRY_RESULT_WITH_RSSI:
 		case BT_HCI_EVT_EXTENDED_INQUIRY_RESULT:
-			rx.discardable = true;
+			h4->rx.discardable = true;
 			break;
 #endif
 		}
 	}
 
-	if (!rx.remaining) {
-		if (rx.evt.evt == BT_HCI_EVT_LE_META_EVENT &&
-		    ((rx.hdr[sizeof(*hdr)] == BT_HCI_EVT_LE_ADVERTISING_REPORT) ||
-		     (rx.hdr[sizeof(*hdr)] == BT_HCI_EVT_LE_EXT_ADVERTISING_REPORT))) {
+	if (!h4->rx.remaining) {
+		if (h4->rx.evt.evt == BT_HCI_EVT_LE_META_EVENT &&
+		    ((h4->rx.hdr[sizeof(*hdr)] == BT_HCI_EVT_LE_ADVERTISING_REPORT) ||
+		    (h4->rx.hdr[sizeof(*hdr)] == BT_HCI_EVT_LE_EXT_ADVERTISING_REPORT))) {
 			LOG_DBG("Marking adv report as discardable");
-			rx.discardable = true;
+			h4->rx.discardable = true;
 		}
 
-		rx.remaining = hdr->len - (rx.hdr_len - sizeof(*hdr));
+		h4->rx.remaining = hdr->len - (h4->rx.hdr_len - sizeof(*hdr));
 		LOG_DBG("Got event header. Payload %u bytes", hdr->len);
-		rx.have_hdr = true;
+		h4->rx.have_hdr = true;
 	}
 }
 
-static inline void copy_hdr(struct net_buf *buf)
+
+static inline void copy_hdr(struct hci_alif_data *h4)
 {
-	net_buf_add_mem(buf, rx.hdr, rx.hdr_len);
+	net_buf_add_mem(h4->rx.buf, h4->rx.hdr, h4->rx.hdr_len);
 }
 
-static void reset_rx(void)
+static void reset_rx(struct hci_alif_data *h4)
 {
-	rx.type = H4_NONE;
-	rx.remaining = 0U;
-	rx.have_hdr = false;
-	rx.hdr_len = 0U;
-	rx.discardable = false;
+	h4->rx.type = BT_HCI_H4_NONE;
+	h4->rx.remaining = 0U;
+	h4->rx.have_hdr = false;
+	h4->rx.hdr_len = 0U;
+	h4->rx.discardable = false;
 }
 
-static struct net_buf *get_rx(k_timeout_t timeout)
+static struct net_buf *get_rx(struct hci_alif_data *h4, k_timeout_t timeout)
 {
-	LOG_DBG("type 0x%02x, evt 0x%02x", rx.type, rx.evt.evt);
+	LOG_DBG("type 0x%02x, evt 0x%02x", h4->rx.type, h4->rx.evt.evt);
 
-	switch (rx.type) {
-	case H4_EVT:
-		return bt_buf_get_evt(rx.evt.evt, rx.discardable, timeout);
-	case H4_ACL:
+	switch (h4->rx.type) {
+	case BT_HCI_H4_EVT:
+		return bt_buf_get_evt(h4->rx.evt.evt, h4->rx.discardable, timeout);
+	case BT_HCI_H4_ACL:
 		return bt_buf_get_rx(BT_BUF_ACL_IN, timeout);
-	case H4_ISO:
-		/* TODO: Figure out a way to use shared memory for ISO */
+	case BT_HCI_H4_ISO:
 		if (IS_ENABLED(CONFIG_BT_ISO)) {
 			return bt_buf_get_rx(BT_BUF_ISO_IN, timeout);
 		}
@@ -255,55 +230,53 @@ static struct net_buf *get_rx(k_timeout_t timeout)
 
 static void hci_alif_rx_thread(void *p1, void *p2, void *p3)
 {
+	const struct device *dev = p1;
+	const struct hci_alif_config *cfg = dev->config;
+	struct hci_alif_data *h4 = dev->data;
 	struct net_buf *buf;
 
-	ARG_UNUSED(p1);
 	ARG_UNUSED(p2);
 	ARG_UNUSED(p3);
 
 	LOG_DBG("started");
 
 	while (!atomic_get(&stop_flag)) {
-		LOG_DBG("rx.buf %p", rx.buf);
+		LOG_DBG("rx.buf %p", h4->rx.buf);
 
 		/* We can only do the allocation if we know the initial
 		 * header, since Command Complete/Status events must use the
 		 * original command buffer (if available).
 		 */
-		if (rx.have_hdr && !rx.buf) {
-			rx.buf = get_rx(K_FOREVER);
-			LOG_DBG("Got rx.buf %p", rx.buf);
-			if (rx.remaining > net_buf_tailroom(rx.buf)) {
+		if (h4->rx.have_hdr && !h4->rx.buf) {
+			h4->rx.buf = get_rx(h4, K_FOREVER);
+			LOG_DBG("Got rx.buf %p", h4->rx.buf);
+			if (h4->rx.remaining > net_buf_tailroom(h4->rx.buf)) {
 				LOG_ERR("Not enough space in buffer");
-				rx.discard = rx.remaining;
-				reset_rx();
+				h4->rx.discard = h4->rx.remaining;
+				reset_rx(h4);
 			} else {
-				copy_hdr(rx.buf);
+				copy_hdr(h4);
 			}
-		}
-		if (!hci_uart_dma_rx_enabled) {
-			/* Let the ISR continue receiving new packets */
-			uart_irq_rx_enable(hci_alif_dev);
 		}
 
-		buf = net_buf_get(&rx.fifo, K_FOREVER);
+		/* Let the ISR continue receiving new packets */
+		uart_irq_rx_enable(cfg->uart);
+
+		buf = k_fifo_get(&h4->rx.fifo, K_FOREVER);
 		do {
-			if (!hci_uart_dma_rx_enabled) {
-				uart_irq_rx_enable(hci_alif_dev);
-			}
+			uart_irq_rx_enable(cfg->uart);
 
 			LOG_DBG("Calling bt_recv(%p)", buf);
-			bt_recv(buf);
+			h4->recv(dev, buf);
 
-			if (!hci_uart_dma_rx_enabled) {
-				/* Give other threads a chance to run if the ISR
-				 * is receiving data so fast that rx.fifo never
-				 * or very rarely goes empty.
-				 */
-				k_yield();
-				uart_irq_rx_disable(hci_alif_dev);
-			}
-			buf = net_buf_get(&rx.fifo, K_NO_WAIT);
+			/* Give other threads a chance to run if the ISR
+			 * is receiving data so fast that rx.fifo never
+			 * or very rarely goes empty.
+			 */
+			k_yield();
+
+			uart_irq_rx_disable(cfg->uart);
+			buf = k_fifo_get(&h4->rx.fifo, K_NO_WAIT);
 		} while (buf);
 	}
 
@@ -315,8 +288,7 @@ static size_t hci_alif_discard(const struct device *uart, size_t len)
 	uint8_t buf[33];
 	int err;
 
-	err = ring_buf_get(&hci_ring_buf, buf, MIN(len, sizeof(buf)));
-
+	err = uart_fifo_read(uart, buf, MIN(len, sizeof(buf)));
 	if (unlikely(err < 0)) {
 		LOG_ERR("Unable to read from UART (err %d)", err);
 		return 0;
@@ -325,99 +297,93 @@ static size_t hci_alif_discard(const struct device *uart, size_t len)
 	return err;
 }
 
-static inline void read_payload(void)
+static inline void read_payload(const struct device *dev)
 {
+	const struct hci_alif_config *cfg = dev->config;
+	struct hci_alif_data *h4 = dev->data;
 	struct net_buf *buf;
-	uint8_t evt_flags;
 	int read;
 
-	if (!rx.buf) {
+	if (!h4->rx.buf) {
 		size_t buf_tailroom;
 
-		rx.buf = get_rx(K_NO_WAIT);
-		if (!rx.buf) {
-			if (rx.discardable) {
-				LOG_WRN("Discarding event 0x%02x", rx.evt.evt);
-				rx.discard = rx.remaining;
-				reset_rx();
+		h4->rx.buf = get_rx(h4, K_NO_WAIT);
+		if (!h4->rx.buf) {
+			if (h4->rx.discardable) {
+				LOG_WRN("Discarding event 0x%02x", h4->rx.evt.evt);
+				h4->rx.discard = h4->rx.remaining;
+				reset_rx(h4);
 				return;
 			}
 
-			LOG_WRN("Failed to allocate, deferring to hci_alif_rx_thread");
-			uart_irq_rx_disable(hci_alif_dev);
+			LOG_WRN("Failed to allocate, deferring to rx_thread");
+			uart_irq_rx_disable(cfg->uart);
 			return;
 		}
 
-		LOG_DBG("Allocated rx.buf %p", rx.buf);
+		LOG_DBG("Allocated rx.buf %p", h4->rx.buf);
 
-		buf_tailroom = net_buf_tailroom(rx.buf);
-		if (buf_tailroom < rx.remaining) {
-			LOG_ERR("Not enough space in buffer %u/%zu", rx.remaining, buf_tailroom);
-			rx.discard = rx.remaining;
-			reset_rx();
+		buf_tailroom = net_buf_tailroom(h4->rx.buf);
+		if (buf_tailroom < h4->rx.remaining) {
+			LOG_ERR("Not enough space in buffer %u/%zu", h4->rx.remaining,
+				buf_tailroom);
+			h4->rx.discard = h4->rx.remaining;
+			reset_rx(h4);
 			return;
 		}
 
-		copy_hdr(rx.buf);
+		copy_hdr(h4);
 	}
 
-	read = ring_buf_get(&hci_ring_buf, net_buf_tail(rx.buf), rx.remaining);
-
+	read = uart_fifo_read(cfg->uart, net_buf_tail(h4->rx.buf), h4->rx.remaining);
 	if (unlikely(read < 0)) {
 		LOG_ERR("Failed to read UART (err %d)", read);
 		return;
 	}
 
-	net_buf_add(rx.buf, read);
-	rx.remaining -= read;
+	net_buf_add(h4->rx.buf, read);
+	h4->rx.remaining -= read;
 
-	LOG_DBG("got %d bytes, remaining %u", read, rx.remaining);
-	LOG_DBG("Payload (len %u): %s", rx.buf->len, bt_hex(rx.buf->data, rx.buf->len));
+	LOG_DBG("got %d bytes, remaining %u", read, h4->rx.remaining);
+	LOG_DBG("Payload (len %u): %s", h4->rx.buf->len,
+		bt_hex(h4->rx.buf->data, h4->rx.buf->len));
 
-	if (rx.remaining) {
+	if (h4->rx.remaining) {
 		return;
 	}
 
-	buf = rx.buf;
-	rx.buf = NULL;
+	buf = h4->rx.buf;
+	h4->rx.buf = NULL;
 
-	if (rx.type == H4_EVT) {
-		evt_flags = bt_hci_evt_get_flags(rx.evt.evt);
+	if (h4->rx.type == BT_HCI_H4_EVT) {
 		bt_buf_set_type(buf, BT_BUF_EVT);
 	} else {
-		evt_flags = BT_HCI_EVT_FLAG_RECV;
 		bt_buf_set_type(buf, BT_BUF_ACL_IN);
 	}
 
-	reset_rx();
+	reset_rx(h4);
 
-	if (IS_ENABLED(CONFIG_BT_RECV_BLOCKING) && (evt_flags & BT_HCI_EVT_FLAG_RECV_PRIO)) {
-		LOG_DBG("Calling bt_recv_prio(%p)", buf);
-		bt_recv_prio(buf);
-	}
-
-	if (evt_flags & BT_HCI_EVT_FLAG_RECV) {
-		LOG_DBG("Putting buf %p to rx fifo", buf);
-		net_buf_put(&rx.fifo, buf);
-	}
+	LOG_DBG("Putting buf %p to rx fifo", buf);
+	k_fifo_put(&h4->rx.fifo, buf);
 }
 
-static inline void read_header(void)
+static inline void read_header(const struct device *dev)
 {
-	switch (rx.type) {
-	case H4_NONE:
-		hci_alif_get_type();
+	struct hci_alif_data *h4 = dev->data;
+
+	switch (h4->rx.type) {
+	case BT_HCI_H4_NONE:
+		hci_alif_get_type(dev);
 		return;
-	case H4_EVT:
-		get_evt_hdr();
+	case BT_HCI_H4_EVT:
+		get_evt_hdr(dev);
 		break;
-	case H4_ACL:
-		get_acl_hdr();
+	case BT_HCI_H4_ACL:
+		get_acl_hdr(dev);
 		break;
-	case H4_ISO:
-		/* TODO: Figure out a way to use shared memory for ISO */
+	case BT_HCI_H4_ISO:
 		if (IS_ENABLED(CONFIG_BT_ISO)) {
-			get_iso_hdr();
+			get_iso_hdr(dev);
 			break;
 		}
 		__fallthrough;
@@ -426,42 +392,43 @@ static inline void read_header(void)
 		return;
 	}
 
-	if (rx.have_hdr && rx.buf) {
-		if (rx.remaining > net_buf_tailroom(rx.buf)) {
+	if (h4->rx.have_hdr && h4->rx.buf) {
+		if (h4->rx.remaining > net_buf_tailroom(h4->rx.buf)) {
 			LOG_ERR("Not enough space in buffer");
-			rx.discard = rx.remaining;
-			reset_rx();
+			h4->rx.discard = h4->rx.remaining;
+			reset_rx(h4);
 		} else {
-			copy_hdr(rx.buf);
+			copy_hdr(h4);
 		}
 	}
 }
 
-static inline void process_tx(void)
+static inline void process_tx(const struct device *dev)
 {
+	const struct hci_alif_config *cfg = dev->config;
+	struct hci_alif_data *h4 = dev->data;
 	int bytes;
 
-	if (!tx.buf) {
-		tx.buf = net_buf_get(&tx.fifo, K_NO_WAIT);
-		if (!tx.buf) {
+	if (!h4->tx.buf) {
+		h4->tx.buf = k_fifo_get(&h4->tx.fifo, K_NO_WAIT);
+		if (!h4->tx.buf) {
 			LOG_ERR("TX interrupt but no pending buffer!");
-			uart_irq_tx_disable(hci_alif_dev);
+			uart_irq_tx_disable(cfg->uart);
 			return;
 		}
 	}
 
-	if (!tx.type) {
-		switch (bt_buf_get_type(tx.buf)) {
+	if (!h4->tx.type) {
+		switch (bt_buf_get_type(h4->tx.buf)) {
 		case BT_BUF_ACL_OUT:
-			tx.type = H4_ACL;
+			h4->tx.type = BT_HCI_H4_ACL;
 			break;
 		case BT_BUF_CMD:
-			tx.type = H4_CMD;
+			h4->tx.type = BT_HCI_H4_CMD;
 			break;
 		case BT_BUF_ISO_OUT:
-			/* TODO: Figure out a way to use shared memory for ISO */
 			if (IS_ENABLED(CONFIG_BT_ISO)) {
-				tx.type = H4_ISO;
+				h4->tx.type = BT_HCI_H4_ISO;
 				break;
 			}
 			__fallthrough;
@@ -470,372 +437,194 @@ static inline void process_tx(void)
 			goto done;
 		}
 
-		bytes = uart_fifo_fill(hci_alif_dev, &tx.type, 1);
+		bytes = uart_fifo_fill(cfg->uart, &h4->tx.type, 1);
 		if (bytes != 1) {
 			LOG_WRN("Unable to send H:4 type");
-			tx.type = H4_NONE;
+			h4->tx.type = BT_HCI_H4_NONE;
 			return;
 		}
 	}
 
-	bytes = uart_fifo_fill(hci_alif_dev, tx.buf->data, tx.buf->len);
+	bytes = uart_fifo_fill(cfg->uart, h4->tx.buf->data, h4->tx.buf->len);
 	if (unlikely(bytes < 0)) {
 		LOG_ERR("Unable to write to UART (err %d)", bytes);
 	} else {
-		net_buf_pull(tx.buf, bytes);
+		net_buf_pull(h4->tx.buf, bytes);
 	}
 
-	if (tx.buf->len) {
+	if (h4->tx.buf->len) {
 		return;
 	}
 
 done:
-	tx.type = H4_NONE;
-	net_buf_unref(tx.buf);
-	tx.buf = net_buf_get(&tx.fifo, K_NO_WAIT);
-	if (!tx.buf) {
-		uart_irq_tx_disable(hci_alif_dev);
+	h4->tx.type = BT_HCI_H4_NONE;
+	net_buf_unref(h4->tx.buf);
+	h4->tx.buf = k_fifo_get(&h4->tx.fifo, K_NO_WAIT);
+	if (!h4->tx.buf) {
+		uart_irq_tx_disable(cfg->uart);
 	}
 }
 
-static inline void process_dma_tx(struct net_buf *buf)
+static inline void process_rx(const struct device *dev)
 {
-	int length, copy_length;
-	bool first_part = true;
-	uint8_t tx_type;
+	const struct hci_alif_config *cfg = dev->config;
+	struct hci_alif_data *h4 = dev->data;
 
-	switch (bt_buf_get_type(buf)) {
-	case BT_BUF_ACL_OUT:
-		tx_type = H4_ACL;
-		break;
-	case BT_BUF_CMD:
-		tx_type = H4_CMD;
-		break;
-	case BT_BUF_ISO_OUT:
-		/* TODO: Figure out a way to use shared memory for ISO */
-		if (IS_ENABLED(CONFIG_BT_ISO)) {
-			tx_type = H4_ISO;
-			break;
-		}
-		__fallthrough;
-	default:
-		LOG_ERR("Unknown buffer type");
-		goto done;
-	}
+	LOG_DBG("remaining %u discard %u have_hdr %u rx.buf %p len %u",
+		h4->rx.remaining, h4->rx.discard, h4->rx.have_hdr, h4->rx.buf,
+		h4->rx.buf ? h4->rx.buf->len : 0);
 
-	length = buf->len;
-	while (length) {
-		if (first_part) {
-			copy_length = length;
-			if (copy_length > 255) {
-				copy_length = 255;
-			}
-			hci_tx_buf[0] = tx_type;
-			memcpy(&hci_tx_buf[1], buf->data, copy_length);
-			net_buf_pull(buf, copy_length);
-			length -= copy_length;
-			first_part = false;
-			copy_length += 1;
-		} else {
-			copy_length = length;
-			if (copy_length > 256) {
-				copy_length = 256;
-			}
-			memcpy(hci_tx_buf, buf->data, copy_length);
-			net_buf_pull(buf, copy_length);
-			length -= copy_length;
-		}
-
-		int ret = uart_tx(hci_alif_dev, hci_tx_buf, copy_length, TX_TIMEOUT_US);
-
-		if (ret < 0) {
-			LOG_ERR("TX err %d", ret);
-			goto done;
-		}
-		if (k_sem_take(&hci_tx_sem, K_MSEC(5)) != 0) {
-
-			LOG_ERR("TX SEM TO");
-			goto done;
-		}
-	}
-done:
-	net_buf_unref(buf);
-}
-
-static inline void process_rx(void)
-{
-	LOG_DBG("remaining %u discard %u have_hdr %u rx.buf %p len %u", rx.remaining, rx.discard,
-		rx.have_hdr, rx.buf, rx.buf ? rx.buf->len : 0);
-
-	if (rx.discard) {
-		rx.discard -= hci_alif_discard(hci_alif_dev, rx.discard);
+	if (h4->rx.discard) {
+		h4->rx.discard -= hci_alif_discard(cfg->uart, h4->rx.discard);
 		return;
 	}
 
-	if (rx.have_hdr) {
-		read_payload();
+	if (h4->rx.have_hdr) {
+		read_payload(dev);
 	} else {
-		read_header();
+		read_header(dev);
 	}
 }
 
-static void hci_data_parse(void)
+static void bt_uart_isr(const struct device *uart, void *user_data)
 {
-	/* Read A ring Buffer allways to empty */
-	while (1) {
-		if (ring_buf_is_empty(&hci_ring_buf)) {
-			return;
+	struct device *dev = user_data;
+
+	while (uart_irq_update(uart) && uart_irq_is_pending(uart)) {
+		if (uart_irq_tx_ready(uart)) {
+			process_tx(dev);
 		}
 
-		process_rx();
-	}
-}
-
-/**
- * @brief UART async event callback
- *
- * This function handles UART async events for both TX and RX operations
- * when using DMA-based transfers with the async UART API
- *
- * @param dev UART device
- * @param evt UART event
- * @param user_data User data pointer
- */
-static void hci_uart_async_callback(const struct device *dev, struct uart_event *evt,
-				    void *user_data)
-{
-	switch (evt->type) {
-	case UART_TX_DONE:
-		/* TX completed successfully */
-		LOG_DBG("UART TX completed successfully");
-		k_sem_give(&hci_tx_sem);
-		break;
-
-	case UART_TX_ABORTED:
-		/* TX was aborted */
-		LOG_ERR("UART TX was aborted, sent %d bytes", evt->data.tx.len);
-		k_sem_give(&hci_tx_sem);
-		break;
-#if ALIF_HCI_DMA_RX_ENABLED
-	case UART_RX_RDY:
-		/* Data received and ready for processing */
-		char *p_start = evt->data.rx.buf + evt->data.rx.offset;
-		/* Push To ring buffer */
-		ring_buf_put(&hci_ring_buf, p_start, evt->data.rx.len);
-		LOG_DBG("Rxd %d , offset %d", evt->data.rx.len, evt->data.rx.offset);
-		hci_data_parse();
-		break;
-
-	case UART_RX_BUF_REQUEST:
-		/* UART driver is requesting a new buffer for continuous reception */
-		pingpong ^= true;
-		uart_rx_buf_rsp(dev, temp_rx_buf + (32 * pingpong), BUFF_SIZE);
-		break;
-
-	case UART_RX_BUF_RELEASED:
-		/* Buffer has been released */
-		break;
-
-#endif /* ALIF_HCI_DMA_RX_ENABLED */
-
-	case UART_RX_DISABLED:
-		/* RX has been disabled */
-		break;
-
-	case UART_RX_STOPPED:
-		/* RX has been stopped due to error */
-		LOG_ERR("UART RX stopped due to error: %d", evt->data.rx_stop.reason);
-		break;
-
-	default:
-		LOG_ERR("Unknown UART event: %d", evt->type);
-		break;
-	}
-}
-
-static void hci_alif_uart_isr(const struct device *unused, void *user_data)
-{
-	ARG_UNUSED(unused);
-	ARG_UNUSED(user_data);
-
-	while (uart_irq_update(hci_alif_dev) && uart_irq_is_pending(hci_alif_dev)) {
-		if (uart_irq_tx_ready(hci_alif_dev)) {
-			process_tx();
-		}
-
-		if (uart_irq_rx_ready(hci_alif_dev)) {
-
-			int read = uart_fifo_read(hci_alif_dev, temp_rx_buf, 64);
-
-			LOG_DBG("RX %d", read);
-			if (read > 0) {
-				ring_buf_put(&hci_ring_buf, temp_rx_buf, read);
-				hci_data_parse();
-			}
+		if (uart_irq_rx_ready(uart)) {
+			process_rx(dev);
 		}
 	}
 }
 
-static int hci_alif_send(struct net_buf *buf)
+static int hci_alif_send(const struct device *dev, struct net_buf *buf)
 {
+	const struct hci_alif_config *cfg = dev->config;
+	struct hci_alif_data *h4 = dev->data;
+
 	LOG_DBG("buf %p type %u len %u", buf, bt_buf_get_type(buf), buf->len);
 
 	/* Deassert&assert rts_n, falling edge triggers wake up the RF core */
 
-	wake_es0(hci_alif_dev);
+	wake_es0(cfg->uart);
 
-	if (hci_uart_dma_tx_enabled) {
-		process_dma_tx(buf);
-	} else {
-		net_buf_put(&tx.fifo, buf);
-		uart_irq_tx_enable(hci_alif_dev);
-	}
+	k_fifo_put(&h4->tx.fifo, buf);
+	uart_irq_tx_enable(cfg->uart);
 
 	return 0;
 }
 
-int __weak bt_hci_transport_setup(const struct device *dev)
+/** Setup the HCI transport, which usually means to reset the Bluetooth IC
+  *
+  * @param dev The device structure for the bus connecting to the IC
+  *
+  * @return 0 on success, negative error value on failure
+  */
+int __weak bt_hci_transport_setup(const struct device *uart)
 {
-	hci_alif_discard(hci_alif_dev, 32);
+	hci_alif_discard(uart, 32);
 	return 0;
 }
 
-static int hci_alif_close(void)
+static int hci_alif_close(const struct device *dev)
 {
 	int err;
+	struct hci_alif_data *hci = dev->data;
+	const struct hci_alif_config *cfg = dev->config;
 
 	/* Signal the BLE thread to exit the loop */
 	atomic_set(&stop_flag, 1);
-
 	/* Call k_thread_join() to ensure the rx thread is fully terminated */
-	err = k_thread_join(&alif_rx_thread_data, K_MSEC(50));
+	err = k_thread_join(cfg->rx_thread, K_MSEC(50));
 
 	if (err) {
 
 		/* Aborting thread */
 		k_thread_abort(tid);
 
-		err = k_thread_join(&alif_rx_thread_data, K_FOREVER);
+		err = k_thread_join(cfg->rx_thread, K_FOREVER);
 		if (err) {
 			LOG_ERR("Error aborting hci_alif_rx_thread");
 			return err;
 		}
 	}
 
+
 	err = stop_using_es0();
 
 	if (-2 == err) {
 		return -EIO;
 	}
+
+	hci->recv = NULL;
+
 	return 0;
 }
 
-static bool hci_uart_rx_dma_driver_check(void)
+static int hci_alif_open(const struct device *dev, bt_hci_recv_t recv)
 {
-#if CONFIG_UART_ASYNC_API && ALIF_HCI_DMA_RX_ENABLED
-#if DT_NODE_HAS_STATUS(DT_DMAS_CTLR_BY_NAME(DT_NODELABEL(uart_hci), rx), okay)
-	/* RX DMA is disabled because it not give great value yet */
-	const struct device *rxdma =
-		DEVICE_DT_GET_OR_NULL(DT_DMAS_CTLR_BY_NAME(DT_NODELABEL(uart_hci), rx));
-
-	if (rxdma && device_is_ready(rxdma)) {
-		int rx_config = DT_DMAS_CELL_BY_NAME(DT_NODELABEL(uart_hci), rx, periph);
-
-		uart_callback_set(hci_alif_dev, hci_uart_async_callback, NULL);
-		LOG_DBG("DMA RX event enable %d", rx_config);
-		dma_event_router_configure(DMA_UART_RX_GROUP, rx_config, false);
-		return true;
-	}
-#endif
-#endif
-	uart_irq_callback_set(hci_alif_dev, hci_alif_uart_isr);
-	uart_irq_rx_enable(hci_alif_dev);
-	return false;
-}
-
-static bool hci_uart_tx_dma_driver_check(void)
-{
-#ifdef CONFIG_UART_ASYNC_API
-#if (DT_NODE_HAS_STATUS(DT_DMAS_CTLR_BY_NAME(DT_NODELABEL(uart_hci), tx), okay))
-	const struct device *txdma =
-		DEVICE_DT_GET_OR_NULL(DT_DMAS_CTLR_BY_NAME(DT_NODELABEL(uart_hci), tx));
-
-	if (txdma && device_is_ready(txdma)) {
-		int tx_config = DT_DMAS_CELL_BY_NAME(DT_NODELABEL(uart_hci), tx, periph);
-
-		uart_callback_set(hci_alif_dev, hci_uart_async_callback, NULL);
-		LOG_DBG("DMA tX event enable %d", tx_config);
-		dma_event_router_configure(DMA_UART_TX_GROUP, tx_config, false);
-		return true;
-	}
-#endif
-#endif
-	uart_irq_callback_set(hci_alif_dev, hci_alif_uart_isr);
-	return false;
-}
-
-static int hci_alif_open(void)
-{
+	const struct hci_alif_config *cfg = dev->config;
+	struct hci_alif_data *data = dev->data;
 	int ret;
 
 	/* Clear the stop_flag to allow entering the hci_alif_rx_thread loop */
 	atomic_clear(&stop_flag);
-
-	LOG_DBG("");
 
 	ret = take_es0_into_use();
 	if (ret < 0) {
 		return -EIO;
 	}
 
-	/* Disable receiver and interrupts */
-	uart_irq_rx_disable(hci_alif_dev);
-	uart_irq_tx_disable(hci_alif_dev);
-	uart_rx_disable(hci_alif_dev);
+	uart_irq_rx_disable(cfg->uart);
+	uart_irq_tx_disable(cfg->uart);
 
-	hci_uart_dma_rx_enabled = hci_uart_rx_dma_driver_check();
-	hci_uart_dma_tx_enabled = hci_uart_tx_dma_driver_check();
-
-	ret = bt_hci_transport_setup(hci_alif_dev);
+	ret = bt_hci_transport_setup(cfg->uart);
 	if (ret < 0) {
 		return -EIO;
 	}
-#if ALIF_HCI_DMA_RX_ENABLED
-	if (hci_uart_dma_rx_enabled) {
-		ret = uart_rx_enable(hci_alif_dev, temp_rx_buf + (32 * pingpong), BUFF_SIZE,
-				     RX_TIMEOUT_US);
-		if (ret < 0) {
-			LOG_ERR("Failed to enable UART: %d", ret);
-			return ret;
-		}
-	}
-#endif
-	tid = k_thread_create(&alif_rx_thread_data, alif_rx_thread_stack,
-			      K_KERNEL_STACK_SIZEOF(alif_rx_thread_stack), hci_alif_rx_thread, NULL,
-			      NULL, NULL, K_PRIO_COOP(CONFIG_BT_RX_PRIO), 0, K_NO_WAIT);
+
+	data->recv = recv;
+
+	uart_irq_callback_user_data_set(cfg->uart, bt_uart_isr, (void *)dev);
+
+	tid = k_thread_create(cfg->rx_thread, cfg->rx_thread_stack,
+			      cfg->rx_thread_stack_size,
+			      hci_alif_rx_thread, (void *)dev, NULL, NULL,
+			      K_PRIO_COOP(CONFIG_BT_RX_PRIO),
+			      0, K_NO_WAIT);
 	k_thread_name_set(tid, "hci_alif_rx_thread");
 
 	return 0;
 }
 
-static const struct bt_hci_driver drv = {
-	.name = "H:4",
-	.bus = BT_HCI_DRIVER_BUS_UART,
-	.open = hci_alif_open,
-	.send = hci_alif_send,
-	.close = hci_alif_close,
+static DEVICE_API(bt_hci, hci_alif_driver_api) = {
+	.open  	= hci_alif_open,
+	.send  	= hci_alif_send,
+	.close 	= hci_alif_close,
 };
 
-static int bt_uart_init(void)
-{
+#define BT_ALIF_UART_DEVICE_INIT(inst) \
+	static K_KERNEL_STACK_DEFINE(alif_rx_thread_stack_##inst, CONFIG_BT_DRV_RX_STACK_SIZE); \
+	static struct k_thread alif_rx_thread_##inst; \
+	static const struct hci_alif_config hci_alif_config_##inst = { \
+		.uart = DEVICE_DT_GET(DT_INST_PARENT(inst)), \
+		.rx_thread_stack = alif_rx_thread_stack_##inst, \
+		.rx_thread_stack_size = K_KERNEL_STACK_SIZEOF(alif_rx_thread_stack_##inst), \
+		.rx_thread = &alif_rx_thread_##inst, \
+	}; \
+	static struct hci_alif_data hci_alif_data_##inst = { \
+		.rx = { \
+			.fifo = Z_FIFO_INITIALIZER(hci_alif_data_##inst.rx.fifo), \
+		}, \
+		.tx = { \
+			.fifo = Z_FIFO_INITIALIZER(hci_alif_data_##inst.tx.fifo), \
+		}, \
+	}; \
+	DEVICE_DT_INST_DEFINE(inst, NULL, NULL, &hci_alif_data_##inst, &hci_alif_config_##inst, \
+			      POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &hci_alif_driver_api)
 
-	if (!device_is_ready(hci_alif_dev)) {
-		return -ENODEV;
-	}
-
-	bt_hci_driver_register(&drv);
-
-	return 0;
-}
-
-SYS_INIT(bt_uart_init, POST_KERNEL, CONFIG_APPLICATION_INIT_PRIORITY);
+DT_INST_FOREACH_STATUS_OKAY(BT_ALIF_UART_DEVICE_INIT)
