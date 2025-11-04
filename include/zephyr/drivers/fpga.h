@@ -23,6 +23,15 @@
 extern "C" {
 #endif
 
+/**
+ * @brief Interfaces for Field-Programmable Gate Arrays (FPGA).
+ * @defgroup fpga_interface FPGA
+ * @since 2.7
+ * @version 0.8.0
+ * @ingroup io_interfaces
+ * @{
+ */
+
 enum FPGA_status {
 	/* Inactive is when the FPGA cannot accept the bitstream
 	 * and will not be programmed correctly

@@ -17,7 +17,7 @@
  * @brief GNSS Interface
  * @defgroup gnss_interface GNSS Interface
  * @since 3.6
- * @version 0.1.0
+ * @version 0.8.0
  * @ingroup io_interfaces
  * @{
  */
