@@ -16,6 +16,7 @@ menuconfig OSPI_FLASH_IS25WX
 	select FLASH_HAS_DRIVER_ENABLED
 	select FLASH_HAS_PAGE_LAYOUT
 	select EVENTS
+	select FLASH_HAS_EXPLICIT_ERASE
 	help
 	 Enables IS25WX256/512 flash driver on Alif DevKit.
 	 Update num-of-sector@ospi_flash property value in devicetree.
