@@ -133,8 +133,7 @@ static int soc_init(void)
 
 	/*Enable Clock : 76P8M */
 #if DT_HAS_COMPAT_STATUS_OKAY(snps_designware_i2s)
-	if (IS_ENABLED(CONFIG_SOC_SERIES_E8) ||
-		IS_ENABLED(CONFIG_SOC_SERIES_E4)) {
+	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2)) {
 		sys_set_bits(CGU_CLK_ENA, BIT(24));
 	}
 #endif
@@ -163,7 +162,7 @@ static int soc_init(void)
 #endif
 
 #if (DT_NODE_HAS_STATUS(DT_NODELABEL(pdm), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(lppdm), okay))
-	if (IS_ENABLED(CONFIG_SOC_SERIES_E8)) {
+	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2)) {
 		/* enable the HFOSCx2 clock */
 		sys_set_bits(CGU_CLK_ENA, BIT(24));
 	}

@@ -43,7 +43,7 @@
  * bits 8:31 are unused
  */
 #define PIN_FUNC_SHIFT 3
-#if defined(CONFIG_SOC_SERIES_ENSEMBLE_E8) || defined(CONFIG_SOC_SERIES_ENSEMBLE_E4)
+#if defined(CONFIG_ENSEMBLE_GEN2)
 /* bits 3:10 [PPPPPPPP] denote port values */
 #define PIN_NUM_MASK 0xFF
 #else
