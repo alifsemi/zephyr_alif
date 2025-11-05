@@ -56,19 +56,18 @@ static inline uint32_t pd_id_to_mask(uint32_t pd_id)
  * @param pd_id Power domain ID (ALIF_PD_SYST, ALIF_PD_SSE700_AON, etc.)
  * @param enable True to enable domain, false to disable
  *
+ * This function manages power domains through SE services with proper
+ * reference counting.
+ *
+ * The driver calls se_service_set_run_cfg() to request/release domains.
+ *
  * Note: SSE AON domain is always on when any core is active and cannot be
  * controlled via SE service. For SSE AON, this function returns success
  * without calling SE service to avoid unnecessary overhead.
- *
- * WORKAROUND: Due to SE firmware bug, only enable operations are performed.
- * Disable operations are skipped - SE firmware will handle domain disable
- * during set_off_cfg() execution. This will be fixed in future SE versions.
  */
  static int alif_pd_update_se(uint32_t pd_id, bool enable)
 {
 	run_profile_t runp;
-	uint32_t pd_mask;
-	bool is_enabled;
 	int ret;
 
 	/*
@@ -81,51 +80,29 @@ static inline uint32_t pd_id_to_mask(uint32_t pd_id)
 		return 0;
 	}
 
-	pd_mask = pd_id_to_mask(pd_id);
-
-	/* Read current SE configuration */
-	ret = se_service_get_run_cfg(&runp);
+	/*
+	 * Get last set run configuration for read-modify-write.
+	 * This returns what we last requested via set_run_cfg(), not actual SOC state.
+	 */
+	ret = se_service_get_last_set_run_cfg(&runp);
 	if (ret) {
-		LOG_ERR("Failed to get SE run config: %d", ret);
+		LOG_ERR("Failed to get last set run config: %d", ret);
 		return -EIO;
 	}
 
-	/* Check if domain is already in the desired state */
-	is_enabled = (runp.power_domains & pd_mask) != 0;
-	if (is_enabled == enable) {
-		LOG_DBG("Domain %u already in desired state (%s) - skipping SE call",
-			pd_id, enable ? "enabled" : "disabled");
-		return 0;
-	}
-
 	/*
-	 * WORKAROUND: Only perform enable operations via set_run_cfg().
-	 * Disable operations are skipped due to SE firmware bug.
-	 *
-	 * Rationale: SE firmware requires SYSTOP to be enabled when calling
-	 * set_off_cfg(). If we disable SYSTOP here, the core cannot properly
-	 * enter OFF states. SE firmware will disable SYSTOP internally as part
-	 * of the OFF state transition.
-	 *
-	 * This will be removed once SE firmware is fixed to handle both
-	 * enable and disable operations correctly.
+	 * Update power_domains field.
 	 */
 	if (enable) {
-		runp.power_domains |= pd_mask;
-		LOG_DBG("Enabling domain %u via SE service", pd_id);
-
-		/* Apply new configuration */
-		ret = se_service_set_run_cfg(&runp);
-		if (ret) {
-			LOG_ERR("Failed to set SE run config: %d", ret);
-			return -EIO;
-		}
+		runp.power_domains |= pd_id_to_mask(pd_id);
 	} else {
-		/*
-		 * Skip disable operation - SE firmware will handle this during
-		 * set_off_cfg() execution. The refcount is still decremented
-		 * for proper tracking.
-		 */
+		runp.power_domains &= ~pd_id_to_mask(pd_id);
+	}
+
+	ret = se_service_set_run_cfg(&runp);
+	if (ret) {
+		LOG_ERR("Failed to set run config for PD%u: %d", pd_id, ret);
+		return -EIO;
 	}
 
 	return 0;
