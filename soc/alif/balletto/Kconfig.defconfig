@@ -12,7 +12,11 @@ choice NULL_POINTER_EXCEPTION_DETECTION
 	default NULL_POINTER_EXCEPTION_DETECTION_NONE
 endchoice
 
+config ROM_START_OFFSET
+	default 0x800 if BOOTLOADER_MCUBOOT
+
 rsource "*/Kconfig.defconfig"
+
 endif # SOC_FAMILY_BALLETTO
 
 config SD_BUFFER_SECTION
