@@ -72,6 +72,9 @@
 #define _STM32_SDRAM1_SECTION_NAME	.stm32_sdram1
 #define _STM32_SDRAM2_SECTION_NAME	.stm32_sdram2
 
+#define _ALIF_SRAM0_SECTION_NAME	.alif_sram0
+#define _ALIF_SRAM1_SECTION_NAME	.alif_sram1
+
 #define _STM32_BACKUP_SRAM_SECTION_NAME	.stm32_backup_sram
 
 #define _ALIF_NS_SECTION_NAME		.alif_ns
