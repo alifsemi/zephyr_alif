@@ -4,7 +4,7 @@
 
 description: ILI9XXX display controllers common properties.
 
-include: [mipi-dbi-spi-device.yaml, display-controller.yaml]
+include: display-controller.yaml
 
 properties:
   pixel-format:
@@ -13,6 +13,8 @@ properties:
     enum:
       - 0 # RGB565
       - 1 # RGB888
+      - 2 # RGB666_Packed
+      - 3 # RGB666
     description:
       Display pixel format. Note that when RGB888 pixel format is selected
       only 6 color bits are actually used being in practice equivalent to

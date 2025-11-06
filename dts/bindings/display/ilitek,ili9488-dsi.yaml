@@ -1,11 +1,11 @@
-# Copyright (c) 2020, Teslabs Engineering S.L.
+# Copyright (c) 2024, Alif Semiconductor
 # SPDX-License-Identifier: Apache-2.0
 
-description: ILI9488 320x480 display controller
+description: ILI9488 320x480 display controller accessed via DSI Interface
 
 compatible: "ilitek,ili9488"
 
-include: ilitek,ili9xxx-common.yaml
+include: ["mipi-dsi-device.yaml", "ilitek,ili9xxx-common.yaml"]
 
 properties:
   frmctr1:
@@ -82,3 +82,36 @@ properties:
     ]
     description:
       Negative gamma correction (NGAMCTRL) register values.
+
+  reset-gpios:
+    type: phandle-array
+    description: |
+      The RESETn pin is asserted to disable the sensor causing a hard reset.
+      The sensor receives this as an active-low signal.
+
+  bl-gpios:
+    type: phandle-array
+    description: |
+      The BLn pin is asserted to control the backlight of the panel. The sensor
+      receives this as an active-high signal.
+
+  video-mode:
+    type: string
+    required: false
+    enum:
+      - "burst"
+      - "nb-sync-pulse"
+      - "nb-sync-events"
+    description: |
+      This property specifies whether the panel works in burst mode or
+      non-burst mode.
+
+  command-tx-mode:
+    type: string
+    required: false
+    enum:
+      - "low-power"
+      - "high-speed"
+    description: |
+      This property specifies whether the DSI commands transmission is
+      supported in Low-Power or High-Speed mode.

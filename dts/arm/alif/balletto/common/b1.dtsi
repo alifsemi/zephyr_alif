@@ -12,6 +12,8 @@
 #include <zephyr/dt-bindings/i2c/i2c.h>
 #include <mem.h>
 #include <alif/common/alif_common.dtsi>
+#include <zephyr/dt-bindings/mipi_dsi/mipi_dsi.h>
+#include <zephyr/dt-bindings/display/ili9xxx.h>
 
 #define HCI_UART_DMA_RX_CH  0
 #define HCI_UART_DMA_RX_REQ 26
@@ -80,10 +82,10 @@
 		};
 	};
 
-	ns: ns@200d0000 {
+	ns: ns@2002a000 {
 		compatible = "zephyr,memory-region";
-		/* Ensemble TGU Block Size(16KB) Aligned always */
-		reg = <0x200d0000 DT_SIZE_K(176)>;
+		/* TGU Block Size(128KB) Aligned always */
+		reg = <0x2002a000 DT_SIZE_K(512)>;
 		zephyr,memory-region = "NON_SECURE0";
 		status = "disabled";
 	};
@@ -109,6 +111,7 @@
 
 	dtcm: dtcm@2000a000 {
 		compatible = "alif,dtcm", "zephyr,memory-region";
+		reg = <0x2000a000 DT_SIZE_K(1496)>;
 		global_base = <0x5880a000>;
 		zephyr,memory-region = "DTCM";
 	};
@@ -933,6 +936,136 @@
 		status = "disabled";
 	};
 
+	cdc200: cdc200@49031000 {
+		compatible = "tes,cdc-2.1";
+		reg = <0x49031000 0x1000>;
+		status = "okay";
+		interrupts =	<333 0>,
+				<334 0>,
+				<335 0>,
+				<336 0>,
+				<337 0>,
+				<338 0>,
+				<339 0>,
+				<340 0>,
+				<341 0>,
+				<342 0>;
+		interrupt-names = "scanline_0",
+				  "scanline_1",
+				  "fifo_warning_0",
+				  "fifo_warning_1",
+				  "fifo_underrun_0",
+				  "fifo_underrun_1",
+				  "bus_error_0",
+				  "bus_error_1",
+				  "reg_reload_0",
+				  "reg_reload_1";
+		pinctrl-0 = < &pinctrl_cdc200 >;
+		pinctrl-names = "default";
+
+		clocks = <&clockctrl ALIF_DPI_CLK>, <&clockctrl ALIF_CDC200_PIX_SYST_ACLK>;
+		clock-names = "dpi-clk-en", "pixel-clk";
+
+		/* Panel Config */
+		width = <800>;
+		height = <480>;
+		hfront-porch = <210>;
+		hback-porch = <46>;
+		hsync-len = <1>;
+		vfront-porch = <22>;
+		vback-porch = <23>;
+		vsync-len = <1>;
+		hsync-active = <0>;
+		vsync-active = <0>;
+		de-active = <1>;
+		pixelclk-active = <0>;
+		clock-frequency = <2779910>;
+		/* BG Layer color is 24-bit in size. */
+		bg-color = <0x5a5a5a>;
+
+		/* Layer 0 Config */
+		enable-l1 = <1>;
+		pixel-fmt-l1 = "rgb-565";
+		/* Default color for Layer is 32-bit in size. */
+		def-back-color-l1 = <0x00ff00>;
+		win-x0-l1 = <0>;
+		win-y0-l1 = <0>;
+		win-x1-l1 = <300>;
+		win-y1-l1 = <480>;
+		blend-factor1-l1 = <4>;
+		blend-factor2-l1 = <5>;
+		const-alpha-l1 = <0x7f>;
+
+		/* Layer 1 Config */
+		enable-l2 = <1>;
+		pixel-fmt-l2 = "argb-8888";
+		win-x0-l2 = <500>;
+		win-y0-l2 = <0>;
+		win-x1-l2 = <800>;
+		win-y1-l2 = <68>;
+		blend-factor1-l2 = <4>;
+		blend-factor2-l2 = <5>;
+		const-alpha-l2 = <0xaf>;
+	};
+
+	dphy: d-phy@4903f000{
+		compatible = "snps,designware-dphy";
+		reg = <0x4903f000 0x40>,
+			<0x49032000 0x1000>,
+			<0x49033000 0x1000>;
+		reg-names = "expmst_reg", "dsi_reg", "csi_reg";
+
+		clocks = <&clockctrl ALIF_MIPI_PLLREF_CLK>;
+		clock-names = "pllref-clk";
+
+		ref-frequency = <38400000>;
+		cfg-clk-frequency = <25000000>;
+		status = "okay";
+	};
+
+	mipi_dsi: mipi-dsi@49032000 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "snps,designware-dsi";
+		reg = <0x49032000 0x1000>;
+		interrupts = <343 3>;
+		cdc-if = <&cdc200>;
+		phy-if = <&dphy>;
+
+		clocks = <&clockctrl ALIF_DSI_CLK>, <&clockctrl ALIF_CDC200_PIX_SYST_ACLK>,
+			<&clockctrl ALIF_MIPI_TXDPHY_CLK>;
+		clock-names = "dsi-clk-en", "pixel-clk", "tx-dphy-clk";
+		dpi-shutdn-active = <1>;
+		dpi-colorm-active = <1>;
+		vid-pkt-size = <320>;
+		ecc-recv-en;
+		crc-recv-en;
+		frame-ack-en;
+		panel-max-lane-bandwidth = <500000000>;
+		status = "disabled";
+
+		ili9488: ili9488@0 {
+			compatible = "ilitek,ili9488";
+			reg = <0>;
+			pixel-format = <ILI9XXX_PIXEL_FORMAT_RGB666_PACKED>;
+			width = <320>;
+			height = <480>;
+			rotation = <0>;
+
+			display-inversion;
+
+			vmctrl = [00 25 80 25];
+			pwctrl1 = [0f 0c];
+			pwctrl2 = [41];
+			pgamctrl = [00 10 14 01 0e 04 33 56 48 03 0c 0b 2b 34 0f];
+			ngamctrl = [00 12 18 05 12 06 40 34 57 06 10 0c 3b 3f 0f];
+			data-lanes = <1>;
+			reset-gpios = <&gpio8 0 GPIO_ACTIVE_LOW>;
+			bl-gpios = <&gpio8 1 GPIO_ACTIVE_HIGH>;
+			status = "disabled";
+		};
+	};
+
 	ospi0: ospi0@83000000 {
 		compatible = "snps,designware-ospi";
 		#address-cells = <1>;
@@ -1057,6 +1190,12 @@
 		zephyr,ahi-uart = &uart_ahi;
 		zephyr,ieee802154 = &ieee802154;
 		zephyr,entropy = &rng;
+		zephyr,display = &cdc200;
+	};
+
+	aliases {
+		mipi-dsi = &mipi_dsi;
+		panel = &ili9488;
 	};
 
 	reserved-memory {
