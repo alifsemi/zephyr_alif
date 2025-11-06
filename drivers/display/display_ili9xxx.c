@@ -15,6 +15,10 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(display_ili9xxx, CONFIG_DISPLAY_LOG_LEVEL);
 
+#if !defined(CONFIG_MIPI_DBI) && !defined(CONFIG_MIPI_DSI)
+#error "Need either DSI or DBI interfaces for the panel to work"
+#endif
+
 struct ili9xxx_data {
 	uint8_t bytes_per_pixel;
 	enum display_pixel_format pixel_format;
@@ -69,8 +73,12 @@ int ili9xxx_transmit(const struct device *dev, uint8_t cmd, const void *tx_data,
 {
 	const struct ili9xxx_config *config = dev->config;
 
+#if defined(CONFIG_MIPI_DBI)
 	return mipi_dbi_command_write(config->mipi_dev, &config->dbi_config,
 				      cmd, tx_data, tx_len);
+#elif defined(CONFIG_MIPI_DSI)
+	return mipi_dsi_dcs_write(config->mipi_dev, 0, cmd, tx_data, tx_len);
+#endif
 }
 
 static int ili9xxx_exit_sleep(const struct device *dev)
@@ -90,13 +98,35 @@ static int ili9xxx_exit_sleep(const struct device *dev)
 static void ili9xxx_hw_reset(const struct device *dev)
 {
 	const struct ili9xxx_config *config = dev->config;
+	int ret;
 
+#if defined(CONFIG_MIPI_DBI)
 	if (mipi_dbi_reset(config->mipi_dev, ILI9XXX_RESET_PULSE_TIME) < 0) {
 		return;
 	};
+#elif defined(CONFIG_MIPI_DSI)
+	if (config->reset_gpio.port != NULL) {
+		ret = gpio_pin_set_dt(&config->reset_gpio, 1);
+		if (ret < 0) {
+			LOG_ERR("Failed to Reset Panel");
+			return;
+		}
+	}
+
+	k_sleep(K_MSEC(ILI9XXX_RESET_PULSE_TIME));
+
+	if (config->reset_gpio.port != NULL) {
+		ret = gpio_pin_set_dt(&config->reset_gpio, 0);
+		if (ret < 0) {
+			LOG_ERR("Failed to Reset Panel");
+			return;
+		}
+	}
+#endif
 	k_sleep(K_MSEC(ILI9XXX_RESET_WAIT_TIME));
 }
 
+#ifdef CONFIG_MIPI_DBI
 static int ili9xxx_set_mem_area(const struct device *dev, const uint16_t x,
 				const uint16_t y, const uint16_t w,
 				const uint16_t h)
@@ -120,12 +150,14 @@ static int ili9xxx_set_mem_area(const struct device *dev, const uint16_t x,
 
 	return 0;
 }
+#endif
 
 static int ili9xxx_write(const struct device *dev, const uint16_t x,
 			 const uint16_t y,
 			 const struct display_buffer_descriptor *desc,
 			 const void *buf)
 {
+#if defined(CONFIG_MIPI_DBI)
 	const struct ili9xxx_config *config = dev->config;
 	struct ili9xxx_data *data = dev->data;
 	struct display_buffer_descriptor mipi_desc;
@@ -184,6 +216,9 @@ static int ili9xxx_write(const struct device *dev, const uint16_t x,
 	}
 
 	return 0;
+#elif defined(CONFIG_MIPI_DSI)
+	return -ENOTSUP;
+#endif
 }
 
 #ifdef CONFIG_ILI9XXX_READ
@@ -275,18 +310,39 @@ static int ili9xxx_read(const struct device *dev, const uint16_t x,
 
 static int ili9xxx_display_blanking_off(const struct device *dev)
 {
+	const struct ili9xxx_config *config = dev->config;
+	int ret = -ENOTSUP;
+
+	if (config->bl_gpio.port != NULL) {
+		ret = gpio_pin_set_dt(&config->bl_gpio, 1);
+		if (ret < 0) {
+			LOG_ERR("Failed to turn Backlight GPIO ON");
+			return ret;
+		}
+	}
+
 	LOG_DBG("Turning display blanking off");
 	return ili9xxx_transmit(dev, ILI9XXX_DISPON, NULL, 0);
 }
 
 static int ili9xxx_display_blanking_on(const struct device *dev)
 {
+	const struct ili9xxx_config *config = dev->config;
+	int ret = -ENOTSUP;
+
+	if (config->bl_gpio.port != NULL) {
+		ret = gpio_pin_set_dt(&config->bl_gpio, 0);
+		if (ret < 0) {
+			LOG_ERR("Failed to turn Backlight GPIO OFF");
+			return ret;
+		}
+	}
+
 	LOG_DBG("Turning display blanking on");
 	return ili9xxx_transmit(dev, ILI9XXX_DISPOFF, NULL, 0);
 }
 
-static int
-ili9xxx_set_pixel_format(const struct device *dev,
+static int ili9xxx_set_pixel_format(const struct device *dev,
 			 const enum display_pixel_format pixel_format)
 {
 	struct ili9xxx_data *data = dev->data;
@@ -402,6 +458,24 @@ static int ili9xxx_configure(const struct device *dev)
 		return r;
 	}
 
+	if (IS_ENABLED(CONFIG_MIPI_DSI)) {
+		if (config->pixel_format == ILI9XXX_PIXEL_FORMAT_RGB666_PACKED) {
+			uint8_t tx_data[] = {0xA9, 0x51, 0x2C, 0x02};
+
+			r = ili9xxx_transmit(dev, ILI9XXX_ADJCTRL, tx_data, ARRAY_SIZE(tx_data));
+			if (r < 0) {
+				return r;
+			}
+		} else if (config->pixel_format == ILI9XXX_PIXEL_FORMAT_RGB666) {
+			uint8_t tx_data[] = {0xA9, 0x51, 0x2C, 0x82};
+
+			r = ili9xxx_transmit(dev, ILI9XXX_ADJCTRL, tx_data, ARRAY_SIZE(tx_data));
+			if (r < 0) {
+				return r;
+			}
+		}
+	}
+
 	/* orientation */
 	if (config->rotation == 0U) {
 		orientation = DISPLAY_ORIENTATION_NORMAL;
@@ -438,10 +512,83 @@ static int ili9xxx_init(const struct device *dev)
 	const struct ili9xxx_config *config = dev->config;
 
 	int r;
+#ifdef CONFIG_MIPI_DSI
+	struct mipi_dsi_device mdev;
+#endif
 
 	if (!device_is_ready(config->mipi_dev)) {
 		LOG_ERR("MIPI DBI device is not ready");
 		return -ENODEV;
+	}
+
+	if (IS_ENABLED(CONFIG_MIPI_DSI) && (config->reset_gpio.port != NULL)) {
+		r = gpio_pin_configure_dt(&config->reset_gpio,
+				GPIO_OUTPUT_INACTIVE);
+		if (r < 0) {
+			LOG_ERR("Failed to configure reset GPIO (%d)", r);
+			return r;
+		}
+	}
+
+	if (config->bl_gpio.port != NULL) {
+		r = gpio_pin_configure_dt(&config->bl_gpio,
+				GPIO_OUTPUT_INACTIVE);
+		if (r < 0) {
+			LOG_ERR("Failed to configure Backlight GPIO (%d)", r);
+			return r;
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_MIPI_DSI)) {
+		mdev.data_lanes = config->num_lanes;
+		switch (config->pixel_format) {
+		case ILI9XXX_PIXEL_FORMAT_RGB565:
+			mdev.pixfmt = MIPI_DSI_PIXFMT_RGB565;
+			break;
+		case ILI9XXX_PIXEL_FORMAT_RGB888:
+			mdev.pixfmt = MIPI_DSI_PIXFMT_RGB888;
+			break;
+		case ILI9XXX_PIXEL_FORMAT_RGB666_PACKED:
+			mdev.pixfmt = MIPI_DSI_PIXFMT_RGB666_PACKED;
+			break;
+		case ILI9XXX_PIXEL_FORMAT_RGB666:
+			mdev.pixfmt = MIPI_DSI_PIXFMT_RGB666;
+			break;
+		}
+
+		mdev.timings.hactive = config->x_resolution;
+		mdev.timings.vactive = config->y_resolution;
+
+		mdev.timings.hfp = TIMINGS_HFP;
+		mdev.timings.hbp = TIMINGS_HBP;
+		mdev.timings.hsync = TIMINGS_HSYNC_LEN;
+		mdev.timings.vfp = TIMINGS_VFP;
+		mdev.timings.vbp = TIMINGS_VBP;
+		mdev.timings.vsync = TIMINGS_VSYNC_LEN;
+
+		mdev.mode_flags = MIPI_DSI_MODE_VIDEO |
+			MIPI_DSI_MODE_EOT_PACKET;
+
+		if (config->cmd_type == CMD_LP)
+			mdev.mode_flags |= MIPI_DSI_MODE_LPM;
+
+		switch (config->vid_mode) {
+		case BURST_MODE:
+			mdev.mode_flags |= MIPI_DSI_MODE_VIDEO_BURST;
+			break;
+		case NON_BURST_MODE_SYNC_PULSE:
+			mdev.mode_flags |=  MIPI_DSI_MODE_VIDEO_SYNC_PULSE;
+			break;
+		case NON_BURST_MODE_SYNC_EVENTS:
+		default:
+			break;
+		}
+
+		r = mipi_dsi_attach(config->mipi_dev, config->channel, &mdev);
+		if (r < 0) {
+			LOG_ERR("Could not attach to MIPI-DSI host");
+			return r;
+		}
 	}
 
 	ili9xxx_hw_reset(dev);
@@ -512,6 +659,27 @@ static const struct ili9xxx_quirks ili9488_quirks = {
 };
 #endif
 
+#define ILI9XXX_GET_DBI_CONFIG(n, t, _dbi_config)                             \
+	IF_ENABLED(CONFIG_MIPI_DBI,                                           \
+		(._dbi_config.mode = MIPI_DBI_MODE_SPI_4WIRE,                 \
+		 ._dbi_config.config = MIPI_DBI_SPI_CONFIG_DT(                \
+							INST_DT_ILI9XXX(n, t),\
+							SPI_OP_MODE_MASTER |  \
+							SPI_WORD_SET(8),      \
+							0),))
+
+#define ILI9XXX_GET_DSI_CONFIG(n, t)               \
+	IF_ENABLED(CONFIG_MIPI_DSI,                                           \
+		(.num_lanes = DT_PROP_BY_IDX(INST_DT_ILI9XXX(n, t),           \
+					data_lanes, 0),                       \
+		 .channel = DT_REG_ADDR(INST_DT_ILI9XXX(n, t)),               \
+		 .vid_mode = DT_ENUM_IDX_OR(INST_DT_ILI9XXX(n, t), video_mode,\
+					BURST_MODE),                          \
+		 .cmd_type = DT_ENUM_IDX_OR(INST_DT_ILI9XXX(n, t),            \
+					command_tx_mode, CMD_LP),             \
+		 .reset_gpio = GPIO_DT_SPEC_GET_OR(INST_DT_ILI9XXX(n, t),     \
+					reset_gpios, {0}),))
+
 #define INST_DT_ILI9XXX(n, t) DT_INST(n, ilitek_ili##t)
 
 #define ILI9XXX_INIT(n, t)                                                     \
@@ -520,16 +688,10 @@ static const struct ili9xxx_quirks ili9488_quirks = {
 	static const struct ili9xxx_config ili9##t##_config_##n = {            \
 		.quirks = &ili##t##_quirks,                                    \
 		.mipi_dev = DEVICE_DT_GET(DT_PARENT(INST_DT_ILI9XXX(n, t))),   \
-		.dbi_config = {                                                \
-			.mode = DT_STRING_UPPER_TOKEN_OR(                      \
-				INST_DT_ILI9XXX(n, t),                         \
-				mipi_mode, MIPI_DBI_MODE_SPI_4WIRE),           \
-			.config = MIPI_DBI_SPI_CONFIG_DT(                      \
-						INST_DT_ILI9XXX(n, t),         \
-						SPI_OP_MODE_MASTER |           \
-						SPI_WORD_SET(8),               \
-						0),                            \
-		},                                                             \
+		ILI9XXX_GET_DBI_CONFIG(n, t, dbi_config)                       \
+		ILI9XXX_GET_DSI_CONFIG(n, t)                                   \
+		.bl_gpio = GPIO_DT_SPEC_GET_OR(INST_DT_ILI9XXX(n, t),          \
+				bl_gpios, {0}),                                \
 		.pixel_format = DT_PROP(INST_DT_ILI9XXX(n, t), pixel_format),  \
 		.rotation = DT_PROP(INST_DT_ILI9XXX(n, t), rotation),          \
 		.x_resolution = ILI##t##_X_RES,                                \
@@ -544,7 +706,7 @@ static const struct ili9xxx_quirks ili9488_quirks = {
 	DEVICE_DT_DEFINE(INST_DT_ILI9XXX(n, t), ili9xxx_init,                  \
 			    NULL, &ili9##t##_data_##n,                         \
 			    &ili9##t##_config_##n, POST_KERNEL,                \
-			    CONFIG_DISPLAY_INIT_PRIORITY, &ili9xxx_api)
+			    CONFIG_APPLICATION_INIT_PRIORITY, &ili9xxx_api)
 
 #define DT_INST_FOREACH_ILI9XXX_STATUS_OKAY(t)                                 \
 	LISTIFY(DT_NUM_INST_STATUS_OKAY(ilitek_ili##t), ILI9XXX_INIT, (;), t)

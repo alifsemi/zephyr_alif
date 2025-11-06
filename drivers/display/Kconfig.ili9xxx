@@ -50,7 +50,8 @@ config ILI9488
 	bool "ILI9488 display driver"
 	default y
 	depends on DT_HAS_ILITEK_ILI9488_ENABLED
-	select MIPI_DBI
+	select MIPI_DBI if $(dt_compat_on_bus,$(DT_COMPAT_ILITEK_ILI9488),mipi_dbi)
+	select MIPI_DSI if $(dt_compat_on_bus,$(DT_COMPAT_ILITEK_ILI9488),mipi_dsi)
 	select ILI9XXX
 	help
 	  Enable driver for ILI9488 display driver.

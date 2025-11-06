@@ -9,8 +9,15 @@
 #ifndef ZEPHYR_DRIVERS_DISPLAY_DISPLAY_ILI9XXX_H_
 #define ZEPHYR_DRIVERS_DISPLAY_DISPLAY_ILI9XXX_H_
 
+#ifdef CONFIG_MIPI_DBI
 #include <zephyr/drivers/mipi_dbi.h>
+#endif
+#ifdef CONFIG_MIPI_DSI
+#include <zephyr/drivers/mipi_dsi.h>
+#include <zephyr/kernel.h>
+#endif
 #include <zephyr/sys/util.h>
+#include <zephyr/drivers/gpio.h>
 
 /* Commands/registers. */
 #define ILI9XXX_SWRESET 0x01
@@ -27,6 +34,7 @@
 #define ILI9XXX_MADCTL 0x36
 #define ILI9XXX_PIXSET 0x3A
 #define ILI9XXX_RAMRD_CONT 0x3e
+#define ILI9XXX_ADJCTRL 0xF7
 
 /* MADCTL register fields. */
 #define ILI9XXX_MADCTL_MY BIT(7U)
@@ -61,6 +69,26 @@ enum madctl_cmd_set {
 	CMD_SET_2,	/* Used by ILI9342c */
 };
 
+#ifdef CONFIG_MIPI_DSI
+#define TIMINGS_HFP 46
+#define TIMINGS_HBP 16
+#define TIMINGS_HSYNC_LEN 14
+#define TIMINGS_VFP 2
+#define TIMINGS_VBP 2
+#define TIMINGS_VSYNC_LEN 2
+
+enum video_mode_type {
+	BURST_MODE = 0,
+	NON_BURST_MODE_SYNC_PULSE = 1,
+	NON_BURST_MODE_SYNC_EVENTS = 2,
+};
+
+enum cmd_mode_type {
+	CMD_LP = 0,
+	CMD_HS = 1,
+};
+#endif /* CONFIG_MIPI_DSI */
+
 struct ili9xxx_quirks {
 	enum madctl_cmd_set cmd_set;
 };
@@ -68,7 +96,17 @@ struct ili9xxx_quirks {
 struct ili9xxx_config {
 	const struct ili9xxx_quirks *quirks;
 	const struct device *mipi_dev;
+#ifdef CONFIG_MIPI_DBI
 	struct mipi_dbi_config dbi_config;
+#endif /* CONFIG_MIPI_DBI */
+#ifdef CONFIG_MIPI_DSI
+	uint8_t num_lanes;
+	uint8_t channel;
+	enum video_mode_type vid_mode;
+	enum cmd_mode_type cmd_type;
+	const struct gpio_dt_spec reset_gpio;
+#endif /* CONFIG_MIPI_DSI */
+	const struct gpio_dt_spec bl_gpio;
 	uint8_t pixel_format;
 	uint16_t rotation;
 	uint16_t x_resolution;
