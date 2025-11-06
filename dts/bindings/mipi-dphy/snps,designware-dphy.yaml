@@ -1,0 +1,19 @@
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Designware MIPI D-PHY
+
+compatible: "snps,designware-dphy"
+
+include: base.yaml
+
+properties:
+  ref-frequency:
+    type: int
+    default: 38400000
+    description: Reference Frequency for D-PLL.
+
+  cfg-clk-frequency:
+    type: int
+    default: 25000000
+    description: Configuration clock frequency for D-PHY.

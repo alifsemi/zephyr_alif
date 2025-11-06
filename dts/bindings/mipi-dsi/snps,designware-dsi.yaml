@@ -1,0 +1,96 @@
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Designware MIPI DSI
+
+compatible: "snps,designware-dsi"
+
+include: mipi-dsi-host.yaml
+
+properties:
+  interrupts:
+    required: true
+
+  cdc-if:
+    type: phandle
+    required: true
+    description: Instance of CDC200 peripheral
+
+  phy-if:
+    type: phandle
+    required: true
+    description:
+      Handle to the PHY interface.
+
+  eotp-lp-tx-en:
+    type: boolean
+    description:
+      Automatically insert an EoTp short packet at the end of LP transmission.
+
+  eotp-rx-en:
+    type: boolean
+    description:
+      Enable reception of an EoTp short packet at the end of LPDT reception
+      from peripheral.
+
+  ecc-recv-en:
+    type: boolean
+    description:
+      DSI controller should support ECC reception, error correction and
+      reporting.
+
+  crc-recv-en:
+    type: boolean
+    description:
+      DSI controller should support CRC reception and error reporting.
+
+  frame-ack-en:
+    type: boolean
+    description:
+      DSI controller should request Peripheral ACK at the end of frames.
+
+  dpi-colorm-active:
+    type: int
+    required: true
+    description:
+      Color-Mode command pulse polarity.
+      If dpicolorm is active low, use 0,
+      otherwise use 1.
+    enum:
+      - 0
+      - 1
+
+  dpi-shutdn-active:
+    type: int
+    required: true
+    description:
+      Shutdown command pulse polarity.
+      If dpishutdn is active low, use 0,
+      otherwise use 1.
+    enum:
+      - 0
+      - 1
+
+  vid-pkt-size:
+    type: int
+    default: 0
+    description:
+      Video packet size in MIPI Video mode pixel stream in bytes. The product of
+      number of chunks and video packet size should be active line width.
+
+  dpi-video-pattern-gen:
+    type: string
+    required: false
+    enum:
+      - "vertical-color-bar"
+      - "horizontal-color-bar"
+      - "vertical-bit-error-rate"
+    description:
+      Video pattern generator for testing MIPI-DSI without DPI inputs.
+
+  panel-max-lane-bandwidth:
+    type: int
+    default: 500000000
+    description:
+      The lane bandwidth that a panel supports. All the calculations for DPHY
+      PLL should be limited to half of the above value for a panel.

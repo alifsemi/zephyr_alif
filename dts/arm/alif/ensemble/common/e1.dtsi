@@ -11,6 +11,7 @@
 #include <zephyr/dt-bindings/pwm/pwm.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
 #include <alif/common/alif_common.dtsi>
+#include <zephyr/dt-bindings/mipi_dsi/mipi_dsi.h>
 #include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
 
 &{/} {
@@ -1518,6 +1519,129 @@
 		cs-pin = <0>;
 		status = "disabled";
 	};
+
+	cdc200: cdc200@49031000 {
+		compatible = "tes,cdc-2.1";
+		reg = <0x49031000 0x1000>;
+		status = "okay";
+		interrupts =	<333 0>,
+				<334 0>,
+				<335 0>,
+				<336 0>,
+				<337 0>,
+				<338 0>,
+				<339 0>,
+				<340 0>,
+				<341 0>,
+				<342 0>;
+		interrupt-names = "scanline_0",
+				  "scanline_1",
+				  "fifo_warning_0",
+				  "fifo_warning_1",
+				  "fifo_underrun_0",
+				  "fifo_underrun_1",
+				  "bus_error_0",
+				  "bus_error_1",
+				  "reg_reload_0",
+				  "reg_reload_1";
+		pinctrl-0 = < &pinctrl_cdc200 >;
+		pinctrl-names = "default";
+
+		clocks = <&clockctrl ALIF_DPI_CLK>, <&clockctrl ALIF_CDC200_PIX_SYST_ACLK>;
+		clock-names = "dpi-clk-en", "pixel-clk";
+
+		/* Panel Config */
+		width = <800>;
+		height = <480>;
+		hfront-porch = <210>;
+		hback-porch = <46>;
+		hsync-len = <1>;
+		vfront-porch = <22>;
+		vback-porch = <23>;
+		vsync-len = <1>;
+		hsync-active = <0>;
+		vsync-active = <0>;
+		de-active = <1>;
+		pixelclk-active = <0>;
+		clock-frequency = <2779910>;
+		/* BG Layer color is 24-bit in size. */
+		bg-color = <0x5a5a5a>;
+
+		/* Layer 0 Config */
+		enable-l1 = <1>;
+		pixel-fmt-l1 = "rgb-565";
+		/* Default color for Layer is 32-bit in size. */
+		def-back-color-l1 = <0x00ff00>;
+		win-x0-l1 = <0>;
+		win-y0-l1 = <0>;
+		win-x1-l1 = <300>;
+		win-y1-l1 = <480>;
+		blend-factor1-l1 = <4>;
+		blend-factor2-l1 = <5>;
+		const-alpha-l1 = <0x7f>;
+
+		/* Layer 1 Config */
+		enable-l2 = <1>;
+		pixel-fmt-l2 = "argb-8888";
+		win-x0-l2 = <500>;
+		win-y0-l2 = <0>;
+		win-x1-l2 = <800>;
+		win-y1-l2 = <68>;
+		blend-factor1-l2 = <4>;
+		blend-factor2-l2 = <5>;
+		const-alpha-l2 = <0xaf>;
+	};
+
+	mipi_dsi: mipi-dsi@49032000 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "snps,designware-dsi";
+		reg = <0x49032000 0x1000>;
+		interrupts = <343 0>;
+		cdc-if = <&cdc200>;
+		phy-if = <&dphy>;
+
+		clocks = <&clockctrl ALIF_DSI_CLK>, <&clockctrl ALIF_CDC200_PIX_SYST_ACLK>,
+			<&clockctrl ALIF_MIPI_TXDPHY_CLK>;
+		clock-names = "dsi-clk-en", "pixel-clk", "tx-dphy-clk";
+		dpi-shutdn-active = <1>;
+		dpi-colorm-active = <1>;
+		vid-pkt-size = <480>;
+		ecc-recv-en;
+		crc-recv-en;
+		frame-ack-en;
+		status = "disabled";
+
+		mw405: mw405@0 {
+			status = "okay";
+			compatible = "focuslcd,mw405";
+			reg = <0>;
+			reset-gpios = <&lpgpio 5 GPIO_ACTIVE_HIGH>;
+			bl-gpios = <&gpio6 1 GPIO_ACTIVE_HIGH>;
+			data-lanes = <2>;
+			width = <480>;
+			height = <800>;
+			video-mode = "burst";
+			command-tx-mode = "high-speed";
+			pixel-format = <MIPI_DSI_PIXFMT_RGB888>;
+			status = "okay";
+		};
+	};
+
+	dphy: d-phy@4903f000{
+		compatible = "snps,designware-dphy";
+		reg = <0x4903f000 0x40>,
+		      <0x49032000 0x1000>,
+		      <0x49033000 0x1000>;
+		reg-names = "expmst_reg", "dsi_reg", "csi_reg";
+
+		clocks = <&clockctrl ALIF_MIPI_PLLREF_CLK>;
+		clock-names = "pllref-clk";
+
+		ref-frequency = <38400000>;
+		cfg-clk-frequency = <25000000>;
+		status = "okay";
+	};
 };
 
 &{/} {
@@ -1584,8 +1708,14 @@
 		};
 	};
 
+	aliases {
+		mipi-dsi = &mipi_dsi;
+		panel = &mw405;
+	};
+
 	chosen {
 		zephyr,entropy = &rng;
 		zephyr,flash-controller = &mram_flash;
+		zephyr,display = &cdc200;
 	};
 };
