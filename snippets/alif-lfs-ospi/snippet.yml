@@ -1,0 +1,18 @@
+#
+# Copyright 2025 Alif Semiconductor.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+name: alif-lfs-ospi
+append:
+  EXTRA_CONF_FILE: alif-lfs-ospi.conf
+
+boards:
+  /alif_b.*/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: alif_balletto_dk_rtss_ospi.overlay
+  /alif_e.*/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: alif_ensemble_dk_rtss_ospi.overlay
+
