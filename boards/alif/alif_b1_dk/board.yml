@@ -5,3 +5,5 @@ board:
   socs:
   - name: ab1c1f4m51820hh0
   - name: ab1c1f4m51820ph0
+  - name: ab1c1f1m41820hh0
+  - name: ab1c1f1m41820ph0
