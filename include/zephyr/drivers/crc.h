@@ -7,6 +7,7 @@
 #define ZEPHYR_INCLUDE_DRIVERS_CRC_H_
 
 #include <zephyr/device.h>
+#include <errno.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,14 +24,14 @@ struct crc_params {
 	bool		custom_poly;	/* CRC custom polynomial	 */
 };
 
-typedef int (*crc_start)(const struct device *dev, struct crc_params *cfg);
-typedef int (*crc_set_seed)(const struct device *dev, uint32_t seed_value);
-typedef int (*crc_set_polycustom)(const struct device *dev, uint32_t seed_value);
+typedef int (*crc_api_compute_t)(const struct device *dev, struct crc_params *cfg);
+typedef int (*crc_api_set_seed_t)(const struct device *dev, uint32_t seed_value);
+typedef int (*crc_api_set_polynomial_t)(const struct device *dev, uint32_t polynomial);
 
-struct crc_driver_api {
-	crc_start		start;
-	crc_set_seed		seed;
-	crc_set_polycustom	polynomial;
+__subsystem struct crc_driver_api {
+	crc_api_compute_t		compute;
+	crc_api_set_seed_t		set_seed;
+	crc_api_set_polynomial_t	set_polynomial;
 };
 
 /**
@@ -45,16 +46,16 @@ struct crc_driver_api {
  */
 __syscall int crc_compute(const struct device *dev, struct crc_params *params);
 
-static inline int crc_compute(const struct device *dev, struct crc_params *params)
+static inline int z_impl_crc_compute(const struct device *dev, struct crc_params *params)
 {
 	const struct crc_driver_api *api =
 			(struct crc_driver_api *)dev->api;
 
-	if (api->start == NULL) {
+	if (api->compute == NULL) {
 		return -ENOSYS;
 	}
 
-	return api->start(dev, params);
+	return api->compute(dev, params);
 }
 
 /**
@@ -65,18 +66,18 @@ static inline int crc_compute(const struct device *dev, struct crc_params *param
  * @retval 0 If successful.
  * @retval -ENOSYS   If the driver does not implement this function.
  */
-__syscall int crc_seed(const struct device *dev, uint32_t seed_value);
+__syscall int crc_set_seed(const struct device *dev, uint32_t seed_value);
 
-static inline int crc_seed(const struct device *dev, uint32_t seed_value)
+static inline int z_impl_crc_set_seed(const struct device *dev, uint32_t seed_value)
 {
 	const struct crc_driver_api *api =
 			(struct crc_driver_api *)dev->api;
 
-	if (api->seed == NULL) {
+	if (api->set_seed == NULL) {
 		return -ENOSYS;
 	}
 
-	return api->seed(dev, seed_value);
+	return api->set_seed(dev, seed_value);
 }
 
 /**
@@ -88,19 +89,21 @@ static inline int crc_seed(const struct device *dev, uint32_t seed_value)
  * @retval 0 If successful.
  * @retval -ENOSYS   If the driver does not implement this function.
  */
-__syscall int crc_polycustom(const struct device *dev, uint32_t polynomial);
+__syscall int crc_set_polynomial(const struct device *dev, uint32_t polynomial);
 
-static inline int crc_polycustom(const struct device *dev, uint32_t polynomial)
+static inline int z_impl_crc_set_polynomial(const struct device *dev, uint32_t polynomial)
 {
 	const struct crc_driver_api *api =
 			(struct crc_driver_api *)dev->api;
 
-	if (api->polynomial == NULL) {
+	if (api->set_polynomial == NULL) {
 		return -ENOSYS;
 	}
 
-	return api->polynomial(dev, polynomial);
+	return api->set_polynomial(dev, polynomial);
 }
+
+#include <zephyr/syscalls/crc.h>
 
 #ifdef __cplusplus
 }

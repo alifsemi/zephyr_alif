@@ -294,7 +294,7 @@ static void crc_params_init(const struct device *dev, struct crc_params *params)
 }
 
 /**
- * @fn		int crc_compute_start (const struct device *dev, crc_params *params)
+ * @fn		int alif_crc_compute(const struct device *dev, crc_params *params)
  * @brief		1.calculate the CRC result for 8 bit 16 bit and 32 bit CRC algorithm.
 			2.For 8 bit and 16 bit CRC algorithm our hardware can able to
 			calculate the CRC result for both aligned and unaligned CRC input
@@ -312,7 +312,7 @@ static void crc_params_init(const struct device *dev, struct crc_params *params)
 			  swap, byte swap and custom polynomial parameters
  * @return	 None
  */
-static int crc_compute_start(const struct device *dev, struct crc_params *params)
+static int alif_crc_compute(const struct device *dev, struct crc_params *params)
 {
 	struct crc_data *data = dev->data;
 
@@ -360,14 +360,14 @@ static int crc_compute_start(const struct device *dev, struct crc_params *params
 }
 
 /**
- * @fn		void crc_set_seed_val(const struct device *dev,uint32_t seed_value)
+ * @fn		void alif_crc_set_seed(const struct device *dev,uint32_t seed_value)
  * @brief	Set crc seed value
  * @param[in]   seed_value : Seed value depending on whether the data is 8 bit
 			    or 16 or 32 bit
  * @param[in]   dev	: pointer to Runtime device structure
  * @return	None
  */
-static int crc_set_seed_val(const struct device *dev, uint32_t seed_value)
+static int alif_crc_set_seed(const struct device *dev, uint32_t seed_value)
 {
 	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
 	uint32_t val = sys_read32(reg_base + CRC_CONTROL);
@@ -382,13 +382,13 @@ static int crc_set_seed_val(const struct device *dev, uint32_t seed_value)
 }
 
 /**
- * @fn		void crc_set_custom_poly(const struct device *dev,uint32_t polynomial)
+ * @fn		void alif_crc_set_polynomial(const struct device *dev,uint32_t polynomial)
  * @brief	add polynomial value
  * @param[in]   polynomial : Polynomial data for 8 bit or 16 or 32 bit
  * @param[in]   dev	   : pointer to Runtime device structure
  * @return	None
  */
-static int crc_set_custom_poly(const struct device *dev, uint32_t polynomial)
+static int alif_crc_set_polynomial(const struct device *dev, uint32_t polynomial)
 {
 	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
 	uint32_t val = sys_read32(reg_base + CRC_CONTROL);
@@ -403,9 +403,9 @@ static int crc_set_custom_poly(const struct device *dev, uint32_t polynomial)
 }
 
 static const struct crc_driver_api crc_api_funcs = {
-		.start = crc_compute_start,
-		.seed = crc_set_seed_val,
-		.polynomial = crc_set_custom_poly,
+		.compute = alif_crc_compute,
+		.set_seed = alif_crc_set_seed,
+		.set_polynomial = alif_crc_set_polynomial,
 };
 
 /* Init function  */
