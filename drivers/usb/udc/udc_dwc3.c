@@ -10,6 +10,7 @@
 #include <zephyr/irq.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/devicetree.h>
+#include <zephyr/drivers/clock_control.h>
 
 #include "udc_common.h"
 
@@ -36,7 +37,13 @@ struct udc_dwc3_config {
 	uint8_t num_endpoints;
 	uint16_t ep0_mps;
 	uint16_t ep_mps;
-	int speed_idx;
+	uint8_t speed_idx;
+	const struct device *clock_dev;
+	clock_control_subsys_t clock_subsys;
+	/* Optional second clock (e.g., SDC clock for some variants) */
+#if DT_INST_NUM_CLOCKS(0) > 1
+	clock_control_subsys_t clock_subsys2;
+#endif
 };
 
 struct udc_dwc3_msg {
@@ -1793,15 +1800,31 @@ static int  udc_dwc3_unlock(const struct device *dev)
 
 int udc_dwc3_init(const struct device *dev)
 {
-	int  status;
+	int  ret;
 	struct udc_dwc3_data *priv = udc_get_private(dev);
+	const struct udc_dwc3_config * const udc_dwc3_cfg = dev->config;
 
-	status = usbd_dwc3_initialize(&priv->drv);
-	if (status) {
+	if (!device_is_ready(udc_dwc3_cfg->clock_dev)) {
+		return -EINVAL;
+	}
+	/* Enable clock (USB) */
+	ret = clock_control_on(udc_dwc3_cfg->clock_dev, udc_dwc3_cfg->clock_subsys);
+	if (ret != 0 && ret != -EALREADY) {
+		return ret;
+	}
+#if DT_INST_NUM_CLOCKS(0) > 1
+	/* Enable clock (SDC) for Balletto */
+	ret = clock_control_on(udc_dwc3_cfg->clock_dev, udc_dwc3_cfg->clock_subsys2);
+	if (ret != 0 && ret != -EALREADY) {
+		return ret;
+	}
+#endif
+	ret = usbd_dwc3_initialize(&priv->drv);
+	if (ret) {
 		LOG_ERR("USB controller initialization failed");
 	}
 
-	return status;
+	return ret;
 }
 
 static int udc_dwc3_enable(const struct device *dev)
@@ -2248,10 +2271,16 @@ static struct udc_data udc0_dwc3_data = {
 };
 
 static const struct udc_dwc3_config udc0_dwc3_cfg  = {
-	.num_endpoints = 8,
-	.ep0_mps = 64,
-	.ep_mps = 512,
-	.speed_idx = 2,
+	.num_endpoints = USB_NUM_OF_EPS,
+	.ep0_mps = USB_CONTROL_EP_MAX_PKT,
+	.ep_mps = USB_BULK_EP_MAX_PKT,
+	.speed_idx = DT_PROP(DT_DRV_INST(0), speed_idx),
+	.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(0)),
+	.clock_subsys = (clock_control_subsys_t) DT_INST_CLOCKS_CELL_BY_IDX(0, 0, clkid),
+	/* clock subsys2 for Balletto */
+#if DT_INST_NUM_CLOCKS(0) > 1
+	.clock_subsys2 = (clock_control_subsys_t) DT_INST_CLOCKS_CELL_BY_IDX(0, 1, clkid),
+#endif
 };
 
 DEVICE_DT_INST_DEFINE(0, udc_dwc3_driver_init0, NULL, &udc0_dwc3_data, &udc0_dwc3_cfg,
