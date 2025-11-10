@@ -11,8 +11,8 @@
 &pinctrl_lpgpio {
 	group0 {
 		pinmux = < PIN_P15_4__LPGPIO >;
-		read_enable = < 0x1 >;
-		driver_state_control = <1>;
+		read-enable = < 0x1 >;
+		driver-state-control = <1>;
 	};
 };
 

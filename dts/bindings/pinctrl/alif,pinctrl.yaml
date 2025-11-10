@@ -36,7 +36,7 @@ description: |
           pinmux = < PIN_P12_1__UART4_RX_B >,
                    < PIN_P12_2__UART4_TX_B >;
           /* enable read on pins P12_1 and P12_2 */
-          read_enable = < 0x1 >;
+          read-enable = < 0x1 >;
         };
       };
       pinctrl_i3c: pinctrl_i3c {
@@ -45,15 +45,15 @@ description: |
           /* configure pin P7_6 I3C_SDA */
           pinmux = < PIN_P7_6__I3C_SDA_D >;
           /* enable schimtt trigger and drive strength to 4mA on pin P7_6 */
-          schmitt_enable = < 0x1 >;
-          drive_strength = < 0x4 >;
+          schmitt-enable = < 0x1 >;
+          drive-strength = < 0x4 >;
         };
         /* group 1 */
         group1 {
           /* configure pin P7_7 as I3C_SCL */
           pinmux = < PIN_P7_7__I3C_SCL_D >;
           /* set drive strength to 2mA on pin P7_7 */
-          drive_strength = < 0x2 >;
+          drive-strength = < 0x2 >;
         };
       };
     };
@@ -67,22 +67,22 @@ description: |
     in the 'pinmux' property.
 
     A group can specify shared pin properties common to all the specified
-    pins in a group, such as 'read_enable' property in group 0 of
+    pins in a group, such as 'read-enable' property in group 0 of
     'pinctrl_uart4' node or separate pin properties for each pin in a group
-    such as 'schmitt_enable' in group 0, and 'drive_strength' in both
+    such as 'schmitt-enable' in group 0, and 'drive-strength' in both
     group 0 and 1 of 'pinctrl_i3c' node.
     List of supported standard pin properties are below:
-    - read_enable: read selection. 0 for disable and 1 for enable.
-    - schmitt_enable:  schmitt trigger selection.
+    - read-enable: read selection. 0 for disable and 1 for enable.
+    - schmitt-enable:  schmitt trigger selection.
                        0 for disable and 1 for enable.
-    - slew_rate: slew rate speed. 0 for slow and 1 for fast.
-    - driver_state_control: driver disabled state control.
+    - slew-rate: slew rate speed. 0 for slow and 1 for fast.
+    - driver-state-control: driver disabled state control.
                             Two bits feild can be:
                             0 0 for High Z
                             0 1 for Pull up
                             1 0 for Pull down
                             1 1 for Bus repeater
-    - driver_strength: output drive strength.
+    - drive-strength: output drive strength.
                             Two bits feild can be:
                             0 0 for 2mA
                             0 1 for 4mA
@@ -135,7 +135,7 @@ child-binding:
           An array of pins sharing the same group properties. Each
           element of the array is an integer constructed from the
           pin number and the alternative function of the pin.
-      read_enable:
+      read-enable:
         type: int
         enum:
            - 0
@@ -145,7 +145,7 @@ child-binding:
           Option to enable read.
           0 - disable
           1 - enable
-      schmitt_enable:
+      schmitt-enable:
         type: int
         enum:
            - 0
@@ -155,7 +155,7 @@ child-binding:
           Option to enable schmitt trigger.
           0 - disable
           1 - enable
-      slew_rate:
+      slew-rate:
         type: int
         enum:
           - 0
@@ -165,7 +165,7 @@ child-binding:
           Pin output slew rate.
           0 - slow slew rate when pin is configured as output
           1 - fast slew rate when pin is configured as output
-      driver_state_control:
+      driver-state-control:
         type: int
         enum:
           - 0
@@ -179,7 +179,7 @@ child-binding:
           1 - Pull up
           0 - Pull down
           1 - Bus repeater
-      drive_strength:
+      drive-strength:
         type: int
         enum:
           - 2

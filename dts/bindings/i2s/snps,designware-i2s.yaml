@@ -25,7 +25,7 @@ properties:
     description : |
       I2S driven by external clock source.
 
-  driver_instance:
+  driver-instance:
     type: string
     description: instance identifier
     enum:
