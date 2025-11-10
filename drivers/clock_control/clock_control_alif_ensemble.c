@@ -9,6 +9,7 @@
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/dt-bindings/clock/alif_ensemble_clocks.h>
+#include "soc_common.h"
 
 LOG_MODULE_REGISTER(alif_clock_control, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 
@@ -294,6 +295,14 @@ static int alif_clock_control_on(const struct device *dev,
 		return 0;
 	}
 
+	switch ((uint32_t)sub_system) {
+	case ALIF_USB_CLK:
+		/* Enable USB clock 20MHz */
+		sys_set_bits(CGU_CLK_ENA, BIT(22));
+		break;
+	default:
+		break;
+	}
 	ret = alif_get_module_base(dev, ALIF_CLOCK_CFG_MODULE(clk_id),
 					&module_base);
 	if (ret) {

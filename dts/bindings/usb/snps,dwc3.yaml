@@ -17,6 +17,8 @@ properties:
   interrupts:
     required: true
 
+  clocks:
+    required: true
 
   num-in-eps:
     type: int

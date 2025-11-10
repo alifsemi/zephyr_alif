@@ -1796,7 +1796,7 @@ static int  udc_dwc3_unlock(const struct device *dev)
 
 static int udc_dwc3_init(const struct device *dev)
 {
-	int  status;
+	int  ret;
 	struct udc_dwc3_data *priv = udc_get_private(dev);
 	const struct udc_dwc3_config * const udc_dwc3_cfg = dev->config;
 
@@ -1821,7 +1821,7 @@ static int udc_dwc3_init(const struct device *dev)
 		LOG_ERR("USB controller initialization failed");
 	}
 
-	return status;
+	return ret;
 }
 
 static int udc_dwc3_enable(const struct device *dev)

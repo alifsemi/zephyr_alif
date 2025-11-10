@@ -193,6 +193,7 @@
 	usb: usb@48200000 {
 		compatible = "snps,dwc3";
 		reg = <0x48200000 0xca04>;
+		clocks = <&clockctrl ALIF_USB_CLK>;
 		maximum-speed = "high-speed";
 		interrupts = <101 3>;
 		num-out-eps = <4>;
