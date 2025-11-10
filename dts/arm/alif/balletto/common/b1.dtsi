@@ -107,7 +107,10 @@
 	usb: usb@48200000 {
 		compatible = "snps,dwc3";
 		reg = <0x48200000 0xca04>;
-		interrupts = < 101 3 >;
+		clocks = <&clockctrl ALIF_SDC_CLK>,
+			 <&clockctrl ALIF_USB_CLK>;
+		speed-idx = <2>;
+		interrupts = <101 3>;
 		status = "disabled";
 	};
 
