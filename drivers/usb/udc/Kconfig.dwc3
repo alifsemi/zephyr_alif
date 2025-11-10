@@ -1,0 +1,45 @@
+# Copyright (c) 2025 Alif semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config UDC_DWC3
+	bool "DWC3 USB device controller driver"
+	default y
+	depends on DT_HAS_SNPS_DWC3_ENABLED
+	help
+	  DWC3 USB device controller driver.
+
+config UDC_DWC3_DMA
+	bool "DWC3 USB DMA support"
+	default y
+	depends on UDC_DWC3
+	help
+	  Enable DMA if DWC3 USB controller supports Internal DMA.
+
+config UDC_DWC3_ALIF
+	bool "UDC DWC3 Alif support"
+	default y
+	depends on UDC_DWC3
+	depends on SOC_FAMILY_ENSEMBLE || SOC_FAMILY_BALLETTO
+	help
+	  Enable support for the Synopsys DesignWare DWC3 on Alif platforms.
+
+config UDC_DWC3_STACK_SIZE
+	int "UDC DWC3 driver internal thread stack size"
+	depends on UDC_DWC3
+	default 512
+	help
+	  DWC3 driver internal thread stack size.
+
+config UDC_DWC3_THREAD_PRIORITY
+	int "UDC DWC3 driver thread priority"
+	depends on UDC_DWC3
+	default 8
+	help
+	  DWC3 driver thread priority.
+
+config UDC_DWC3_MAX_QMESSAGES
+	int "DWC3 UDC driver maximum number of ISR event messages"
+	range 4 64
+	default 8
+	help
+	  Maximum number of messages for handling of DWC3 USBD ISR events.

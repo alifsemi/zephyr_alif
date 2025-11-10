@@ -21,6 +21,7 @@ config UDC_BUF_COUNT
 config UDC_BUF_POOL_SIZE
 	int "Memory available for requests"
 	range 64 32768
+	default 2048 if SOC_FAMILY_ENSEMBLE || SOC_FAMILY_BALLETTO
 	default 1024
 	help
 	  Total amount of memory available for UDC requests.
@@ -67,5 +68,6 @@ source "drivers/usb/udc/Kconfig.numaker"
 source "drivers/usb/udc/Kconfig.rpi_pico"
 source "drivers/usb/udc/Kconfig.ambiq"
 source "drivers/usb/udc/Kconfig.renesas_ra"
+source "drivers/usb/udc/Kconfig.dwc3"
 
 endif # UDC_DRIVER

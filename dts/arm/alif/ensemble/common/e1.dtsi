@@ -190,6 +190,16 @@
 		};
 	};
 
+	usb: usb@48200000 {
+		compatible = "snps,dwc3";
+		reg = <0x48200000 0xca04>;
+		maximum-speed = "high-speed";
+		interrupts = <101 3>;
+		num-out-eps = <4>;
+		num-in-eps = <4>;
+		status = "disabled";
+	};
+
 	hwsem0: hwsem@4902e000 {
 		compatible = "alif,hwsem";
 		reg = <0x4902E000 0x10>;

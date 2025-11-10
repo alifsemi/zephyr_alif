@@ -17,6 +17,11 @@
 
 /delete-node/ &lpcmp;
 
+&usb {
+	num-out-eps = <5>;
+	num-in-eps = <11>;
+};
+
 &{/soc} {
 
 	ethosu1: ethosu85@49042000 {

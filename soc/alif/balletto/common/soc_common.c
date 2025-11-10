@@ -121,6 +121,23 @@ static int soc_init(void)
 	sys_set_bits(EXPMST_PERIPH_CLK_EN, BIT(16));
 #endif
 
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(usb), okay)
+	/* Enable USB clock 20MHz */
+	sys_set_bits(CGU_CLK_ENA, BIT(22));
+
+	/* SD Peripheral clock enable is required for USB */
+	sys_set_bits(EXPMST_PERIPH_CLK_EN, BIT(16));
+
+	/* Enable Peripheral clock  */
+	sys_set_bits(EXPMST_PERIPH_CLK_EN, BIT(20));
+
+	/* Enable phy pwr mask and Enable the phy Isolation. */
+	sys_clear_bits(VBAT_PWR_CTRL, BIT(16) | BIT(17));
+
+	/* USB power on reset clear */
+	sys_clear_bits(EXPMST_USB_CTRL2, BIT(8));
+#endif
+
 	return 0;
 }
 

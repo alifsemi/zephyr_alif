@@ -8,6 +8,8 @@ GROUP_START(NON_SECURE0)
 	{
 			KEEP(*(.alif_ns))
 			KEEP(*(".alif_ns.*"))
+			KEEP(*(.bss.usb_dwc3_event_buff))
+			KEEP(*(.bss.udc_dwc3_priv_0))
 			KEEP(*(.noinit.*kheap_buf_video_buffer_pool))
 	} GROUP_LINK_IN(NON_SECURE0)
 

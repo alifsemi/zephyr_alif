@@ -133,6 +133,18 @@
 		status = "disabled";
 	};
 
+	usb: usb@48200000 {
+		compatible = "snps,dwc3";
+		reg = <0x48200000 0xca04>;
+		clocks = <&clockctrl ALIF_SDC_CLK>,
+			<&clockctrl ALIF_USB_CLK>;
+		maximum-speed = "high-speed";
+		interrupts = <101 3>;
+		num-out-eps = <5>;
+		num-in-eps = <11>;
+		status = "disabled";
+	};
+
 	peripheral@40000000 {
 		#address-cells = < 0x1 >;
 		#size-cells = < 0x1 >;

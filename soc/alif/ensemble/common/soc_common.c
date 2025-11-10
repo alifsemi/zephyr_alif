@@ -223,6 +223,20 @@ static int soc_init(void)
 	sys_set_bits(EXPMST_PERIPH_CLK_EN, BIT(16));
 #endif
 
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(usb), okay)
+	/* Enable phy pwr mask and Enable the phy Isolation. */
+	sys_clear_bits(VBAT_PWR_CTRL, BIT(16) | BIT(17));
+
+	/* USB power on reset clear */
+	sys_clear_bits(EXPMST_USB_CTRL2, BIT(8));
+#endif
+
+#if (DT_NODE_HAS_STATUS(DT_NODELABEL(pdm), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(lppdm), okay))
+	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2)) {
+		/* enable the HFOSCx2 clock */
+		sys_set_bits(CGU_CLK_ENA, BIT(24));
+	}
+#endif
 	/* I3C settings */
 #if (DT_NODE_HAS_STATUS(DT_NODELABEL(i3c0), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(lpi3c0), okay))
 	/* I3C Flex GPIO */
