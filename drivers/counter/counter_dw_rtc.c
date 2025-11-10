@@ -29,6 +29,8 @@ struct counter_dw_data {
 	uint32_t ccr_reg_value;
 };
 
+static int counter_dw_cancel_alarm(const struct device *dev, uint8_t chan_id);
+
 static int counter_dw_start(const struct device *dev)
 {
 	const struct counter_dw_config *config = dev->config;
@@ -37,7 +39,8 @@ static int counter_dw_start(const struct device *dev)
 	data->ccr_reg_value = read_ccr(config->base_address);
 
 	if ((data->ccr_reg_value & (1 << DW_RTC_CCR_EN))) {
-		return -EALREADY;
+		(void) counter_dw_cancel_alarm(dev, 0);
+		return 0;
 	}
 
 	write_clr(config->load_value, config->base_address);
@@ -182,9 +185,7 @@ static const struct counter_driver_api counter_dw_api = {
 static int counter_dw_init(const struct device *dev)
 {
 	const struct counter_dw_config *config = dev->config;
-	struct counter_dw_data *data = dev->data;
 
-	data->alarm_cb = NULL;
 	config->config_func();
 	return 0;
 }
