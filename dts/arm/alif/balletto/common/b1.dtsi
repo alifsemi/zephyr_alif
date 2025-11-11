@@ -40,9 +40,9 @@
 		status = "okay";
 	};
 
-	ethosu0: ethosu55@400E1000 {
+	ethosu0: ethosu55@400e1000 {
 		compatible = "arm,ethos-u";
-		reg = <0x400E1000>;
+		reg = <0x400e1000 0x1000>;
 		interrupts = <55 0>;
 		interrupt-parent = <&nvic>;
 		secure-enable;
