@@ -932,6 +932,11 @@
 };
 
 &{/} {
+	soc_info: soc {
+		compatible = "alif,balletto-soc";
+		ble-rom-version = "1.2";
+	};
+
 	clocks {
 		lfrc: lfrc {
 			compatible = "fixed-clock";

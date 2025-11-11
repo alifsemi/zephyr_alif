@@ -18,13 +18,25 @@ config HAS_ALIF_BLE_ROM_IMAGE
 	  Device has BLE HOST and LC3 ROM code
 
 if HAS_ALIF_BLE_ROM_IMAGE
-choice ALIF_BLE_ROM_IMAGE_VERSION
-	prompt "Choose ROM code version"
-	default ALIF_BLE_ROM_IMAGE_V1_2
 
-	config ALIF_BLE_ROM_IMAGE_V1_2
-		bool "ROM code version 1.2"
-endchoice
+# BLE ROM version is hardware-specific and defined in DTS.
+# The version is automatically detected from the ble-rom-version property.
+
+DT_SOC_INFO := $(dt_nodelabel_path,soc_info)
+
+config ALIF_BLE_ROM_IMAGE_V1_2
+	def_bool $(dt_node_str_prop_equals,$(DT_SOC_INFO),ble-rom-version,1.2)
+	help
+	  BLE ROM version 1.2 (automatically set from device tree)
+
+# To add support for a new BLE ROM version (e.g., v1.3):
+# 1. Add "1.3" to the enum in zephyr/dts/bindings/arm/alif,balletto-soc.yaml
+# 2. Add a new config here:
+#    config ALIF_BLE_ROM_IMAGE_V1_3
+#        def_bool $(dt_node_str_prop_equals,$(DT_SOC_INFO),ble-rom-version,1.3)
+# 3. Update CMakeLists.txt in modules/hal/alif/ble/ and modules/hal/alif/lc3/
+# 4. Create version-specific subdirectories with ROM symbols
+
 endif
 
 config HAS_ALIF_POWER_MANAGER

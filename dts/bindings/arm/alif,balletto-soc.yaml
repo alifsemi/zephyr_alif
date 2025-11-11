@@ -1,0 +1,15 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+description: Alif Balletto SoC
+
+compatible: "alif,balletto-soc"
+
+properties:
+  ble-rom-version:
+    type: string
+    required: true
+    description: BLE ROM version embedded in the hardware
+    enum:
+      - "1.2"
