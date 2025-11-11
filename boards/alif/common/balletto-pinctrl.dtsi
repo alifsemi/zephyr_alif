@@ -132,8 +132,8 @@
 
 	pinctrl_lpuart: pinctrl_lpuart {
 		group0 {
-			pinmux = < PIN_P2_0__LPUART_RX_A >,
-				 < PIN_P9_1__LPUART_TX_C >;
+			pinmux = <PIN_P2_0__LPUART_RX_A>,
+				 <PIN_P7_1__LPUART_TX_B>;
 		};
 	};
 
