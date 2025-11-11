@@ -9,19 +9,30 @@ config SOC_SERIES_B1
 config SOC_SERIES
 	default "b1" if SOC_SERIES_B1
 
-config SOC_AB1C1F4M51820HH
+config SOC_AB1C1F4M51820HH0
 	bool
 	select SOC_SERIES_B1
 	help
-	  Alif Balletto B1
+	  Alif Balletto B1 CSP
 
-config SOC_AB1C1F4M51820HH_RTSS_HE
+config SOC_AB1C1F4M51820HH0_RTSS_HE
 	bool
-	select SOC_AB1C1F4M51820HH
+	select SOC_AB1C1F4M51820HH0
+
+config SOC_AB1C1F4M51820PH0
+	bool
+	select SOC_SERIES_B1
+	help
+	  Alif Balletto B1 BGA
+
+config SOC_AB1C1F4M51820PH0_RTSS_HE
+	bool
+	select SOC_AB1C1F4M51820PH0
 
 config DT_HAS_ALIF_BT_HCI_ENABLED
 	bool
 	default y
 
 config SOC
-	default "ab1c1f4m51820hh" if SOC_AB1C1F4M51820HH
+	default "ab1c1f4m51820hh0" if SOC_AB1C1F4M51820HH0
+	default "ab1c1f4m51820ph0" if SOC_AB1C1F4M51820PH0

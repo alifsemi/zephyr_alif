@@ -3,6 +3,9 @@ family:
     series:
       - name: b1
         socs:
-          - name: ab1c1f4m51820hh
+          - name: ab1c1f4m51820hh0
+            cpuclusters:
+              - name: rtss_he
+          - name: ab1c1f4m51820ph0
             cpuclusters:
               - name: rtss_he
