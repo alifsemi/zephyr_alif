@@ -59,6 +59,12 @@ endchoice
 config SOC_SERIES_BALLETTO
 	bool "Alif Balletto Series"
 
+config SOC_B1_DCDC_VOLTAGE
+	int "Run profile DCDC voltage"
+	default 825
+	help
+		Config DCDC voltage.
+
 if (PM || POWEROFF)
 config PM_RTSS
 	bool

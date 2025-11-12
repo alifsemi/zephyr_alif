@@ -32,7 +32,7 @@ static int pm_set_run_params(void)
 
 	runp.power_domains =
 		PD_VBAT_AON_MASK | PD_SYST_MASK | PD_SSE700_AON_MASK | PD_DBSS_MASK | PD_SESS_MASK;
-	runp.dcdc_voltage = 825;
+	runp.dcdc_voltage = CONFIG_SOC_B1_DCDC_VOLTAGE;
 	runp.dcdc_mode = DCDC_MODE_PFM_FORCED;
 	runp.aon_clk_src = CLK_SRC_LFXO;
 	runp.run_clk_src = CLK_SRC_PLL;
