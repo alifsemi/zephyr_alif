@@ -5,7 +5,6 @@ pipeline {
 
     environment {
         REPO_NAME='zephyr'
-        BRANCH_NAME='zas-v2.x-dev'
         PATH="${env.WEST_BIN_PATH}:${env.PATH}"
     }
 
@@ -64,8 +63,8 @@ pipeline {
                         script: '''#!/bin/bash
                             set -xe
                             cd ${REPO_NAME}
-                            git fetch origin refs/heads/${BRANCH_NAME}:refs/remotes/origin/${BRANCH_NAME}
-                            commitCnt=$(git rev-list --count origin/${BRANCH_NAME}..HEAD)
+                            git fetch origin refs/heads/${CHANGE_TARGET}:refs/remotes/origin/${CHANGE_TARGET}
+                            commitCnt=$(git rev-list --count origin/${CHANGE_TARGET}..HEAD)
                             commits=$(git log -n ${commitCnt} --pretty=format:"%H")
 
                             if [[ "$commitCnt" -lt "1" ]] ; then
@@ -100,7 +99,7 @@ pipeline {
                         script: '''#!/bin/bash
                             set -xe
                             cd ${REPO_NAME}
-                            commitCnt=$(git rev-list --count origin/${BRANCH_NAME}..HEAD)
+                            commitCnt=$(git rev-list --count origin/${CHANGE_TARGET}..HEAD)
 
                             # Get all author emails for this PR
                             culpritEmails=$(git log -n $commitCnt --pretty=format:'%ae' | sort | uniq | paste -sd";" -)
@@ -134,8 +133,8 @@ pipeline {
                         echo -e "☑️ west update is completed."
                         west zephyr-export
 
-                        commitCnt=$(git rev-list --count origin/${BRANCH_NAME}..HEAD)
-                        totalCommitCnt=$(git rev-list --count origin/${BRANCH_NAME})
+                        commitCnt=$(git rev-list --count origin/${CHANGE_TARGET}..HEAD)
+                        totalCommitCnt=$(git rev-list --count origin/${CHANGE_TARGET})
                         if [[ "$totalCommitCnt" < "$commitCnt" ]] ; then
                             checkGitLog=${commitCnt}
                         else
@@ -143,7 +142,7 @@ pipeline {
                         fi
                         git log -${checkGitLog}
 
-                        echo -e "🎯 we have $commitCnt commits in $BRANCH_NAME review"
+                        echo -e "🎯 we have $commitCnt commits in $CHANGE_TARGET review"
 
                         if [[ "$commitCnt" =~ ^[0-9]+$ && "$commitCnt" -gt "0" ]] ; then
                             git format-patch -${commitCnt}
@@ -184,7 +183,7 @@ pipeline {
 
                             echo -e "🎯Check-Patch has=> Errors: ${check_patch_errors} Warnings: ${check_patch_warnings}, Lines: ${check_patch_lines}\n\n"
 
-                            pr_checker_log=$(${VALIDATION_SCRIPT_DIR}/pr_commit_checker.sh ${commitCnt} ${PWD} origin/${BRANCH_NAME})
+                            pr_checker_log=$(${VALIDATION_SCRIPT_DIR}/pr_commit_checker.sh ${commitCnt} ${PWD} origin/${CHANGE_TARGET})
                             pr_checker_err=$?
                             echo -e "🎯PR Checker=>\n$pr_checker_log"
 

@@ -5,7 +5,7 @@ pipeline {
     agent any
 
     environment {
-        REPO_NAME='sdk-alif_2.0'
+        REPO_NAME='sdk-alif'
     }
 
     options {
@@ -146,7 +146,7 @@ pipeline {
                         fi
                         git log -${checkGitLog}
 
-                        echo -e "🎯 we have $commitCnt commits in $BRANCH_NAME review"
+                        echo -e "🎯 we have $commitCnt commits in $CHANGE_TARGET review"
 
                         if [[ "$commitCnt" =~ ^[0-9]+$ && "$commitCnt" -gt "0" ]] ; then
                             git format-patch -${commitCnt}
