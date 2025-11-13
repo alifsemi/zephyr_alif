@@ -1,0 +1,26 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+description: DesignWare USB DWC3 controller
+
+compatible: "snps,dwc3"
+
+include: [base.yaml]
+
+bus: usb
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true
+
+  clocks:
+    required: true
+
+  speed-idx:
+    type: int
+    default: 2
+    description: USB speed index (0=low, 1=full, 2=high speed)
