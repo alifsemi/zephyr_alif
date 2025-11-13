@@ -64,6 +64,11 @@ struct clock_control_alif_config {
 #define ALIF_CLOCK_S32K_CLK_FREQ OSC_CLOCK_SRC_FREQ(lfrc)
 #endif
 
+/* EXPMST0 control register config */
+#if !defined(CONFIG_ENSEMBLE_GEN2)
+#define ALIF_EXPMST0_CTRL_IPCLK_FORCE_BIT BIT(31U)
+#define ALIF_EXPMST0_CTRL_PCLK_FORCE_BIT  BIT(30U)
+#endif
 
 /** register offset (from clkid cell) */
 #define ALIF_CLOCK_CFG_REG(id) (((id) >> ALIF_CLOCK_REG_SHIFT) & ALIF_CLOCK_REG_MASK)
@@ -289,6 +294,27 @@ static int alif_clock_control_on(const struct device *dev,
 
 	sys_set_bit(reg_addr, ALIF_CLOCK_CFG_ENABLE(clk_id));
 
+#if !defined(CONFIG_ENSEMBLE_GEN2)
+	/* Force enable ipclk and pclk as uart requires it */
+	switch (clk_id) {
+	case ALIF_UART0_SYST_PCLK:
+	case ALIF_UART1_SYST_PCLK:
+	case ALIF_UART2_SYST_PCLK:
+	case ALIF_UART3_SYST_PCLK:
+	case ALIF_UART4_SYST_PCLK:
+	case ALIF_UART5_SYST_PCLK:
+	case ALIF_UART6_SYST_PCLK:
+	case ALIF_UART7_SYST_PCLK:
+		reg_addr = module_base + ALIF_EXPMST0_CTRL_REG;
+
+		sys_write32((ALIF_EXPMST0_CTRL_IPCLK_FORCE_BIT |
+			    ALIF_EXPMST0_CTRL_PCLK_FORCE_BIT),
+			    reg_addr);
+		break;
+	default:
+		break;
+	}
+#endif
 	return 0;
 }
 
