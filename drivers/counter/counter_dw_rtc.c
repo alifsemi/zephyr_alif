@@ -192,9 +192,10 @@ static int counter_dw_init(const struct device *dev)
 }
 
 #define COUNTER_DW_INIT(inst)							\
-	static void counter_dw_irq_config_##inst(void);				\
+	static void counter_dw_irq_config_##inst(void);			\
 										\
-	static struct counter_dw_data counter_dw_dev_data_##inst;		\
+	static struct counter_dw_data						\
+		counter_dw_dev_data_##inst __attribute__((noinit));		\
 										\
 	static struct counter_dw_config counter_dw_dev_config_##inst = {	\
 		.info = {							\
