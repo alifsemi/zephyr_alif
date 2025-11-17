@@ -1261,13 +1261,14 @@
 		reg =	<0x49020000 0x1000>,
 			<0x49020000 0x100>,
 			<0x49023000 0x100>,
-			<0x1A604000 0x100>;
-		reg-names = "adc_reg", "analog_reg", "comp_reg", "aon_regs";
+			<0x1A604000 0x100>,
+			<0x4902B000 0x100>;
+		reg-names = "adc_reg", "analog_reg", "comp_reg", "aon_regs", "adc_vref";
 
 		comparator_threshold_a = <0x01>;
 		comparator_threshold_b = <0x01>;
 		comparator_threshold_comparison = "ABOVE_THRESHOLD_A_AND_B";
-		interrupts		= <(ADC_DONE0_INTERRUPT | ADC_DONE1_INTERRUPT)>;
+		interrupt_en		= <(ADC_DONE0_INTERRUPT | ADC_DONE1_INTERRUPT)>;
 
 		sample-width		= <16>;
 		clock_div		= <2>;
@@ -1298,13 +1299,14 @@
 		reg =	<0x49021000 0x1000>,
 			<0x49020000 0x100>,
 			<0x49023000 0x100>,
-			<0x1A604000 0x100>;
-		reg-names = "adc_reg", "analog_reg", "comp_reg", "aon_regs";
+			<0x1A604000 0x100>,
+			<0x4902B000 0x100>;
+		reg-names = "adc_reg", "analog_reg", "comp_reg", "aon_regs", "adc_vref";
 
 		comparator_threshold_a = <0x01>;
 		comparator_threshold_b = <0x01>;
 		comparator_threshold_comparison = "ABOVE_THRESHOLD_A_AND_B";
-		interrupts		= <(ADC_DONE0_INTERRUPT | ADC_DONE1_INTERRUPT)>;
+		interrupt_en		= <(ADC_DONE0_INTERRUPT | ADC_DONE1_INTERRUPT)>;
 
 		sample-width		= <16>;
 		clock_div		= <2>;
@@ -1335,13 +1337,14 @@
 		reg =	<0x49022000 0x1000>,
 			<0x49020000 0x100>,
 			<0x49023000 0x100>,
-			<0x1A604000 0x100>;
-		reg-names = "adc_reg", "analog_reg", "comp_reg", "aon_regs";
+			<0x1A604000 0x100>,
+			<0x4902B000 0x100>;
+		reg-names = "adc_reg", "analog_reg", "comp_reg", "aon_regs", "adc_vref";
 
 		comparator_threshold_a = <0x01>;
 		comparator_threshold_b = <0x01>;
 		comparator_threshold_comparison = "ABOVE_THRESHOLD_A_AND_B";
-		interrupts              = <(ADC_DONE0_INTERRUPT | ADC_DONE1_INTERRUPT)>;
+		interrupt_en		= <(ADC_DONE0_INTERRUPT | ADC_DONE1_INTERRUPT)>;
 
 		sample-width		= <16>;
 		clock_div		= <2>;
@@ -1372,13 +1375,14 @@
 		reg =	<0x49027000 0x1000>,
 			<0x49020000 0x100>,
 			<0x49023000 0x100>,
-			<0x1A604000 0x100>;
-		reg-names = "adc_reg", "analog_reg", "comp_reg", "aon_regs";
+			<0x1A604000 0x100>,
+			<0x4902B000 0x100>;
+		reg-names = "adc_reg", "analog_reg", "comp_reg", "aon_regs", "adc_vref";
 
 		comparator_threshold_a = <0x01>;
 		comparator_threshold_b = <0x01>;
 		comparator_threshold_comparison = "ABOVE_THRESHOLD_A_AND_B";
-		interrupts              = <(ADC_DONE0_INTERRUPT | ADC_DONE1_INTERRUPT)>;
+		interrupt_en              = <(ADC_DONE0_INTERRUPT | ADC_DONE1_INTERRUPT)>;
 
 		clock_div		= <2>;
 		avg_sample_num		= <256>;

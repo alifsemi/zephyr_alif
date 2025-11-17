@@ -31,7 +31,9 @@ struct adc_config {
 	DEVICE_MMIO_NAMED_ROM(analog_reg);
 	DEVICE_MMIO_NAMED_ROM(adc_reg);
 	DEVICE_MMIO_NAMED_ROM(aon_regs);
+#if CONFIG_ANALOG_ALIASING
 	DEVICE_MMIO_NAMED_ROM(adc_vref);
+#endif
 	void (*irq_config_func)(const struct device *dev);
 	const struct pinctrl_dev_config *pcfg;
 	uint32_t sample_width;
@@ -43,7 +45,6 @@ struct adc_config {
 	uint32_t comparator_threshold_a;
 	uint32_t comparator_threshold_b;
 	uint8_t shift_direction;
-	uint8_t comparator_en;
 	uint8_t comparator_bias;
 	uint8_t pga_enable;
 	uint8_t scan_mode;
@@ -58,7 +59,9 @@ struct adc_data {
 	DEVICE_MMIO_NAMED_RAM(analog_reg);
 	DEVICE_MMIO_NAMED_RAM(adc_reg);
 	DEVICE_MMIO_NAMED_RAM(aon_regs);
+#if CONFIG_ANALOG_ALIASING
 	DEVICE_MMIO_NAMED_RAM(adc_vref);
+#endif
 	const struct device *dev;
 	struct adc_context ctx;
 	volatile uint32_t curr_cnt;
@@ -939,6 +942,9 @@ static int adc_init(const struct device *dev)
 
 	DEVICE_MMIO_NAMED_MAP(dev, comp_reg, K_MEM_CACHE_NONE);
 	DEVICE_MMIO_NAMED_MAP(dev, adc_reg, K_MEM_CACHE_NONE);
+#if CONFIG_ANALOG_ALIASING
+	DEVICE_MMIO_NAMED_MAP(dev, adc_vref, K_MEM_CACHE_NONE);
+#endif
 	regs = DEVICE_MMIO_NAMED_GET(dev, adc_reg);
 
 	data->dev = dev;
@@ -1022,15 +1028,14 @@ struct adc_driver_api alif_adc_api = {
 		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(analog_reg, DT_DRV_INST(inst)),                 \
 		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(adc_reg, DT_DRV_INST(inst)),                    \
 		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(aon_regs, DT_DRV_INST(inst)),                   \
-		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(adc_vref, DT_DRV_INST(inst)),                   \
+		IF_ENABLED(CONFIG_ANALOG_ALIASING,					           \
+		(DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(adc_vref, DT_DRV_INST(inst)),))	           \
 		.irq_config_func = adc_config_func_##inst,                                         \
 		.sample_width = COND_CODE_0(DT_INST_ENUM_IDX(inst, driver_instance), (BIT(16)),    \
 					    (DT_INST_ENUM_IDX(inst, sample_width))),               \
 		.clock_div = DT_INST_PROP(inst, clock_div),                                        \
 		.shift_n_bits = DT_INST_PROP(inst, shift_n_bits),                                  \
 		.shift_direction = DT_INST_ENUM_IDX(inst, shift_direction),                        \
-		.comparator_en = COND_CODE_0(DT_INST_ENUM_IDX(inst, driver_instance), (0),         \
-					     (DT_INST_PROP(inst, comparator_en))),                 \
 		.comparator_bias = COND_CODE_0(DT_INST_ENUM_IDX(inst, driver_instance), (0),       \
 					       (DT_INST_ENUM_IDX(inst, comparator_bias))),         \
 		.avg_sample_num = DT_INST_PROP(inst, avg_sample_num),                              \

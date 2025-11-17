@@ -79,7 +79,7 @@ properties:
       -  "ADC_INSTANCE_ADC12_1"
       -  "ADC_INSTANCE_ADC12_2"
 
-  interrupts:
+  interrupt_en:
     type: int
     description: Enable required interrupts
     required: true
