@@ -1,0 +1,31 @@
+/*
+ * Copyright (c) 2025 Alif Semiconductor.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * I2S_0 => Speaker Output
+ */
+
+&i2s0 {
+	status = "okay";
+};
+
+/ {
+	aliases {
+		i2s-tx = &i2s0;
+	};
+};
+
+/* update i2s pin as per devkit */
+&pinctrl {
+	pinctrl_i2s0:pinctrl_i2s0 {
+		group0 {
+			pinmux = <PIN_P2_4__I2S0_SDI_B>,
+				<PIN_P2_5__I2S0_SDO_B>,
+				<PIN_P1_6__I2S0_SCLK_A>,
+				<PIN_P1_7__I2S0_WS_A>;
+		};
+	};
+};
+

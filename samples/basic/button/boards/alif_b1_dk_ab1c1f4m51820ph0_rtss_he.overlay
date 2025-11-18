@@ -1,0 +1,18 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Copyright (c) 2025 Alif Semiconductor
+ */
+
+/* for "buttons" node gpio5_7, enable software pull-up */
+&pinctrl_gpio5 {
+	group0 {
+		pinmux = < PIN_P5_7__GPIO >;
+		read-enable = < 0x1 >;
+		driver-state-control = <1>;
+	};
+};
+
+&gpio5{
+	status = "okay";
+};
