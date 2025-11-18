@@ -1,0 +1,26 @@
+# Alif Camera controller driver configuration options
+
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config VIDEO_ALIF_CAM
+	bool "Camera Parallel Interface (CPI) controller driver"
+	default y
+	depends on DT_HAS_ALIF_CAM_ENABLED
+
+if VIDEO_ALIF_CAM
+
+config VIDEO_ALIF_CAM_INIT_PRIORITY
+	int "CPI Video initialization priority"
+	default 60
+	help
+	 System initialization priority for Alif Camera Driver.
+	 The default initialization priority for video devices is 60.
+
+config VIDEO_ALIF_CAM_EXTENDED
+	bool "CPI has extended registers and Ports."
+	help
+	 CPI has extended registers and ports to forward video
+	 signals to ISP and dump the frame to memory.
+
+endif #VIDEO_ALIF_CAM

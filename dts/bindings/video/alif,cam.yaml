@@ -1,0 +1,123 @@
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: ALIF Camera Parallel Interface
+
+compatible: "alif,cam"
+
+include: [base.yaml, pinctrl-device.yaml]
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true
+
+  clocks:
+    required: true
+
+  clock-names:
+    required: true
+
+  sensor:
+    required: true
+    type: phandle
+    description: phandle of connected sensor device
+
+  csi-bus-if:
+    required: false
+    type: phandle
+    description: phandle to connected MIPI CSI-2 bus device.
+
+  lp-cam:
+    type: boolean
+    description: Signifies if the current CPI IP is LPCPI or normal CPI.
+
+  capture-mode:
+    type: string
+    required: false
+    default: "snapshot"
+    description: Continuous or single frame (snapshot) capture.
+    enum: ["continuous", "snapshot"]
+
+  fifo-rd-wmark:
+    type: int
+    required: false
+    default: 0x08
+    description: Output FIFO read (almost empty) watermark.
+    enum: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+
+  fifo-wr-wmark:
+    type: int
+    required: false
+    default: 0x18
+    description: Output FIFO write (almost full) watermark.
+    enum: [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]
+
+  code-10-on-8:
+    type: boolean
+    description: Send 10-bit of data on 8-bit interface (data-mode).
+
+  data-mask:
+    type: string
+    required: false
+    default: "16-bit"
+    description: Video data mask for 16-bit data-mode.
+    enum: ["16-bit", "10-bit", "12-bit", "14-bit"]
+
+  data-mode:
+    type: string
+    required: false
+    default: "8-bit"
+    description: Defines number of data pins from external camera sensor. 32-bit and 64-bit modes are only valid for MIPI-CSI.
+    enum: ["1-bit", "2-bit", "4-bit", "8-bit", "16-bit", "32-bit", "64-bit"]
+
+  inv-vsync-pol:
+    type: int
+    required: false
+    default: 0
+    description: Invert polarity of V-Sync Signal
+    enum: [0, 1]
+
+  inv-hsync-pol:
+    type: int
+    required: false
+    default: 0
+    description: Invert polarity of H-Sync Signal
+    enum: [0, 1]
+
+  inv-pclk-pol:
+    type: int
+    required: false
+    default: 0
+    description: Invert polarity of Pixel-Clock Signal
+    enum: [0, 1]
+
+  wait-vsync:
+    type: boolean
+    description: Start to capture video frame on the rising edge of V-Sync. If V-Sync and H-Sync are aligned, we can begin data capture without waiting for V-Sync rising edge; else we start data capture on the rising edge of V-Sync.
+
+  vsync-en:
+    type: boolean
+    description: Capture video data when V-Sync as well as H-Sync is high. In absence of this property, data will be captured when only H-Sync is high.
+
+  msb:
+    type: boolean
+    description: Camera sensor sends Most Significant Byte last based on data-mode type.
+
+  csi-halt-en:
+    type: boolean
+    description: Enable MIPI-CSI halt function when FIFO is almost full.
+
+child-binding:
+  child-binding:
+    child-binding:
+      include: video-interfaces.yaml
+      properties:
+        reg:
+          type: int
+          enum:
+            - 0 # CSI-2/Camera EP
+            - 1 # Memory dump EP
+            - 2 # ISP EP

@@ -940,9 +940,12 @@ void video_closest_frmival(const struct device *dev, enum video_endpoint_id ep,
  * 8-pixels are stored over 7-bytes:
  *
  * @verbatim
- *  0...........................55
- * | P1   |   P2   |   P3   |   P4 |
- * | P5   |   P6   |   P7   |   P8 |
+ * Byte layout (B0..B6, bits 0..55):
+ *   B0        B1        B2        B3        B4        B5        B6
+ * |7......0|7......0|7......0|7......0|7......0|7......0|7......0|
+ *  P1      P2      P3      P4      P5      P6      P7      P8
+ *
+ * Px = [6..0]
  * @endverbatim
  */
 #define VIDEO_PIX_FMT_Y7P VIDEO_FOURCC('Y', '0', '7', 'P')
