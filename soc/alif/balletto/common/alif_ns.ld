@@ -8,6 +8,7 @@ GROUP_START(NON_SECURE0)
 	{
 			KEEP(*(.alif_ns))
 			KEEP(*(".alif_ns.*"))
+			KEEP(*(.noinit.*kheap_buf_video_buffer_pool))
 	} GROUP_LINK_IN(NON_SECURE0)
 
 GROUP_END(NON_SECURE0)
