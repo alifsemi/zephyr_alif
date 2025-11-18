@@ -888,6 +888,19 @@
 		status = "disabled";
 	};
 
+	lpcam: lpcam@43003000 {
+		compatible = "alif,cam";
+		reg = <0x43003000 0x1000>;
+		interrupts = <54 0>;
+		lp-cam;
+		clocks = <&clockctrl ALIF_LPCPI_CLK>;
+		clock-names = "cam_clk";
+		pinctrl-0 = <&pinctrl_lpcam>;
+		pinctrl-names = "default";
+
+		status = "disabled";
+	};
+
 	ospi0: ospi0@83000000 {
 		compatible = "snps,designware-ospi";
 		#address-cells = <1>;

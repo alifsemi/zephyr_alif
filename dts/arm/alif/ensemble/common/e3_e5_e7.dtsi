@@ -160,6 +160,20 @@
 		status = "disabled";
 	};
 
+	cam: cam@49030000 {
+		compatible = "alif,cam";
+		reg = <0x49030000 0x1000>;
+		interrupts = <345 0>;
+		pinctrl-0 = <&pinctrl_cam8>;
+		pinctrl-names = "default";
+		clocks = <&clockctrl ALIF_CPI_CLK>;
+		clock-names = "cam_clk";
+		fifo-wr-wmark = <0x18>;
+		fifo-rd-wmark = <0x08>;
+		wait-vsync;
+		status = "disabled";
+	};
+
 	ospi1: ospi1@83002000 {
 		compatible = "snps,designware-ospi";
 		#address-cells = <1>;
