@@ -186,7 +186,7 @@ config BT_PSOC6_BLESS
 config BT_ALIF
 	bool
 	default y
-	depends on DT_HAS_ALIF_BT_HCI_ENABLED
+	depends on DT_HAS_ALIF_BT_HCI_UART_ENABLED
 	help
 	  "Alif Semiconductor HCI bluetooth interface"
 
