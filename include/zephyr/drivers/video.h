@@ -925,6 +925,76 @@ void video_closest_frmival(const struct device *dev, enum video_endpoint_id ep,
  */
 
 /**
+ * 6-bit Greyscale, MIPI RAW6 packed.
+ * 4-pixels are stored over 3-bytes:
+ *
+ * @verbatim
+ *   0......7 8.........15 16....23
+ * | P1   |   P2   |   P3   |   P4 |
+ * @endverbatim
+ */
+#define VIDEO_PIX_FMT_Y6P VIDEO_FOURCC('Y', '0', '6', 'P')
+
+/**
+ * 7-bit Greyscale, MIPI RAW7 packed.
+ * 8-pixels are stored over 7-bytes:
+ *
+ * @verbatim
+ *  0...........................55
+ * | P1   |   P2   |   P3   |   P4 |
+ * | P5   |   P6   |   P7   |   P8 |
+ * @endverbatim
+ */
+#define VIDEO_PIX_FMT_Y7P VIDEO_FOURCC('Y', '0', '7', 'P')
+
+/**
+ * Same as Y8 (8-bit luma-only) following the standard FOURCC naming,
+ * or L8 in some graphics libraries.
+ *
+ * @verbatim
+ *   0          1          2          3
+ * | Yyyyyyyy | Yyyyyyyy | Yyyyyyyy | Yyyyyyyy | ...
+ * @endverbatim
+ */
+#define VIDEO_PIX_FMT_GREY VIDEO_FOURCC('G', 'R', 'E', 'Y')
+
+/**
+ * @verbatim
+ *   0          1          2          3          3 2 1 0
+ * | Yyyyyyyy | Yyyyyyyy | Yyyyyyyy | Yyyyyyyy | yyyyyyyy | ...
+ * @endverbatim
+ */
+#define VIDEO_PIX_FMT_Y10P VIDEO_FOURCC('Y', '1', '0', 'P')
+
+/**
+ * @verbatim
+ *   0          1          1   0      2          3          3   2
+ * | Yyyyyyyy | Yyyyyyyy | yyyyyyyy | Yyyyyyyy | Yyyyyyyy | yyyyyyyy | ...
+ * | Yyyyyyyy | Yyyyyyyy | yyyyyyyy | Yyyyyyyy | Yyyyyyyy | yyyyyyyy | ...
+ * @endverbatim
+ */
+#define VIDEO_PIX_FMT_Y12P VIDEO_FOURCC('Y', '1', '2', 'P')
+
+/**
+ * @verbatim
+ *   0          1          2          3          1 0      2   1    3     2
+ * | Yyyyyyyy | Yyyyyyyy | Yyyyyyyy | Yyyyyyyy | yyyyyyyy yyyyyyyy yyyyyyyy | ...
+ * | Yyyyyyyy | Yyyyyyyy | Yyyyyyyy | Yyyyyyyy | yyyyyyyy yyyyyyyy yyyyyyyy | ...
+ * @endverbatim
+ */
+#define VIDEO_PIX_FMT_Y14P VIDEO_FOURCC('Y', '1', '4', 'P')
+
+/**
+ * Little endian.
+ * @verbatim
+ *   0                   1                   2                   3
+ * | yyyyyyyy Yyyyyyyy | yyyyyyyy Yyyyyyyy | yyyyyyyy Yyyyyyyy | yyyyyyyy Yyyyyyyy | ...
+ * | yyyyyyyy Yyyyyyyy | yyyyyyyy Yyyyyyyy | yyyyyyyy Yyyyyyyy | yyyyyyyy Yyyyyyyy | ...
+ * @endverbatim
+ */
+#define VIDEO_PIX_FMT_Y16 VIDEO_FOURCC('Y', '1', '6', ' ')
+
+/**
  * There is either a missing channel per pixel, U or V.
  * The value is to be averaged over 2 pixels to get the value of individual pixel.
  *

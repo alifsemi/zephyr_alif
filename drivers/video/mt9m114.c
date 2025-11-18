@@ -54,6 +54,10 @@ LOG_MODULE_REGISTER(video_mt9m114, CONFIG_VIDEO_LOG_LEVEL);
 /* Camera output format */
 #define MT9M114_CAM_OUTPUT_FORMAT_FORMAT_YUV (0 << 8)
 #define MT9M114_CAM_OUTPUT_FORMAT_FORMAT_RGB (1 << 8)
+#define MT9M114_CAM_OUTPUT_FORMAT_BAYER       (2 << 8)
+#define MT9M114_CAM_OUTPUT_FORMAT_FORMAT_Y10P (0 << 10)
+#define MT9M114_CAM_OUTPUT_FORMAT_FORMAT_GREY (3 << 10)
+
 
 /* Camera control masks */
 #define MT9M114_CAM_SENSOR_CTRL_HORZ_FLIP_EN BIT(0)
@@ -78,6 +82,46 @@ struct mt9m114_resolution_config {
 	uint16_t height;
 	struct mt9m114_reg *params;
 };
+
+#if defined(CONFIG_MT9M114_PARALLEL_INIT)
+
+static struct mt9m114_reg mt9m114_init_config[] = {
+	{0x098E, 2, 0x1000},    /* LOGICAL_ADDRESS_ACCESS */
+	{0xC97E, 2, 0x01},      /* CAM_SYSCTL_PLL_ENABLE */
+	{0xC980, 2, 0x0120},    /* CAM_SYSCTL_PLL_DIVIDER_M_N = 288 */
+	{0xC982, 2, 0x0700},    /* CAM_SYSCTL_PLL_DIVIDER_P = 1792 */
+	{0xC984, 2, 0x8000},    /* CAM_PORT_OUTPUT_CONTROL = 32768 (No pixel clock slow down) */
+	{0xC808, 4, 0x2DC6C00}, /* CAM_SENSOR_CFG_PIXCLK = 48000000 */
+	{0x316A, 2, 0x8270},    /* Auto txlo_row for hot pixel and linear full well optimization */
+	{0x316C, 2, 0x8270},    /* Auto txlo for hot pixel and linear full well optimization */
+	{0x3ED0, 2, 0x2305},    /* Eclipse setting, ecl range=1, ecl value=2, ivln=3 */
+	{0x3ED2, 2, 0x77CF},    /* TX_hi = 12 */
+	{0x316E, 2, 0x8202},    /* Auto ecl, threshold 2x */
+	{0x3180, 2, 0x87FF},    /* Enable delta dark */
+	{0x30D4, 2, 0x6080},    /* Disable column correction due to AE oscillation problem */
+	{0xA802, 2, 0x0008},    /* RESERVED_AE_TRACK_02 */
+	{0x3E14, 2, 0xFF39},    /* Enabling pixout clamping to VAA to solve column band issue */
+	{0xC80C, 2, 0x0001},    /* CAM_SENSOR_CFG_ROW_SPEED */
+	{0xC80E, 2, 0x01C3},    /* CAM_SENSOR_CFG_FINE_INTEG_TIME_MIN = 451 */
+	{0xC810, 2, 0x28F8},    /* CAM_SENSOR_CFG_FINE_INTEG_TIME_MAX = 10488 */
+	{0xC812, 2, 0x036C},    /* CAM_SENSOR_CFG_FRAME_LENGTH_LINES = 876 */
+	{0xC814, 2, 0x29E3},    /* CAM_SENSOR_CFG_LINE_LENGTH_PCK = 10723 */
+	{0xC816, 2, 0x00E0},    /* CAM_SENSOR_CFG_FINE_CORRECTION = 224 */
+	{0xC826, 2, 0x0020},    /* CAM_SENSOR_CFG_REG_0_DATA = 32 */
+	{0xC834, 2, 0x0333},    /* CAM_SENSOR_CONTROL_READ_MODE = 819, H and V flip */
+	{0xC854, 2, 0x0000},    /* CAM_CROP_WINDOW_XOFFSET = 0 */
+	{0xC856, 2, 0x0000},    /* CAM_CROP_WINDOW_YOFFSET = 0 */
+	{0xC85C, 1, 0x03},      /* CAM_CROP_CROPMODE = 3 */
+	{0xC878, 1, 0x00},      /* CAM_AET_AEMODE = 0 */
+	{0xC88C, 2, 0x051C},    /* CAM_AET_MAX_FRAME_RATE = 1308, (5 fps) */
+	{0xC88E, 2, 0x051C},    /* CAM_AET_MIN_FRAME_RATE = 1308, (5 fps) */
+	{0xC914, 2, 0x0000},    /* CAM_STAT_AWB_CLIP_WINDOW_XSTART = 0 */
+	{0xC916, 2, 0x0000},    /* CAM_STAT_AWB_CLIP_WINDOW_YSTART = 0 */
+	{0xC91C, 2, 0x0000},    /* CAM_STAT_AE_INITIAL_WINDOW_XSTART = 0 */
+	{0xC91E, 2, 0x0000},    /* CAM_STAT_AE_INITIAL_WINDOW_YSTART = 0 */
+	{/* NULL terminated */}};
+
+#else
 
 static struct mt9m114_reg mt9m114_init_config[] = {
 	{0x098E, 2, 0x1000},    /* LOGICAL_ADDRESS_ACCESS */
@@ -116,6 +160,8 @@ static struct mt9m114_reg mt9m114_init_config[] = {
 	{0xC86E, 2, 0x0038}, /* CAM_OUTPUT_FORMAT_YUV_CLIP for CSI */
 	{0xC984, 2, 0x8000}, /* CAM_PORT_OUTPUT_CONTROL, for MIPI CSI-2 interface : 0x8000 */
 	{/* NULL terminated */}};
+
+#endif
 
 static struct mt9m114_reg mt9m114_480_272[] = {
 	{MT9M114_CAM_SENSOR_CFG_Y_ADDR_START, 2, 0x00D4},     /* 212 */
@@ -182,6 +228,8 @@ static const struct video_format_cap fmts[] = {
 	MT9M114_VIDEO_FORMAT_CAP(480, 272, VIDEO_PIX_FMT_YUYV),
 	MT9M114_VIDEO_FORMAT_CAP(640, 480, VIDEO_PIX_FMT_RGB565),
 	MT9M114_VIDEO_FORMAT_CAP(640, 480, VIDEO_PIX_FMT_YUYV),
+	MT9M114_VIDEO_FORMAT_CAP(640, 480, VIDEO_PIX_FMT_Y10P),
+	MT9M114_VIDEO_FORMAT_CAP(640, 480, VIDEO_PIX_FMT_GREY),
 	MT9M114_VIDEO_FORMAT_CAP(1280, 720, VIDEO_PIX_FMT_RGB565),
 	MT9M114_VIDEO_FORMAT_CAP(1280, 720, VIDEO_PIX_FMT_YUYV),
 	{0}};
@@ -380,6 +428,12 @@ static int mt9m114_set_output_format(const struct device *dev, int pixel_format)
 		output_format = (MT9M114_CAM_OUTPUT_FORMAT_FORMAT_YUV | (1U << 1U));
 	} else if (pixel_format == VIDEO_PIX_FMT_RGB565) {
 		output_format = (MT9M114_CAM_OUTPUT_FORMAT_FORMAT_RGB | (1U << 1U));
+	} else if (pixel_format == VIDEO_PIX_FMT_Y10P) {
+		output_format = (MT9M114_CAM_OUTPUT_FORMAT_FORMAT_Y10P |
+				MT9M114_CAM_OUTPUT_FORMAT_BAYER);
+	} else if (pixel_format == VIDEO_PIX_FMT_GREY) {
+		output_format = (MT9M114_CAM_OUTPUT_FORMAT_FORMAT_GREY |
+				MT9M114_CAM_OUTPUT_FORMAT_BAYER);
 	}
 
 	ret = mt9m114_write_reg(dev, MT9M114_CAM_OUTPUT_FORMAT, sizeof(output_format),
