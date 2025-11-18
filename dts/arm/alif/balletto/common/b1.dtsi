@@ -1008,12 +1008,12 @@
 		const-alpha-l2 = <0xaf>;
 	};
 
-	dphy: d-phy@4903f000{
+	dphy: d-phy@49033000{
 		compatible = "snps,designware-dphy";
-		reg = <0x4903f000 0x40>,
+		reg = <0x49033000 0x1000>,
 			<0x49032000 0x1000>,
-			<0x49033000 0x1000>;
-		reg-names = "expmst_reg", "dsi_reg", "csi_reg";
+			<0x4903f000 0x40>;
+		reg-names = "csi_reg", "dsi_reg", "expmst_reg";
 
 		clocks = <&clockctrl ALIF_MIPI_PLLREF_CLK>;
 		clock-names = "pllref-clk";

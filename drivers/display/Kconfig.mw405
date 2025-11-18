@@ -1,4 +1,4 @@
-# Alif FocusLCD MW-405 display panel configuration options
+# Alif FocusLCDs MW-405 display panel configuration options
 
 # Copyright (C) 2024 Alif Semiconductor
 # SPDX-License-Identifier: Apache-2.0
@@ -8,6 +8,6 @@ config MW405
 	default y
 	depends on MIPI_DSI
 	depends on DISPLAY
-	depends on DT_HAS_FOCUSLCD_MW405_ENABLED
+	depends on DT_HAS_FOCUSLCDS_MW405_ENABLED
 	help
-	  Enable driver for FocusLCD MW405 display driver.
+	  Enable driver for FocusLCDs MW405 display driver.

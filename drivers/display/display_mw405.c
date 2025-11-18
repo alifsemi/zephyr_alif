@@ -2,7 +2,7 @@
  * Copyright (C) 2024 Alif Semiconductor.
  * SPDX-License-Identifier: Apache-2.0
  */
-#define DT_DRV_COMPAT focuslcd_mw405
+#define DT_DRV_COMPAT focuslcds_mw405
 
 #include <zephyr/drivers/display.h>
 #include <zephyr/drivers/mipi_dsi.h>

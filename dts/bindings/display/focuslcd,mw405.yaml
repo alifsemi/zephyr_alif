@@ -1,9 +1,9 @@
 # Copyright (C) 2024 Alif Semiconductor
 # SPDX-License-Identifier: Apache-2.0
 
-description: Focus-LCD E43GB-I-MW405-C Panel
+description: Focus-LCDs E43GB-I-MW405-C Panel
 
-compatible: "focuslcd,mw405"
+compatible: "focuslcds,mw405"
 
 include: [mipi-dsi-device.yaml, display-controller.yaml]
 
