@@ -78,10 +78,10 @@
 		zephyr,memory-region = "SRAM0";
 	};
 
-	ns: ns@200d0000 {
+	ns: ns@20018000 {
 		compatible = "zephyr,memory-region";
 		/* Ensemble TGU Block Size(16KB) Aligned always */
-		reg = <0x200d0000 DT_SIZE_K(176)>;
+		reg = <0x20018000 DT_SIZE_K(96)>;
 		zephyr,memory-region = "NON_SECURE0";
 		status = "disabled";
 	};
