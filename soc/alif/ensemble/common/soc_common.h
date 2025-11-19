@@ -17,7 +17,7 @@
 #define AON_RTSS_HP_RESET               (AON_BASE + 0x4)
 #define AON_RTSS_HE_CTRL                (AON_BASE + 0x10)
 #define AON_RTSS_HE_RESET               (AON_BASE + 0x14)
-#define AON_RTSS_HE_LPUART_CKEN         (AON_BASE + 0x1C)
+#define AON_RTSS_HE_LPPERI_CKEN         (AON_BASE + 0x1C)
 
 /* VBAT registers. */
 #define VBAT_BASE                       0x1A609000
@@ -35,6 +35,7 @@
 #define EXPSLV_DAC_CTRL                 (EXPSLV_BASE + 0x34)
 #define EXPSLV_CMP_CTRL                 (EXPSLV_BASE + 0x38)
 #define EXPSLV_OSPI_CTRL                (EXPSLV_BASE + 0x3C)
+#define EXPSLV_GPIO_CTRLn               (EXPSLV_BASE + 0x80)
 
 #define EVTRTR0_BASE                    0x49035000
 #define EVTRTR0_DMA_CTRL0               (EVTRTR0_BASE)

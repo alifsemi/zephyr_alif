@@ -7,6 +7,61 @@
 #include <zephyr/arch/cpu.h>
 #include <soc_common.h>
 
+#if CONFIG_ENSEMBLE_GEN2 /* ENSEMBLE_GEN2 SoC */
+/* GPIO: enable debounce clock / divisor. */
+#define GPIO_DEBOUNCE_CK_DIV_MASK   0x3FF
+#define GPIO_DEBOUNCE_CK_DIV2       BIT(0)
+#define GPIO_DEBOUNCE_CK_ENABLE     BIT(12)
+
+/* GPIO: enable debounce clock / divisor for gpio0..gpio14 */
+#define EXPSLV_GPIO_DEBOUNCE_CK_EN(n) \
+	IF_ENABLED(DT_NODE_HAS_STATUS(DT_NODELABEL(gpio##n), okay), ( \
+		sys_clear_bits(EXPSLV_GPIO_CTRLn + (0x4 * n), GPIO_DEBOUNCE_CK_DIV_MASK); \
+		sys_set_bits(EXPSLV_GPIO_CTRLn + (0x4 * n), \
+				GPIO_DEBOUNCE_CK_ENABLE | GPIO_DEBOUNCE_CK_DIV2); \
+	))
+
+/* GPIO: enable debounce clock for gpio16 and gpio17 */
+#define AON_GPIO_DEBOUNCE_CK_EN(n, bit) \
+	IF_ENABLED(DT_NODE_HAS_STATUS(DT_NODELABEL(gpio##n), okay), \
+		(sys_set_bits(AON_RTSS_HE_LPPERI_CKEN, BIT(bit));))
+
+/* EXPSLV gpio0..gpio14 */
+#define EXPSLV_ALL_GPIO_DEBOUNCE_CK_EN() \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(0);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(1);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(2);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(3);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(4);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(5);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(6);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(7);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(8);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(9);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(10); \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(11); \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(12); \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(13); \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(14)
+
+/* AON gpio16 and gpio17. */
+#define AON_ALL_GPIO_DEBOUNCE_CK_EN() \
+	AON_GPIO_DEBOUNCE_CK_EN(16, 8); \
+	AON_GPIO_DEBOUNCE_CK_EN(17, 9)
+
+static inline void enable_gpio_debounce_clock(void)
+{
+	/* EXPSLV gpio0..gpio14 */
+	EXPSLV_ALL_GPIO_DEBOUNCE_CK_EN();
+
+	/* LPGPIO(gpio15) debounce clock is always enabled. */
+
+	/* AON gpio16 and gpio17. */
+	AON_ALL_GPIO_DEBOUNCE_CK_EN();
+}
+#endif /* CONFIG_ENSEMBLE_GEN2 */
+
+
 /**
  * @brief Perform common SoC initialization at boot
  *        for ensemble family.
@@ -49,7 +104,7 @@ static int soc_init(void)
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart), okay)
 	if (IS_ENABLED(CONFIG_SERIAL)) {
 		/* Enable clock supply for LPUART */
-		sys_write32(0x1, AON_RTSS_HE_LPUART_CKEN);
+		sys_write32(0x1, AON_RTSS_HE_LPPERI_CKEN);
 	}
 #endif
 
@@ -172,6 +227,12 @@ static int soc_init(void)
 	/* I3C Flex GPIO */
 	sys_write32(0x1, VBAT_GPIO_CTRL_EN);
 #endif
+
+#if CONFIG_ENSEMBLE_GEN2 /* ENSEMBLE_GEN2 SoC */
+	/* GPIO: enable debounce clock. */
+	enable_gpio_debounce_clock();
+#endif /* CONFIG_ENSEMBLE_GEN2 */
+
 	return 0;
 }
 

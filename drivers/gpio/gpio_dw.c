@@ -222,6 +222,11 @@ static int gpio_dw_pin_interrupt_configure(const struct device *port,
 			/* Active low/high */
 			dw_set_bit(base_addr, INT_POLARITY, pin,
 				   (trig == GPIO_INT_TRIG_HIGH));
+
+			if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2)) { /* ENSEMBLE_GEN2 SoC */
+				/* default enable debounce when using interrupts. */
+				dw_set_bit(base_addr, PORTA_DEBOUNCE, pin, 1);
+			}
 		}
 
 		/* Finally enabling interrupt */
