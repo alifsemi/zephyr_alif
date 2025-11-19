@@ -1,0 +1,22 @@
+/*
+ * Copyright (c) 2025 Alif Semiconductor.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+ns: &ns {
+	status = "okay";
+};
+
+&gpio7 {
+	status = "okay";
+};
+
+sdhc: &sdhc {
+	status = "okay";
+
+	mmc {
+		status = "okay";
+		disk-name = "SD";
+	};
+};
+

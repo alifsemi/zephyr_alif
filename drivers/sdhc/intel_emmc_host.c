@@ -345,8 +345,6 @@ static int wait_for_cmd_complete(struct emmc_data *emmc, uint32_t time_out)
 		wait_time = K_MSEC(time_out);
 	}
 
-	k_busy_wait(500u);
-
 	events = k_event_wait(&emmc->irq_event,
 			      EMMC_HOST_CMD_COMPLETE | ERR_INTR_STATUS_EVENT(EMMC_HOST_ERR_STATUS),
 			      false, wait_time);
@@ -595,6 +593,10 @@ static int wait_xfr_intr_complete(const struct device *dev, uint32_t time_out)
 		ret = -EAGAIN;
 	}
 
+	if (ret) {
+		emmc_host_sw_reset(dev, EMMC_HOST_SW_RESET_DATA_LINE);
+	}
+
 	return ret;
 }
 
@@ -742,7 +744,8 @@ static int emmc_host_send_cmd(const struct device *dev, const struct emmc_cmd_co
 		return -EINVAL;
 	}
 
-	k_event_clear(&emmc->irq_event, EMMC_HOST_CMD_COMPLETE);
+	k_event_clear(&emmc->irq_event, EMMC_HOST_CMD_COMPLETE | EMMC_HOST_XFER_COMPLETE |
+						ERR_INTR_STATUS_EVENT(EMMC_HOST_ERR_STATUS));
 
 	regs->argument = sdhc_cmd->arg;
 
@@ -762,6 +765,7 @@ static int emmc_host_send_cmd(const struct device *dev, const struct emmc_cmd_co
 	}
 	if (ret) {
 		LOG_ERR("Error on send cmd: %d, status:%d", config->cmd_idx, ret);
+		emmc_host_sw_reset(dev, EMMC_HOST_SW_RESET_CMD_LINE);
 		return ret;
 	}
 

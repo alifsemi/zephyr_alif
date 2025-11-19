@@ -155,7 +155,11 @@ static int soc_init(void)
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(sdhc), okay)
 	/* Enable CFG (100 MHz and 20MHz) clock.*/
+#if defined(CONFIG_ENSEMBLE_GEN2)
+	sys_set_bits(CGU_CLK_ENA, BIT(7) | BIT(9) | BIT(22));
+#else
 	sys_set_bits(CGU_CLK_ENA, BIT(21) | BIT(22));
+#endif
 
 	/* Peripheral clock enable */
 	sys_set_bits(EXPMST_PERIPH_CLK_EN, BIT(16));
