@@ -1,0 +1,109 @@
+# Copyright (c) 2024 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+config RTSS_HE
+	bool "RTSS_HE core"
+	help
+	  Enable RTSS_HE core.
+
+config RTSS_HP
+	bool "RTSS_HP core"
+	help
+	  Enable RTSS_HP core.
+
+config ALIF_HWSEM_INIT_PRIORITY
+	int "HWSEM Init priority"
+	depends on ALIF_HWSEM
+	default 50
+	help
+	  Hardware Semaphore driver initialization priority.
+
+config SOC_SUPPORT_ARM_MHUV2
+	bool "SoC support communication through Arm MHUv2"
+	depends on SOC_FAMILY_ENSEMBLE
+	select IPM
+	select ARM_MHUV2
+	help
+	  SoC support communication through Arm MHUv2
+
+config SPI_DW_ENABLE
+	bool "SPI DW"
+	default y
+	depends on SPI
+	help
+	  Enable Designware SPI driver.
+	select SPI_DW
+
+if COUNTER_SNPS_DW
+config LPTIMER0_OUTPUT_TOGGLE
+	bool "LPTimer0 Output Toggle"
+	help
+	  Enable lptimer 0 output toggle.
+
+config LPTIMER0_EXT_CLK_FREQ
+	int "LPTimer0 Ext-clock source Frequency value"
+	default 0
+	help
+	  Provide lptimer 0 clock frequency for external clock source.
+
+config LPTIMER1_OUTPUT_TOGGLE
+	bool "LPTimer1 Output Toggle"
+	help
+	  Enable  lptimer 1 output toggle.
+
+config LPTIMER1_EXT_CLK_FREQ
+	int "LPTimer1 Ext-clock source Frequency value"
+	default 0
+	help
+	  Provide lptimer 1 clock frequency for external clock source.
+endif # COUNTER_SNPS_DW
+
+config FLASH_SIZE
+	default $(dt_node_reg_size_int,$(dt_nodelabel_path,itcm),0,K)  if !XIP
+
+config FLASH_BASE_ADDRESS
+	default $(dt_node_reg_addr_hex,$(dt_nodelabel_path,itcm))      if !XIP
+
+if RTSS_HP && !USE_DT_CODE_PARTITION
+config FLASH_LOAD_OFFSET
+	default 0x200000
+endif
+
+config ROM_START_OFFSET
+	default 0x800 if BOOTLOADER_MCUBOOT
+
+config  NONSECURE0_REGION
+	string
+	default "NON-SECURE0" if $(dt_nodelabel_enabled,ns)
+	help
+	    Provide config Non-Secure region
+
+config  SRAM0_REGION
+	string
+	default "SRAM0" if $(dt_nodelabel_enabled,sram0)
+	help
+	    Provide config SRAM0 region
+
+config  SRAM1_REGION
+	string
+	default "SRAM1" if $(dt_nodelabel_enabled,sram1)
+	help
+	    Provide config SRAM1 region
+
+config OSPI0_XIP_REGION
+	string
+	default "ospi0" if $(dt_nodelabel_enabled,ospi0)
+	help
+	    Configure OSPI0 XIP memory mapped region name
+
+config OSPI1_XIP_REGION
+	string
+	default "ospi1" if $(dt_nodelabel_enabled,ospi1)
+	help
+	    Configure OSPI1 XIP memory mapped region name
+
+config USE_ALIF_HAL_UTIMER
+	bool "UTIMER ll driver access"
+	default n
+	help
+	  Enables UTIMER LL driver on Alif SoCs.

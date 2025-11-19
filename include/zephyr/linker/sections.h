@@ -74,6 +74,8 @@
 
 #define _STM32_BACKUP_SRAM_SECTION_NAME	.stm32_backup_sram
 
+#define _ALIF_SRAM0_SECTION_NAME	.alif_sram0
+#define _ALIF_SRAM1_SECTION_NAME	.alif_sram1
 #define _ALIF_NS_SECTION_NAME		.alif_ns
 
 #ifdef CONFIG_NOCACHE_MEMORY

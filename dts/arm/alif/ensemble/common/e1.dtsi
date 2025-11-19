@@ -11,6 +11,7 @@
 #include <zephyr/dt-bindings/i2c/i2c.h>
 #include <alif/common/alif_common.dtsi>
 #include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
+#include <zephyr/dt-bindings/mipi_dsi/mipi_dsi.h>
 
 &{/} {
 	/* Individual power domain devices - one per domain */
@@ -41,6 +42,57 @@
 		status = "disabled";
 	};
 
+	mipi_dsi: mipi-dsi@49032000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "snps,designware-dsi";
+			reg = <0x49032000 0x1000>;
+			interrupts = <343 0>;
+			cdc-if = <&cdc200>;
+			phy-if = <&dphy>;
+
+			clocks = <&clockctrl ALIF_DSI_CLK>, <&clockctrl ALIF_CDC200_PIX_SYST_ACLK>,
+				<&clockctrl ALIF_MIPI_TXDPHY_CLK>;
+			clock-names = "dsi-clk-en", "pixel-clk", "tx-dphy-clk";
+			dpi-shutdn-active = <1>;
+			dpi-colorm-active = <1>;
+			vid-pkt-size = <480>;
+			ecc-recv-en;
+			crc-recv-en;
+			frame-ack-en;
+			status = "disabled";
+
+			mw405: mw405@0 {
+				status = "okay";
+				compatible = "focuslcd,mw405";
+				reg = <0>;
+				reset-gpios = <&lpgpio 5 GPIO_ACTIVE_HIGH>;
+				bl-gpios = <&gpio6 1 GPIO_ACTIVE_HIGH>;
+				data-lanes = <2>;
+				width = <480>;
+				height = <800>;
+				video-mode = "burst";
+				command-tx-mode = "high-speed";
+				pixel-format = <MIPI_DSI_PIXFMT_RGB888>;
+				status = "okay";
+			};
+		};
+
+	dphy: d-phy@4903f000{
+		compatible = "snps,designware-dphy";
+		reg = <0x4903f000 0x40>,
+			<0x49032000 0x1000>,
+			<0x49033000 0x1000>;
+		reg-names = "expmst_reg", "dsi_reg", "csi_reg";
+
+		clocks = <&clockctrl ALIF_MIPI_PLLREF_CLK>;
+		clock-names = "pllref-clk";
+
+		ref-frequency = <38400000>;
+		cfg-clk-frequency = <25000000>;
+		status = "okay";
+	};
+
 	clockctrl: clock-controller@4903f000 {
 		compatible = "alif,clockctrl";
 		reg = <0x4903F000 0xB0
@@ -50,11 +102,11 @@
 			0x43007000 0x2C
 			0x400F0000 0x14>;
 		reg-names = "clkctl_per_mst",
-			    "clkctl_per_slv",
-			    "aon",
-			    "vbat",
-			    "m55he_cfg",
-			    "m55hp_cfg";
+				"clkctl_per_slv",
+				"aon",
+				"vbat",
+				"m55he_cfg",
+				"m55hp_cfg";
 		#clock-cells = <1>;
 		status = "okay";
 	};
@@ -1422,6 +1474,12 @@
 
 	chosen {
 		zephyr,entropy = &rng;
+		zephyr,display = &cdc200;
 		zephyr,flash-controller = &mram_flash;
+	};
+
+	aliases {	
+		mipi-dsi = &mipi_dsi;
+		panel = &mw405;	
 	};
 };

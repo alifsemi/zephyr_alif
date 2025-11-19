@@ -1,0 +1,21 @@
+# Alif MIPI-DPHY driver configuration options
+
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config MIPI_DPHY_DW
+	bool "MIPI-DPHY Host Controller for Alif"
+	default y
+	depends on DT_HAS_SNPS_DESIGNWARE_DPHY_ENABLED
+	help
+	  Enable Alif MIPI DPHY Host controller driver
+
+if MIPI_DPHY_DW
+
+config MIPI_DPHY_INIT_PRIORITY
+	int "Initialization priority"
+	default 39
+	help
+	  MIPI-DPHY Host Controllers initialization priority.
+
+endif
