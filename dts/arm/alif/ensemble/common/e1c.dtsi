@@ -4,6 +4,7 @@
  */
 #include <arm/armv8.1-m.dtsi>
 #include <zephyr/dt-bindings/timer/alif_utimer.h>
+#include <zephyr/dt-bindings/adc/adc_alif.h>
 #include <zephyr/dt-bindings/pwm/pwm.h>
 #include <zephyr/dt-bindings/clock/alif_ensemble_e1c_clocks.h>
 #include <zephyr/dt-bindings/gpio/gpio.h>
@@ -467,6 +468,82 @@
 			     <172 ALIF_DEFAULT_IRQ_PRIORITY>;
 		gpio-controller;
 		#gpio-cells = <2>;
+		status = "disabled";
+	};
+
+	adc0: adc0@49020000{
+		compatible = "alif,adc";
+		reg =	<0x49020000 0x1000>,
+			<0x49020000 0x100>,
+			<0x49023000 0x100>,
+			<0x1A604000 0x100>,
+			<0x4902B000 0x100>;
+		reg-names = "adc_reg", "analog_reg", "comp_reg", "aon_regs", "adc_vref";
+
+		comparator_threshold_a = <0x01>;
+		comparator_threshold_b = <0x01>;
+		comparator_threshold_comparison = "ABOVE_THRESHOLD_A_AND_B";
+		interrupt_en		= <(ADC_DONE0_INTERRUPT | ADC_DONE1_INTERRUPT)>;
+
+		sample-width		= <16>;
+		clock_div		= <2>;
+		avg_sample_num		= <256>;
+		shift_n_bits		= <8>;
+		shift_direction		= "RIGHT_SHIFT";
+		comparator_bias		= "2.5_MS/s";
+		driver_instance		= "ADC_INSTANCE_ADC12_0";
+		adc_channel_scan	= "SINGLE_CHANNEL_SCAN";
+		adc_conversion_mode	= "SINGLE_SHOT_CONVERSION";
+		/* pga_enable; */       /* This property is valid in differential mode only */
+		pga_gain		= "ADC_PGA_GAIN_0_DB";
+		pinctrl-0		= <&pinctrl_adc0>;
+		pinctrl-names		= "default";
+		interrupts		= <151 0>,
+					  <154 0>,
+					  <157 0>,
+					  <160 0>;
+		interrupt-names         = "done0",
+					  "done1",
+					  "comp_a",
+					  "comp_b";
+		status = "disabled";
+	};
+
+	adc1: adc1@49021000{
+		compatible = "alif,adc";
+		reg =	<0x49021000 0x1000>,
+			<0x49020000 0x100>,
+			<0x49023000 0x100>,
+			<0x1A604000 0x100>,
+			<0x4902B000 0x100>;
+		reg-names = "adc_reg", "analog_reg", "comp_reg", "aon_regs", "adc_vref";
+
+		comparator_threshold_a = <0x01>;
+		comparator_threshold_b = <0x01>;
+		comparator_threshold_comparison = "ABOVE_THRESHOLD_A_AND_B";
+		interrupt_en		= <(ADC_DONE0_INTERRUPT | ADC_DONE1_INTERRUPT)>;
+
+		sample-width		= <16>;
+		clock_div		= <2>;
+		avg_sample_num		= <256>;
+		shift_n_bits		= <8>;
+		shift_direction		= "RIGHT_SHIFT";
+		comparator_bias		= "2.5_MS/s";
+		driver_instance		= "ADC_INSTANCE_ADC12_1";
+		adc_channel_scan	= "SINGLE_CHANNEL_SCAN";
+		adc_conversion_mode	= "SINGLE_SHOT_CONVERSION";
+		/* pga_enable; */       /* This property is valid in differential mode only */
+		pga_gain		= "ADC_PGA_GAIN_0_DB";
+		pinctrl-0		= <&pinctrl_adc1>;
+		pinctrl-names		= "default";
+		interrupts		= <152 0>,
+					  <155 0>,
+					  <158 0>,
+					  <161 0>;
+		interrupt-names		= "done0",
+					  "done1",
+					  "comp_a",
+					  "comp_b";
 		status = "disabled";
 	};
 
