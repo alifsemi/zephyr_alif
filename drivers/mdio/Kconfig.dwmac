@@ -1,0 +1,10 @@
+# Synopsys DesignWare MDIO driver configuration options
+# Copyright (C) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config MDIO_DWMAC
+	bool "Synopsys DesignWare MDIO driver"
+	default y
+	depends on DT_HAS_SNPS_DESIGNWARE_MDIO_ENABLED
+	help
+	  Enable the Synopsys DesignWare (DWMAC) MDIO interface driver.
