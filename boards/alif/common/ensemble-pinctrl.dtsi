@@ -977,4 +977,24 @@
 			drive-strength = <8>;
 		};
 	};
+
+	pinctrl_eth:pinctrl_eth {
+		group0 {
+			pinmux = <PIN_P11_0__ETH_REFCLK_B>,
+				 <PIN_P11_1__ETH_MDIO_B>,
+				 <PIN_P11_3__ETH_RXD0_B>,
+				 <PIN_P11_4__ETH_RXD1_B>,
+				 <PIN_P11_5__ETH_CRS_DV_B>,
+				 <PIN_P11_7__ETH_IRQ_B>;
+			read-enable = <0x1>;
+		};
+		group1 {
+			pinmux = <PIN_P11_2__ETH_MDC_B>,
+				 <PIN_P11_6__ETH_RST_B>,
+				 <PIN_P6_0__ETH_TXD0_A>,
+				 <PIN_P10_5__ETH_TXD1_B>,
+				 <PIN_P10_6__ETH_TXEN_B>;
+			read-enable = <0x0>;
+		};
+	};
 };
