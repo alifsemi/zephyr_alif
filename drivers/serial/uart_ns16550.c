@@ -1990,6 +1990,8 @@ static int uart_ns16550_suspend(const struct device *dev)
 	const struct uart_ns16550_dev_config *dev_cfg = dev->config;
 	struct uart_ns16550_dev_data *data = dev->data;
 	int ret = 0;
+	uint32_t bits_per_frame, byte_time_us;
+	uint8_t lsr;
 
 	/* Save current interrupt enable state */
 	data->ier_cache = ns16550_inbyte(dev_cfg, IER(dev));
@@ -2012,16 +2014,37 @@ static int uart_ns16550_suspend(const struct device *dev)
 		return ret;
 	}
 
-#if defined(CONFIG_PINCTRL)
-	if (dev_cfg->pincfg == NULL) {
-		ret = uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 0);
-		if (ret != 0) {
-			return ret;
-		}
+	/* Clear RTS to prevent remote from sending more data */
+	ret = uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 0);
+	if (ret != 0) {
+		return ret;
 	}
 #endif
-#endif
 
+	/* Wait for one byte time to ensure any ongoing transfer completes
+	 * Calculation: (bits_per_frame * 1000000) / baudrate microseconds
+	 * bits_per_frame = 1 start + data_bits + parity + stop_bits
+	 */
+	bits_per_frame = 1 + data->uart_config.data_bits;
+	if (data->uart_config.parity != UART_CFG_PARITY_NONE) {
+		bits_per_frame++;
+	}
+	bits_per_frame += (data->uart_config.stop_bits == UART_CFG_STOP_BITS_1) ? 1 : 2;
+
+	byte_time_us = (bits_per_frame * 1000000) / data->uart_config.baudrate;
+	k_busy_wait(byte_time_us);
+
+	/* Check RX FIFO status after RTS is cleared - abort suspend if data is present */
+	lsr = ns16550_inbyte(dev_cfg, LSR(dev));
+	if (lsr & LSR_RXRDY) {
+		/* RX FIFO contains data, cannot suspend */
+#if defined(CONFIG_UART_NS16550_LINE_CTRL)
+		/* Re-assert RTS since we're not suspending */
+		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 1);
+		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 0);
+#endif
+		return -EBUSY;
+	}
 	/* Disable all interrupts */
 	ns16550_outbyte(dev_cfg, IER(dev), 0x00);
 
