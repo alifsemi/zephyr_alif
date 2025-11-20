@@ -65,22 +65,22 @@ int main(void)
 			&sampling_freq);
 
 	while (1) {
-		/* 10ms period, 100Hz Sampling frequency */
-		k_sleep(K_MSEC(10));
+		/* 100ms period, 100Hz Sampling frequency */
+		k_sleep(K_MSEC(100));
 
 		sensor_sample_fetch(dev);
 
 		sensor_channel_get(dev, SENSOR_CHAN_ACCEL_XYZ, acc);
 		sensor_channel_get(dev, SENSOR_CHAN_GYRO_XYZ, gyr);
 
-		printf("AX: %d.%06d; AY: %d.%06d; AZ: %d.%06d; "
-		       "GX: %d.%06d; GY: %d.%06d; GZ: %d.%06d;\n",
-		       acc[0].val1, acc[0].val2,
-		       acc[1].val1, acc[1].val2,
-		       acc[2].val1, acc[2].val2,
-		       gyr[0].val1, gyr[0].val2,
-		       gyr[1].val1, gyr[1].val2,
-		       gyr[2].val1, gyr[2].val2);
+		printf("Accel AX: %f; AY: %f; AZ: %f g"
+			"\t Gyro GX: %f; GY: %f; GZ: %f deg/s\n",
+			sensor_value_to_double(&acc[0]),
+			sensor_value_to_double(&acc[1]),
+			sensor_value_to_double(&acc[2]),
+			sensor_value_to_double(&gyr[0]),
+			sensor_value_to_double(&gyr[1]),
+			sensor_value_to_double(&gyr[2]));
 	}
 	return 0;
 }
