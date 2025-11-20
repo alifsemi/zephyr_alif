@@ -1058,7 +1058,7 @@ struct adc_driver_api alif_adc_api = {
 		ADC_CONTEXT_INIT_LOCK(data_##inst, ctx),                                           \
 		ADC_CONTEXT_INIT_SYNC(data_##inst, ctx),                                           \
 		ADC_CONTEXT_INIT_TIMER(data_##inst, ctx),                                          \
-		.interrupts = DT_INST_PROP(inst, interrupts),                                      \
+		.interrupts = DT_INST_PROP(inst, interrupt_en),                                    \
 	};                                                                                         \
 	DEVICE_DT_INST_DEFINE(inst, adc_init, NULL, &data_##inst, &config_##inst, POST_KERNEL,     \
 			      CONFIG_ADC_INIT_PRIORITY, &alif_adc_api);                            \
