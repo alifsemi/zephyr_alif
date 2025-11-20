@@ -709,6 +709,22 @@
 		status = "disabled";
 	};
 
+	lpspi1: lpspi1@43004000 { /* LPSPI1 Slave mode only. */
+		compatible = "snps,designware-spi";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-0 = < &pinctrl_lpspi0 >;
+		pinctrl-names = "default";
+		reg = <0x43004000 0x1000>;
+		interrupt-parent = <&nvic>;
+		interrupts = <46 ALIF_DEFAULT_IRQ_PRIORITY>;
+		clocks = <&syst_core>;
+		fifo-depth = <16>;
+		max-xfer-size = <32>;
+		serial-target;
+		status = "disabled";
+	};
+
 	dac0: dac0@49028000 {
 		compatible = "alif,dac";
 		reg = <0x49028000 0x1000>,

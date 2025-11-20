@@ -19,7 +19,7 @@
 		zephyr,memory-region = "DTCM";
 	};
 
-	spi4: lpspi@43000000 {
+	lpspi0: lpspi0@43000000 {
 		compatible = "snps,designware-spi";
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -32,6 +32,22 @@
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
 		rx-delay = <4>;
+		status = "disabled";
+	};
+
+	lpspi1: lpspi1@43004000 { /* LPSPI1 Slave mode only. */
+		compatible = "snps,designware-spi";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-0 = < &pinctrl_lpspi >;
+		pinctrl-names = "default";
+		reg = <0x43004000 0x1000>;
+		interrupt-parent = <&nvic>;
+		interrupts = <46 ALIF_DEFAULT_IRQ_PRIORITY>;
+		clocks = <&rtss_he_clk>;
+		fifo-depth = <16>;
+		max-xfer-size = <32>;
+		serial-target;
 		status = "disabled";
 	};
 
