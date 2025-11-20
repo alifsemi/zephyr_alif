@@ -1,0 +1,27 @@
+# Copyright (C) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Realtek(RTL8201FR) Ethernet PHY device
+
+compatible: "realtek,rtl8201fr"
+
+include: ethernet-phy.yaml
+
+properties:
+  phy_mode:
+    type: string
+
+    description: Select the PHY mode
+    enum:
+      - "PHY_AUTO_NEGOTIATE"
+      - "PHY_FULL_DUPLEX"
+      - "PHY_HALF_DUPLEX"
+
+  phy_speed:
+    type: string
+    default: "PHY_SPEED_100M"
+    description: Select the PHY speed
+    enum:
+      - "PHY_SPEED_10M"
+      - "PHY_SPEED_100M"
+
