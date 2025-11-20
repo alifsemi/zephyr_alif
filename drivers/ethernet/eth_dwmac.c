@@ -22,6 +22,9 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include "eth_dwmac_priv.h"
 #include "eth.h"
 
+#if CONFIG_ETH_DWMAC_ALIF
+#include "soc_memory_map.h"
+#endif
 
 /*
  * This driver references network data fragments with a zero-copy approach.
@@ -55,7 +58,12 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
  * MMU is special here as we have a separate uncached mapping that is
  * different from the normal RAM virt_to_phys mapping.
  */
-#ifdef CONFIG_MMU
+#ifdef CONFIG_ETH_DWMAC_ALIF
+#define TXDESC_PHYS_H(idx) phys_hi32((void *)local_to_global(&p->tx_descs[idx]))
+#define TXDESC_PHYS_L(idx) phys_lo32((void *)local_to_global(&p->tx_descs[idx]))
+#define RXDESC_PHYS_H(idx) phys_hi32((void *)local_to_global(&p->rx_descs[idx]))
+#define RXDESC_PHYS_L(idx) phys_lo32((void *)local_to_global(&p->rx_descs[idx]))
+#elif CONFIG_MMU
 #define TXDESC_PHYS_H(idx) hi32(p->tx_descs_phys + (idx) * sizeof(struct dwmac_dma_desc))
 #define TXDESC_PHYS_L(idx) lo32(p->tx_descs_phys + (idx) * sizeof(struct dwmac_dma_desc))
 #define RXDESC_PHYS_H(idx) hi32(p->rx_descs_phys + (idx) * sizeof(struct dwmac_dma_desc))
@@ -162,6 +170,7 @@ static int dwmac_send(const struct device *dev, struct net_pkt *pkt)
 			k_sem_give(&p->free_tx_descs);
 			goto abort;
 		}
+
 		sys_cache_data_flush_range(pinned->data, pinned->len);
 		p->tx_frags[d_idx] = pinned;
 		LOG_DBG("d[%d]: frag %p pinned %p len %d", d_idx,
@@ -176,8 +185,13 @@ static int dwmac_send(const struct device *dev, struct net_pkt *pkt)
 
 		/* fill the descriptor */
 		d = &p->tx_descs[d_idx];
+#ifdef CONFIG_ETH_DWMAC_ALIF
+		d->des0 = phys_lo32((void *)local_to_global(pinned->data));
+		d->des1 = phys_hi32((void *)local_to_global(pinned->data));
+#else
 		d->des0 = phys_lo32(pinned->data);
 		d->des1 = phys_hi32(pinned->data);
+#endif
 		d->des2 = pinned->len | des2_flags;
 		d->des3 = pkt_len | des3_flags;
 
@@ -306,6 +320,7 @@ static void dwmac_receive(struct dwmac_priv *p)
 		bytes_so_far = FIELD_GET(RDES3_PL, des3_val);
 		frag->len = bytes_so_far - p->rx_bytes;
 		p->rx_bytes = bytes_so_far;
+
 		net_pkt_frag_add(p->rx_pkt, frag);
 
 		/* last descriptor: */
@@ -324,6 +339,7 @@ static void dwmac_receive(struct dwmac_priv *p)
 			p->rx_pkt = NULL;
 		}
 	}
+
 	p->rx_desc_tail = d_idx;
 }
 
@@ -375,8 +391,13 @@ static void dwmac_rx_refill_thread(void *arg1, void *unused1, void *unused2)
 		}
 
 		/* all is good: initialize the descriptor */
+#ifdef CONFIG_ETH_DWMAC_ALIF
+		d->des0 = phys_lo32((void *)local_to_global(frag->data));
+		d->des1 = phys_hi32((void *)local_to_global(frag->data));
+#else
 		d->des0 = phys_lo32(frag->data);
 		d->des1 = phys_hi32(frag->data);
+#endif
 		d->des2 = 0;
 		d->des3 = RDES3_BUF1V | RDES3_IOC | RDES3_OWN;
 

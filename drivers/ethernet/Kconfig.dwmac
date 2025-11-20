@@ -7,7 +7,7 @@ menuconfig ETH_DWMAC
 	bool "Synopsys DesignWare MAC driver"
 	default y
 	depends on NET_BUF_FIXED_DATA_SIZE
-	depends on (SOC_SERIES_STM32H7X && !ETH_STM32_HAL) || MMU
+	depends on (SOC_SERIES_STM32H7X && !ETH_STM32_HAL) || MMU || SOC_FAMILY_ENSEMBLE
 	depends on DT_HAS_SNPS_DESIGNWARE_ETHERNET_ENABLED
 	help
 	  This is a driver for the Synopsys DesignWare MAC, also referred to
@@ -32,6 +32,14 @@ config ETH_DWMAC_STM32H7X
 	depends on SOC_SERIES_STM32H7X
 	select NOCACHE_MEMORY if ARCH_HAS_NOCACHE_MEMORY_SUPPORT
 	default y
+
+config ETH_DWMAC_ALIF
+	bool
+	depends on SOC_FAMILY_ENSEMBLE
+	depends on DT_HAS_SNPS_DESIGNWARE_ETHERNET_ENABLED
+	default y
+	help
+	  Enable support for the Synopsys DesignWare MAC on Alif platforms.
 
 config ETH_DWMAC_MMU
 	bool
