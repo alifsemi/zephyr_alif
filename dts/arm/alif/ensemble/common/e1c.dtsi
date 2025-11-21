@@ -31,6 +31,17 @@
 };
 
 &{/soc} {
+	/* Ethos-U55 NPU - Added for ML inference support */
+	ethosu0: ethosu55@400e1000 {
+		compatible = "arm,ethos-u";
+		reg = <0x400e1000 0x1000>;
+		interrupts = <55 0>;
+		interrupt-parent = <&nvic>;
+		secure-enable;
+		privilege-enable;
+		status = "disabled";
+	};
+
 	clockctrl: clock-controller@4903f000 {
 		compatible = "alif,clockctrl";
 		reg = <0x4903F000 0xB0
