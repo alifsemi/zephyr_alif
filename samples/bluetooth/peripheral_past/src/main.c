@@ -116,7 +116,7 @@ static const struct bt_data sd[] = {
 
 int main(void)
 {
-	struct bt_le_per_adv_sync_transfer_param past_param;
+	struct bt_le_per_adv_sync_transfer_param past_param = {0};
 	int err;
 
 	printk("Starting Peripheral Periodic Advertising Synchronization Transfer (PAST) Demo\n");
