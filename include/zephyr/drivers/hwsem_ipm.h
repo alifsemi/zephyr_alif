@@ -122,4 +122,8 @@ static inline int hwsem_unlock(const struct device *hwsem_ipmdev,
 }
 #endif
 
+/**
+ * @}
+ */
+
 #endif /* ZEPHYR_INCLUDE_DRIVERS_HWSEM_IPM_H_ */
