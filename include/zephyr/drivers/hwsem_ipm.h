@@ -9,7 +9,6 @@
  * @brief HWSEM IPM Interface
  * @defgroup hwsem_ipm_interface IPM Interface
  * @ingroup io_interfaces
- * @{
  */
 
 #include <zephyr/device.h>
