@@ -2008,12 +2008,6 @@ static int uart_ns16550_suspend(const struct device *dev)
 	}
 
 #if defined(CONFIG_UART_NS16550_LINE_CTRL)
-	/* Set break condition to signal suspend */
-	ret = uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 1);
-	if (ret != 0) {
-		return ret;
-	}
-
 	/* Clear RTS to prevent remote from sending more data */
 	ret = uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 0);
 	if (ret != 0) {
@@ -2034,17 +2028,26 @@ static int uart_ns16550_suspend(const struct device *dev)
 	byte_time_us = (bits_per_frame * 1000000) / data->uart_config.baudrate;
 	k_busy_wait(byte_time_us);
 
-	/* Check RX FIFO status after RTS is cleared - abort suspend if data is present */
+	/* Check RX FIFO status - abort suspend if data is present */
 	lsr = ns16550_inbyte(dev_cfg, LSR(dev));
 	if (lsr & LSR_RXRDY) {
 		/* RX FIFO contains data, cannot suspend */
 #if defined(CONFIG_UART_NS16550_LINE_CTRL)
 		/* Re-assert RTS since we're not suspending */
 		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 1);
-		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 0);
 #endif
 		return -EBUSY;
 	}
+
+#if defined(CONFIG_UART_NS16550_LINE_CTRL)
+	/* Set break condition to signal suspend */
+	ret = uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 1);
+	if (ret != 0) {
+		/* Restore RTS on error */
+		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 1);
+		return ret;
+	}
+#endif
 	/* Disable all interrupts */
 	ns16550_outbyte(dev_cfg, IER(dev), 0x00);
 
