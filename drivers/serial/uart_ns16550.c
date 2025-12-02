@@ -735,25 +735,38 @@ static int uart_ns16550_configure(const struct device *dev,
 	bool enable_MSI_IER = false;
 
 	if (dev_data->rts_ctrl) {
+		/* Software RTS control enabled - manage RTS via CTS interrupts */
 		mdc = MCR_OUT2 | MCR_DTR;
 
 		uint8_t cts_stat = ns16550_inbyte(dev_cfg, MSR(dev)) & MSR_CTS;
 
 		if (cts_stat == MSR_CTS) {
+			/* CTS is HIGH - modem ready, set RTS and AFCE */
 			mdc |= MCR_RTS;
+#if defined(CONFIG_UART_NS16550_VARIANT_NS16750) || \
+	defined(CONFIG_UART_NS16550_VARIANT_NS16950)
+			if (cfg->flow_ctrl == UART_CFG_FLOW_CTRL_RTS_CTS) {
+				mdc |= MCR_AFCE;
+			}
+#endif
 		} else {
+			/* CTS is LOW - will enable modem status interrupt to set RTS+AFCE
+			 * when CTS goes HIGH
+			 */
 			enable_MSI_IER = true;
 		}
 	} else {
+		/* Software RTS control disabled - use hardware flow control if configured */
 		mdc = MCR_OUT2 | MCR_RTS | MCR_DTR;
-	}
 
 #if defined(CONFIG_UART_NS16550_VARIANT_NS16750) || \
 	defined(CONFIG_UART_NS16550_VARIANT_NS16950)
-	if (cfg->flow_ctrl == UART_CFG_FLOW_CTRL_RTS_CTS) {
-		mdc |= MCR_AFCE;
-	}
+		/* Enable hardware auto flow control (AFCE) if configured */
+		if (cfg->flow_ctrl == UART_CFG_FLOW_CTRL_RTS_CTS) {
+			mdc |= MCR_AFCE;
+		}
 #endif
+	}
 
 	ns16550_outbyte(dev_cfg, MDC(dev), mdc);
 
@@ -2079,6 +2092,10 @@ static int uart_ns16550_resume(const struct device *dev)
 	const struct uart_ns16550_dev_config *dev_cfg = dev->config;
 	struct uart_ns16550_dev_data *data = dev->data;
 	int ret;
+	uint8_t ier = data->ier_cache;
+#if defined(CONFIG_UART_NS16550_LINE_CTRL)
+	uint8_t mdc = data->mdc_cache;
+#endif
 
 	/*
 	 * Reconfigure UART hardware (baud rate, parity, stop bits, etc.)
@@ -2090,18 +2107,53 @@ static int uart_ns16550_resume(const struct device *dev)
 	}
 
 #if defined(CONFIG_UART_NS16550_LINE_CTRL)
-	/* Restore modem control register (includes RTS/DTR state from cache) */
-	ns16550_outbyte(dev_cfg, MDC(dev), data->mdc_cache);
+	/* Restore modem control register from cache and adjust based on CTS state */
+	if (data->rts_ctrl) {
+		/* RTS SW control is enabled - check CTS and conditionally set RTS+AFCE
+		 * Same logic as configure() to handle case where CTS is already HIGH
+		 * (modem status interrupt only fires on state changes, not current state)
+		 */
+		uint8_t cts_stat = ns16550_inbyte(dev_cfg, MSR(dev)) & MSR_CTS;
+
+		if (cts_stat == MSR_CTS) {
+			/* CTS is HIGH - modem ready, set RTS and AFCE */
+			mdc |= MCR_RTS;
+#if defined(CONFIG_UART_NS16550_VARIANT_NS16750) || defined(CONFIG_UART_NS16550_VARIANT_NS16950)
+			if (data->uart_config.flow_ctrl == UART_CFG_FLOW_CTRL_RTS_CTS) {
+				mdc |= MCR_AFCE;
+			}
+#endif
+		} else {
+			/* CTS is LOW - clear RTS and AFCE, modem status interrupt will set them */
+			mdc &= ~MCR_RTS;
+#if defined(CONFIG_UART_NS16550_VARIANT_NS16750) || defined(CONFIG_UART_NS16550_VARIANT_NS16950)
+			mdc &= ~MCR_AFCE;
+#endif
+		}
+	}
+
+	ns16550_outbyte(dev_cfg, MDC(dev), mdc);
 
 	/* Clear break condition */
 	ret = uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 0);
 	if (ret != 0) {
 		return ret;
 	}
-#endif
 
 	/* Restore interrupt enable state */
-	ns16550_outbyte(dev_cfg, IER(dev), data->ier_cache);
+	if (data->rts_ctrl) {
+		if (mdc & MCR_AFCE) {
+			/* AFCE enabled - hardware manages flow control, disable MSI interrupt */
+			ier &= ~IER_MSI;
+		} else if (!(mdc & MCR_RTS)) {
+			/* AFCE not enabled and RTS not set (CTS is LOW)
+			 * Enable MSI interrupt to get notified when CTS goes HIGH
+			 */
+			ier |= IER_MSI;
+		}
+	}
+#endif
+	ns16550_outbyte(dev_cfg, IER(dev), ier);
 
 	return 0;
 }
