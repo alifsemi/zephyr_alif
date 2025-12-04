@@ -712,19 +712,26 @@ static int uart_ns16550_configure(const struct device *dev,
 
 		if (cts_stat == MSR_CTS) {
 			mdc |= MCR_RTS;
+#if defined(CONFIG_UART_NS16550_VARIANT_NS16750) || \
+	defined(CONFIG_UART_NS16550_VARIANT_NS16950)
+			if (cfg->flow_ctrl == UART_CFG_FLOW_CTRL_RTS_CTS) {
+				mdc |= MCR_AFCE;
+			}
+#endif
+
 		} else {
 			enable_MSI_IER = true;
 		}
 	} else {
 		mdc = MCR_OUT2 | MCR_RTS | MCR_DTR;
-	}
 
 #if defined(CONFIG_UART_NS16550_VARIANT_NS16750) || \
 	defined(CONFIG_UART_NS16550_VARIANT_NS16950)
-	if (cfg->flow_ctrl == UART_CFG_FLOW_CTRL_RTS_CTS) {
-		mdc |= MCR_AFCE;
-	}
+		if (cfg->flow_ctrl == UART_CFG_FLOW_CTRL_RTS_CTS) {
+			mdc |= MCR_AFCE;
+		}
 #endif
+	}
 
 	ns16550_outbyte(dev_cfg, MDC(dev), mdc);
 
@@ -2163,13 +2170,14 @@ static int uart_ns16550_pm_action(const struct device *dev, enum pm_device_actio
 		const struct uart_ns16550_device_config *const config = dev->config;
 		struct uart_ns16550_dev_data * const dev_data = dev->data;
 
+		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 0);
 		if (dev_data->rts_ctrl && (ns16550_inbyte(config, RFL(dev))) != 0) {
+			uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 1);
 			return -EBUSY;
 		}
 
 		/* Set break condition */
 		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_BRK, 1);
-		uart_ns16550_line_ctrl_set(dev, UART_LINE_CTRL_RTS, 0);
 #endif
 		break;
 	default:
