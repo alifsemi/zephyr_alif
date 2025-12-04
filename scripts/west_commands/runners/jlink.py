@@ -29,7 +29,7 @@ except ImportError:
 if sys.platform == 'win32':
     # JLink.exe can collide with the JDK executable of the same name
     # Look in the usual locations before falling back to $PATH
-    for root in [os.environ["ProgramFiles"], os.environ["ProgramFiles(x86)"], str(Path.home())]: # noqa SIM112
+    for root in [os.environ["ProgramFiles"], os.environ["ProgramFiles(x86)"], str(Path.home())]:  # noqa SIM112
         # SEGGER folder can contain a single "JLink" folder
         _direct = Path(root) / "SEGGER" / "JLink" / "JLink.exe"
         if _direct.exists():
@@ -55,10 +55,13 @@ if sys.platform == 'win32':
     else:
         # Not found in the normal locations, hope that $PATH is correct
         DEFAULT_JLINK_EXE = "JLink.exe"
+        DEFAULT_JLINK_GDB_SERVER = "JLinkGDBServerCL.exe"
 else:
+    DEFAULT_JLINK_GDB_SERVER = "JLinkGDBServer"
     DEFAULT_JLINK_EXE = "JLinkExe"
 DEFAULT_JLINK_GDB_PORT = 2331
 DEFAULT_JLINK_RTT_PORT = 19021
+
 
 def is_ip(ip):
     if not ip:
@@ -69,27 +72,35 @@ def is_ip(ip):
         return False
     return True
 
+
 def is_tunnel(tunnel):
     return tunnel.startswith("tunnel:") if tunnel else False
+
 
 class ToggleAction(argparse.Action):
 
     def __call__(self, parser, args, ignored, option):
         setattr(args, self.dest, not option.startswith('--no-'))
 
+
 class JLinkBinaryRunner(ZephyrBinaryRunner):
     '''Runner front-end for the J-Link GDB server.'''
 
     def __init__(self, cfg, device, dev_id=None,
                  commander=DEFAULT_JLINK_EXE,
-                 dt_flash=True, erase=True, reset=False,
-                 iface='swd', speed='auto', flash_script = None,
+                 dt_flash=True,
+                 erase=True,
+                 reset=False,
+                 iface='swd',
+                 speed='auto',
+                 flash_script=None,
                  loader=None,
-                 gdbserver='JLinkGDBServer',
+                 gdbserver=DEFAULT_JLINK_GDB_SERVER,
                  gdb_host='',
                  gdb_port=DEFAULT_JLINK_GDB_PORT,
                  rtt_port=DEFAULT_JLINK_RTT_PORT,
-                 tui=False, tool_opt=None):
+                 tui=False,
+                 tool_opt=None):
         super().__init__(cfg)
         self.file = cfg.file
         self.file_type = cfg.file_type
@@ -308,6 +319,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
             + self.tool_opt
         )
 
+        self.logger.debug(f'JLink server_cmd: {server_cmd}')
         if command == 'flash':
             self.flash(**kwargs)
         elif command == 'debugserver':
@@ -372,7 +384,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         ]
 
         if self.erase:
-            lines.append('erase') # Erase all flash sectors
+            lines.append('erase')  # Erase all flash sectors
 
         # Get the build artifact to flash
         if self.file is not None:
@@ -420,9 +432,9 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         lines.append(flash_cmd)
 
         if self.reset:
-            lines.append('r') # Reset and halt the target
+            lines.append('r')  # Reset and halt the target
 
-        lines.append('g') # Start the CPU
+        lines.append('g')  # Start the CPU
 
         # Reset the Debug Port CTRL/STAT register
         # Under normal operation this is done automatically, but if other
@@ -433,7 +445,7 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
         lines.append('writeDP 1 0')
         lines.append('readDP 1')
 
-        lines.append('q') # Close the connection and quit
+        lines.append('q')  # Close the connection and quit
 
         self.logger.debug('JLink commander script:\n' +
                           '\n'.join(lines))
