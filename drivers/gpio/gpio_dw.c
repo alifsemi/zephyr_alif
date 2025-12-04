@@ -429,8 +429,8 @@ static int gpio_dw_initialize(const struct device *port)
 			dw_write(base_addr, INTEN, 0);
 			dw_write(base_addr, PORTA_EOI, ~(0));
 
-			config->config_func(port);
 		}
+		config->config_func(port);
 	}
 
 #if defined(CONFIG_PINCTRL)
