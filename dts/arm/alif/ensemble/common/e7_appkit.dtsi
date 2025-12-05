@@ -4,3 +4,10 @@
  */
 
 #include <alif/ensemble/e7/ae722f80f55d5xx.dtsi>
+
+/delete-node/ &uart0;
+/delete-node/ &uart1;
+/delete-node/ &uart3;
+/delete-node/ &uart5;
+/delete-node/ &uart6;
+/delete-node/ &uart7;

@@ -7,557 +7,590 @@
 &pinctrl {
 	pinctrl_uart4: pinctrl_uart4 {
 		group1 {
-			pinmux = < PIN_P12_1__UART4_RX_B >,
-				 < PIN_P12_2__UART4_TX_B >;
+			pinmux = <PIN_P12_1__UART4_RX_B>,
+				 <PIN_P12_2__UART4_TX_B>;
 			/* pad config default values */
-			/* read_enable = < 0x1 >; 0 for disable,1 for enable */
-			/* schmitt_enable = < 0x1 >; 0x0 for disable */
+			/* read-enable = <0x1>; 0 for disable,1 for enable */
+			/* schmitt-enable = <0x1>; 0x0 for disable */
 			/*			     0x1 for enable*/
-			/* slew_rate = < 0x0 > ; 0 for slow, 1 for fast */
-			/* driver_state_control = <0>; */
+			/* slew-rate = <0x0> ; 0 for slow, 1 for fast */
+			/* driver-state-control = <0>; */
 			/*                      0 for high z */
 			/*                      1 for pull up */
 			/*                      2 for pull down */
 			/*                      3 for bus repeater */
-			/* drive_strength = <4>; */
+			/* drive-strength = <4>; */
 			/*                      2 for 2mA */
 			/*                      4 for 4mA */
 			/*                      8 for 8mA */
 			/*                     12 for 12mA */
-			/* driver = < 0x0 >;0 for push pull,1 for open drain */
+			/* driver = <0x0>;0 for push pull,1 for open drain */
+		};
+	};
+
+	pinctrl_uart4_sleep: uart4_sleep {
+		group0 {
+			pinmux = <PIN_P12_1__GPIO>, <PIN_P12_2__GPIO>;
+			read-enable = <0x1>;
+			driver-state-control = <2>; /* pull-down */
 		};
 	};
 
 	pinctrl_uart0: pinctrl_uart0 {
 		group0 {
-			pinmux = < PIN_P0_0__UART0_RX_A >,
-				 < PIN_P0_1__UART0_TX_A >;
+			pinmux = <PIN_P0_0__UART0_RX_A>,
+				 <PIN_P0_1__UART0_TX_A>;
 		};
 	};
 
 	pinctrl_uart1: pinctrl_uart1 {
 		group0 {
-			pinmux = < PIN_P0_4__UART1_RX_A >,
-				 < PIN_P0_5__UART1_TX_A >;
+			pinmux = <PIN_P0_4__UART1_RX_A>,
+				 <PIN_P0_5__UART1_TX_A>;
+		};
+	};
+
+	pinctrl_uart2_sleep: uart2_sleep {
+		group0 {
+			pinmux = <PIN_P1_0__GPIO>, <PIN_P1_1__GPIO>;
+			read-enable = <0x1>;
+			driver-state-control = <2>; /* pull-down */
 		};
 	};
 
 	pinctrl_uart2: pinctrl_uart2 {
 		group0 {
-			pinmux = < PIN_P1_0__UART2_RX_A >,
-				 < PIN_P1_1__UART2_TX_A >;
+			pinmux = <PIN_P1_0__UART2_RX_A>,
+				 <PIN_P1_1__UART2_TX_A>;
 		};
 	};
 
 	pinctrl_uart3: pinctrl_uart3 {
 		group0 {
-			pinmux = < PIN_P1_2__UART3_RX_A >,
-				 < PIN_P1_3__UART3_TX_A >;
+			pinmux = <PIN_P1_2__UART3_RX_A>,
+				 <PIN_P1_3__UART3_TX_A>;
 		};
 	};
 
 	pinctrl_uart5: pinctrl_uart5 {
 		group0 {
-			pinmux = < PIN_P3_4__UART5_RX_A >,
-				 < PIN_P3_5__UART5_TX_A >;
+			pinmux = <PIN_P3_4__UART5_RX_A>,
+				 <PIN_P3_5__UART5_TX_A>;
 		};
 	};
 
 	pinctrl_uart6: pinctrl_uart6 {
 		group0 {
-			pinmux = < PIN_P10_5__UART6_RX_A >,
-				 < PIN_P10_6__UART6_TX_A >;
+			pinmux = <PIN_P10_5__UART6_RX_A>,
+				 <PIN_P10_6__UART6_TX_A>;
 		};
 	};
 
 	pinctrl_uart7: pinctrl_uart7 {
 		group0 {
-			pinmux = < PIN_P9_3__UART7_RX_B >,
-				 < PIN_P9_4__UART7_TX_B >;
+			pinmux = <PIN_P9_3__UART7_RX_B>,
+				 <PIN_P9_4__UART7_TX_B>;
+		};
+	};
+
+	pinctrl_lpuart_sleep: lpuart_sleep {
+		group0 {
+			pinmux = <PIN_P7_6__GPIO>, <PIN_P7_7__GPIO>;
+			read-enable = <0x1>;
+			driver-state-control = <2>; /* pull-down */
 		};
 	};
 
 	pinctrl_lpuart: pinctrl_lpuart {
 		group0 {
-			pinmux = < PIN_P7_6__LPUART_RX_A >,
-				 < PIN_P7_7__LPUART_TX_A >;
+			pinmux = <PIN_P7_6__LPUART_RX_A>,
+				 <PIN_P7_7__LPUART_TX_A>;
 		};
 	};
 
 	pinctrl_hsuart0: pinctrl_hsuart0 {
 		group0 {
-			pinmux = < PIN_P10_1__HSUART0_RX_A >,
-				 < PIN_P10_2__HSUART0_TX_A >;
+			pinmux = <PIN_P10_1__HSUART0_RX_A>,
+				 <PIN_P10_2__HSUART0_TX_A>;
 		};
 	};
 
 	pinctrl_pdm0: pinctrl_pdm0 {
 		group0 {
-			pinmux = < PIN_P6_7__PDM_C2_A >,
-				 < PIN_P0_5__PDM_C0_A >,
-				 < PIN_P6_3__PDM_C1_C >,
-				 < PIN_P5_2__PDM_C3_A >;
+			pinmux = <PIN_P6_7__PDM_C2_A>,
+				 <PIN_P0_5__PDM_C0_A>,
+				 <PIN_P6_3__PDM_C1_C>,
+				 <PIN_P5_2__PDM_C3_A>;
 
-			read_enable = < 0x0 >;
+			read-enable = <0x0>;
 		};
 		group1 {
-			pinmux = < PIN_P5_4__PDM_D2_B >,
-				 < PIN_P0_4__PDM_D0_A >,
-				 < PIN_P6_2__PDM_D1_C >,
-				 < PIN_P5_1__PDM_D3_A >;
+			pinmux = <PIN_P5_4__PDM_D2_B>,
+				 <PIN_P0_4__PDM_D0_A>,
+				 <PIN_P6_2__PDM_D1_C>,
+				 <PIN_P5_1__PDM_D3_A>;
 
-			read_enable = < 0x1 >;
+			read-enable = <0x1>;
 		};
 	};
 
 	pinctrl_lppdm: pinctrl_lppdm {
 		group0 {
-			pinmux = < PIN_P3_4__LPPDM_CO_B >,
-				 < PIN_P3_6__LPPDM_C1_B >,
-				 < PIN_P11_2__LPPDM_C2_B >,
-				 < PIN_P7_6__LPPDM_C3_A >;
+			pinmux = <PIN_P3_4__LPPDM_CO_B>,
+				 <PIN_P3_6__LPPDM_C1_B>,
+				 <PIN_P11_2__LPPDM_C2_B>,
+				 <PIN_P7_6__LPPDM_C3_A>;
 
-			read_enable = < 0x0 >;
+			read-enable = <0x0>;
 		};
 		group1 {
-			pinmux = < PIN_P3_5__LPPDM_DO_B >,
-				 < PIN_P3_7__LPPDM_D1_B >,
-				 < PIN_P11_6__LPPDM_D2_B >,
-				 < PIN_P7_7__LPPDM_D3_A >;
+			pinmux = <PIN_P3_5__LPPDM_DO_B>,
+				 <PIN_P3_7__LPPDM_D1_B>,
+				 <PIN_P11_6__LPPDM_D2_B>,
+				 <PIN_P7_7__LPPDM_D3_A>;
 
-			read_enable = < 0x1 >;
+			read-enable = <0x1>;
 		};
 	};
 
 	pinctrl_cdc200: pinctrl_cdc200 {
 		group0 {
-			pinmux = < PIN_P5_3__CDC_PCLK_A >,
-				 < PIN_P11_0__CDC_D0_B >,
-				 < PIN_P8_1__CDC_D1_A >,
-				 < PIN_P8_2__CDC_D2_A >,
-				 < PIN_P8_3__CDC_D3_A >,
-				 < PIN_P8_4__CDC_D4_A >,
-				 < PIN_P11_5__CDC_D5_B >,
-				 < PIN_P11_6__CDC_D6_B >,
-				 < PIN_P11_7__CDC_D7_B >,
-				 < PIN_P9_0__CDC_D8_A >,
-				 < PIN_P9_1__CDC_D9_A >,
-				 < PIN_P9_2__CDC_D10_A >,
-				 < PIN_P9_3__CDC_D11_A >,
-				 < PIN_P9_4__CDC_D12_A >,
-				 < PIN_P12_5__CDC_D13_B >,
-				 < PIN_P12_6__CDC_D14_B >,
-				 < PIN_P12_7__CDC_D15_B >,
-				 < PIN_P13_0__CDC_D16_B >,
-				 < PIN_P13_1__CDC_D17_B >,
-				 < PIN_P13_2__CDC_D18_B >,
-				 < PIN_P13_3__CDC_D19_B >,
-				 < PIN_P13_4__CDC_D20_B >,
-				 < PIN_P13_5__CDC_D21_B >,
-				 < PIN_P13_6__CDC_D22_B >,
-				 < PIN_P13_7__CDC_D23_B >,
-				 < PIN_P5_4__CDC_DE_A >,
-				 < PIN_P4_1__CDC_HSYNC_B >,
-				 < PIN_P4_0__CDC_VSYNC_B >;
+			pinmux = <PIN_P5_3__CDC_PCLK_A>,
+				 <PIN_P11_0__CDC_D0_B>,
+				 <PIN_P8_1__CDC_D1_A>,
+				 <PIN_P8_2__CDC_D2_A>,
+				 <PIN_P8_3__CDC_D3_A>,
+				 <PIN_P8_4__CDC_D4_A>,
+				 <PIN_P11_5__CDC_D5_B>,
+				 <PIN_P11_6__CDC_D6_B>,
+				 <PIN_P11_7__CDC_D7_B>,
+				 <PIN_P9_0__CDC_D8_A>,
+				 <PIN_P9_1__CDC_D9_A>,
+				 <PIN_P9_2__CDC_D10_A>,
+				 <PIN_P9_3__CDC_D11_A>,
+				 <PIN_P9_4__CDC_D12_A>,
+				 <PIN_P12_5__CDC_D13_B>,
+				 <PIN_P12_6__CDC_D14_B>,
+				 <PIN_P12_7__CDC_D15_B>,
+				 <PIN_P13_0__CDC_D16_B>,
+				 <PIN_P13_1__CDC_D17_B>,
+				 <PIN_P13_2__CDC_D18_B>,
+				 <PIN_P13_3__CDC_D19_B>,
+				 <PIN_P13_4__CDC_D20_B>,
+				 <PIN_P13_5__CDC_D21_B>,
+				 <PIN_P13_6__CDC_D22_B>,
+				 <PIN_P13_7__CDC_D23_B>,
+				 <PIN_P5_4__CDC_DE_A>,
+				 <PIN_P4_1__CDC_HSYNC_B>,
+				 <PIN_P4_0__CDC_VSYNC_B>;
 		};
 	};
 
 	pinctrl_i2c0: pinctrl_i2c0 {
 		group0 {
-			pinmux = < PIN_P3_5__I2C0_SDA_B >,
-				 < PIN_P3_4__I2C0_SCL_B >;
+			pinmux = <PIN_P3_5__I2C0_SDA_B>,
+				 <PIN_P3_4__I2C0_SCL_B>;
 
-			read_enable = < 0x1 >;
-			driver_state_control = < 0x1 >;
+			read-enable = <0x1>;
+			driver-state-control = <0x1>;
 		};
 	};
 	pinctrl_i2c1: pinctrl_i2c1 {
 		group0 {
-			pinmux = < PIN_P7_2__I2C1_SDA_C >,
-				 < PIN_P7_3__I2C1_SCL_C >;
-			read_enable = < 0x1 >;
-			driver_state_control = < 0x1 >;
+			pinmux = <PIN_P7_2__I2C1_SDA_C>,
+				 <PIN_P7_3__I2C1_SCL_C>;
+			read-enable = <0x1>;
+			driver-state-control = <0x1>;
 		};
 	};
 
-	pinctrl_lpi2c: pinctrl_lpi2c {
+	pinctrl_lpi2c0: pinctrl_lpi2c0 {
 		group0 {
-			pinmux = < PIN_P5_2__LPI2C_SCL_B >,
-				 < PIN_P5_3__LPI2C_SDA_B >;
+			pinmux = <PIN_P5_2__LPI2C0_SCL_B>,
+				 <PIN_P5_3__LPI2C0_SDA_B>;
 
-			read_enable = < 0x1 >;
-			driver_state_control = < 0x1 >;
+			read-enable = <0x1>;
+			driver-state-control = <0x1>;
+		};
+	};
+
+	pinctrl_i3c0: pinctrl_i3c0 {
+		group0 {
+			pinmux = <PIN_P7_6__I3C_SDA_D>,
+				 <PIN_P7_7__I3C_SCL_D>;
+			read-enable = <0x1>;
 		};
 	};
 
 	pinctrl_spi0: pinctrl_spi0 {
 		group0 {
-			pinmux = < PIN_P5_0__SPI0_MISO_B >,
-				 < PIN_P5_1__SPI0_MOSI_B >,
-				 < PIN_P5_3__SPI0_SCLK_B >,
-				 < PIN_P5_2__SPI0_SS0_B >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P5_0__SPI0_MISO_B>,
+				 <PIN_P5_1__SPI0_MOSI_B>,
+				 <PIN_P5_3__SPI0_SCLK_B>,
+				 <PIN_P5_2__SPI0_SS0_B>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_spi1: pinctrl_spi1 {
 		group0 {
-			pinmux = < PIN_P8_3__SPI1_MISO_B >,
-				 < PIN_P8_4__SPI1_MOSI_B >,
-				 < PIN_P8_5__SPI1_SCLK_B >,
-				 < PIN_P6_4__SPI1_SS0_B >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P8_3__SPI1_MISO_B>,
+				 <PIN_P8_4__SPI1_MOSI_B>,
+				 <PIN_P8_5__SPI1_SCLK_B>,
+				 <PIN_P6_4__SPI1_SS0_B>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_spi2: pinctrl_spi2 {
 		group0 {
-			pinmux = < PIN_P4_2__SPI2_MISO_A >,
-				 < PIN_P4_3__SPI2_MOSI_A >,
-				 < PIN_P4_4__SPI2_SCLK_A >,
-				 < PIN_P4_5__SPI2_SS0_A >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P4_2__SPI2_MISO_A>,
+				 <PIN_P4_3__SPI2_MOSI_A>,
+				 <PIN_P4_4__SPI2_SCLK_A>,
+				 <PIN_P4_5__SPI2_SS0_A>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_spi3: pinctrl_spi3 {
 		group0 {
-			pinmux = < PIN_P10_5__SPI3_MISO_B >,
-				 < PIN_P12_5__SPI3_MOSI_A >,
-				 < PIN_P12_6__SPI3_SCLK_A >,
-				 < PIN_P12_7__SPI3_SS0_A >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P10_5__SPI3_MISO_B>,
+				 <PIN_P12_5__SPI3_MOSI_A>,
+				 <PIN_P12_6__SPI3_SCLK_A>,
+				 <PIN_P12_7__SPI3_SS0_A>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_lpspi: pinctrl_lpspi {
 		group0 {
-			pinmux = < PIN_P7_4__LPSPI_MISO_A >,
-				 < PIN_P7_5__LPSPI_MOSI_A >,
-				 < PIN_P7_6__LPSPI_SCLK_A >,
-				 < PIN_P7_7__LPSPI_SS_A >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P7_4__LPSPI_MISO_A>,
+				 <PIN_P7_5__LPSPI_MOSI_A>,
+				 <PIN_P7_6__LPSPI_SCLK_A>,
+				 <PIN_P7_7__LPSPI_SS_A>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_i2s0:pinctrl_i2s0 {
 		group0 {
-			pinmux = < PIN_P1_6__I2S0_SDI_A >,
-				 < PIN_P1_7__I2S0_SDO_A >,
-				 < PIN_P3_0__I2S0_SCLK_A >,
-				 < PIN_P3_1__I2S0_WS_A >;
+			pinmux = <PIN_P1_6__I2S0_SDI_A>,
+				 <PIN_P1_7__I2S0_SDO_A>,
+				 <PIN_P3_0__I2S0_SCLK_A>,
+				 <PIN_P3_1__I2S0_WS_A>;
 		};
 	};
 	pinctrl_i2s1:pinctrl_i2s1 {
 		group0 {
-			pinmux = < PIN_P3_2__I2S1_SDI_A >,
-				 < PIN_P3_3__I2S1_SDO_A >,
-				 < PIN_P3_4__I2S1_SCLK_A >,
-				 < PIN_P4_0__I2S1_WS_A >;
+			pinmux = <PIN_P3_2__I2S1_SDI_A>,
+				 <PIN_P3_3__I2S1_SDO_A>,
+				 <PIN_P3_4__I2S1_SCLK_A>,
+				 <PIN_P4_0__I2S1_WS_A>;
 		};
 	};
 	pinctrl_i2s2:pinctrl_i2s2 {
 		group0 {
-			pinmux = < PIN_P8_1__I2S2_SDI_A >,
-				 < PIN_P8_2__I2S2_SDO_A >,
-				 < PIN_P8_3__I2S2_SCLK_A >,
-				 < PIN_P8_4__I2S2_WS_A >;
+			pinmux = <PIN_P8_1__I2S2_SDI_A>,
+				 <PIN_P8_2__I2S2_SDO_A>,
+				 <PIN_P8_3__I2S2_SCLK_A>,
+				 <PIN_P8_4__I2S2_WS_A>;
 		};
 	};
 	pinctrl_i2s3:pinctrl_i2s3 {
 		group0 {
-			pinmux = < PIN_P9_0__I2S3_SDI_B >;
-			read_enable = <0x1>;
+			pinmux = <PIN_P9_0__I2S3_SDI_B>;
+			read-enable = <0x1>;
 		};
 		group1 {
-			pinmux = < PIN_P9_1__I2S3_SDO_B >,
-				 < PIN_P8_6__I2S3_SCLK_B >,
-				 < PIN_P8_7__I2S3_WS_B >;
+			pinmux = <PIN_P9_1__I2S3_SDO_B>,
+				 <PIN_P8_6__I2S3_SCLK_B>,
+				 <PIN_P8_7__I2S3_WS_B>;
 		};
 	};
-	pinctrl_i2s4:pinctrl_lpi2s {
+
+	pinctrl_lpi2s:pinctrl_lpi2s {
 		group0 {
-			pinmux = < PIN_P13_4__LPI2S_SDI_C >,
-				 < PIN_P13_5__LPI2S_SDO_C >,
-				 < PIN_P13_6__LPI2S_SCLK_C >,
-				 < PIN_P13_7__LPI2S_WS_C >;
+			pinmux = <PIN_P13_4__LPI2S_SDI_C>,
+				 <PIN_P13_5__LPI2S_SDO_C>,
+				 <PIN_P13_6__LPI2S_SCLK_C>,
+				 <PIN_P13_7__LPI2S_WS_C>;
 		};
 	};
 	pinctrl_ospi0:pinctrl_ospi0 {
 		group0 {
-			pinmux = < PIN_P3_0__OSPI0_SCLK_B >,
-				 < PIN_P3_4__OSPI0_RXDS_B >,
-				 < PIN_P3_2__OSPI0_SS0_B >,
-				 < PIN_P2_0__OSPI0_D0_B >,
-				 < PIN_P2_1__OSPI0_D1_B >,
-				 < PIN_P2_2__OSPI0_D2_B >,
-				 < PIN_P2_3__OSPI0_D3_B >,
-				 < PIN_P2_4__OSPI0_D4_B >,
-				 < PIN_P2_5__OSPI0_D5_B >,
-				 < PIN_P2_6__OSPI0_D6_B >,
-				 < PIN_P2_7__OSPI0_D7_B >;
-			read_enable = <0x1>;
-			drive_strength = <12>;
-			slew_rate = <0x1>;
+			pinmux = <PIN_P3_0__OSPI0_SCLK_B>,
+				 <PIN_P3_4__OSPI0_RXDS_B>,
+				 <PIN_P3_2__OSPI0_SS0_B>,
+				 <PIN_P2_0__OSPI0_D0_B>,
+				 <PIN_P2_1__OSPI0_D1_B>,
+				 <PIN_P2_2__OSPI0_D2_B>,
+				 <PIN_P2_3__OSPI0_D3_B>,
+				 <PIN_P2_4__OSPI0_D4_B>,
+				 <PIN_P2_5__OSPI0_D5_B>,
+				 <PIN_P2_6__OSPI0_D6_B>,
+				 <PIN_P2_7__OSPI0_D7_B>;
+			read-enable = <0x1>;
+			drive-strength = <12>;
+			slew-rate = <0x1>;
 		};
 	};
 	pinctrl_ospi1:pinctrl_ospi1 {
 		group0 {
-			pinmux = < PIN_P5_5__OSPI1_SCLK_C >,
-				 < PIN_P5_6__OSPI1_RXDS_C >,
-				 < PIN_P5_7__OSPI1_SS0_C >,
-				 < PIN_P9_5__OSPI1_D0_C >,
-				 < PIN_P9_6__OSPI1_D1_C >,
-				 < PIN_P9_7__OSPI1_D2_C >,
-				 < PIN_P10_0__OSPI1_D3_C >,
-				 < PIN_P10_1__OSPI1_D4_C >,
-				 < PIN_P10_2__OSPI1_D5_C >,
-				 < PIN_P10_3__OSPI1_D6_C >,
-				 < PIN_P10_4__OSPI1_D7_C >;
-			read_enable = <0x1>;
-			drive_strength = <12>;
-			slew_rate = <0x1>;
+			pinmux = <PIN_P5_5__OSPI1_SCLK_C>,
+				 <PIN_P5_6__OSPI1_RXDS_C>,
+				 <PIN_P5_7__OSPI1_SS0_C>,
+				 <PIN_P9_5__OSPI1_D0_C>,
+				 <PIN_P9_6__OSPI1_D1_C>,
+				 <PIN_P9_7__OSPI1_D2_C>,
+				 <PIN_P10_0__OSPI1_D3_C>,
+				 <PIN_P10_1__OSPI1_D4_C>,
+				 <PIN_P10_2__OSPI1_D5_C>,
+				 <PIN_P10_3__OSPI1_D6_C>,
+				 <PIN_P10_4__OSPI1_D7_C>;
+			read-enable = <0x1>;
+			drive-strength = <12>;
+			slew-rate = <0x1>;
 		};
 	};
 	pinctrl_flash:pinctrl_flash {
 		group0 {
-			pinmux = < PIN_P5_5__OSPI1_SCLK_C >,
-				 < PIN_P5_6__OSPI1_RXDS_C >,
-				 < PIN_P5_7__OSPI1_SS0_C >,
-				 < PIN_P9_5__OSPI1_D0_C >,
-				 < PIN_P9_6__OSPI1_D1_C >,
-				 < PIN_P9_7__OSPI1_D2_C >,
-				 < PIN_P10_0__OSPI1_D3_C >,
-				 < PIN_P10_1__OSPI1_D4_C >,
-				 < PIN_P10_2__OSPI1_D5_C >,
-				 < PIN_P10_3__OSPI1_D6_C >,
-				 < PIN_P10_4__OSPI1_D7_C >,
-				 < PIN_P8_0__OSPI1_SCLKN_C >,
-				 < PIN_P10_7__UART7_RX_A > ;
-			read_enable = <0x1>;
-			drive_strength = <12>;
-			slew_rate = <0x1>;
+			pinmux = <PIN_P5_5__OSPI1_SCLK_C>,
+				 <PIN_P5_6__OSPI1_RXDS_C>,
+				 <PIN_P5_7__OSPI1_SS0_C>,
+				 <PIN_P9_5__OSPI1_D0_C>,
+				 <PIN_P9_6__OSPI1_D1_C>,
+				 <PIN_P9_7__OSPI1_D2_C>,
+				 <PIN_P10_0__OSPI1_D3_C>,
+				 <PIN_P10_1__OSPI1_D4_C>,
+				 <PIN_P10_2__OSPI1_D5_C>,
+				 <PIN_P10_3__OSPI1_D6_C>,
+				 <PIN_P10_4__OSPI1_D7_C>,
+				 <PIN_P8_0__OSPI1_SCLKN_C>,
+				 <PIN_P10_7__UART7_RX_A> ;
+			read-enable = <0x1>;
+			drive-strength = <12>;
+			slew-rate = <0x1>;
 		};
 	};
 
 	pinctrl_gpio0:pinctrl_gpio0 {
 		group0 {
 			/*comment out based on requirement  */
-			pinmux = < PIN_P0_0__GPIO >,
-				 < PIN_P0_1__GPIO >,
-				 < PIN_P0_2__GPIO >,
-				 < PIN_P0_3__GPIO >,
-				 < PIN_P0_4__GPIO >,
-				 < PIN_P0_5__GPIO >,
-				 < PIN_P0_6__GPIO >,
-				 < PIN_P0_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P0_0__GPIO>,
+				 <PIN_P0_1__GPIO>,
+				 <PIN_P0_2__GPIO>,
+				 <PIN_P0_3__GPIO>,
+				 <PIN_P0_4__GPIO>,
+				 <PIN_P0_5__GPIO>,
+				 <PIN_P0_6__GPIO>,
+				 <PIN_P0_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_gpio1:pinctrl_gpio1 {
 		group0 {
 			/*comment out based on requirement */
-			pinmux = < PIN_P1_0__GPIO >,
-				 < PIN_P1_1__GPIO >,
-				 < PIN_P1_2__GPIO >,
-				 < PIN_P1_3__GPIO >,
-				 < PIN_P1_4__GPIO >,
-				 < PIN_P1_5__GPIO >,
-				 < PIN_P1_6__GPIO >,
-				 < PIN_P1_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P1_0__GPIO>,
+				 <PIN_P1_1__GPIO>,
+				 <PIN_P1_2__GPIO>,
+				 <PIN_P1_3__GPIO>,
+				 <PIN_P1_4__GPIO>,
+				 <PIN_P1_5__GPIO>,
+				 <PIN_P1_6__GPIO>,
+				 <PIN_P1_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_gpio2:pinctrl_gpio2 {
 		group0 {
 			/*comment out based on requirement */
-			pinmux = < PIN_P2_0__GPIO >,
-				 < PIN_P2_1__GPIO >,
-				 < PIN_P2_2__GPIO >,
-				 < PIN_P2_3__GPIO >,
-				 < PIN_P2_4__GPIO >,
-				 < PIN_P2_5__GPIO >,
-				 < PIN_P2_6__GPIO >,
-				 < PIN_P2_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P2_0__GPIO>,
+				 <PIN_P2_1__GPIO>,
+				 <PIN_P2_2__GPIO>,
+				 <PIN_P2_3__GPIO>,
+				 <PIN_P2_4__GPIO>,
+				 <PIN_P2_5__GPIO>,
+				 <PIN_P2_6__GPIO>,
+				 <PIN_P2_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_gpio3:pinctrl_gpio3 {
 		group0 {
 			/*comment out based on requirement */
-			pinmux = < PIN_P3_0__GPIO >,
-				 < PIN_P3_1__GPIO >,
-				 < PIN_P3_2__GPIO >,
-				 < PIN_P3_3__GPIO >,
-				 < PIN_P3_4__GPIO >,
-				 < PIN_P3_5__GPIO >,
-				 < PIN_P3_6__GPIO >,
-				 < PIN_P3_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P3_0__GPIO>,
+				 <PIN_P3_1__GPIO>,
+				 <PIN_P3_2__GPIO>,
+				 <PIN_P3_3__GPIO>,
+				 <PIN_P3_4__GPIO>,
+				 <PIN_P3_5__GPIO>,
+				 <PIN_P3_6__GPIO>,
+				 <PIN_P3_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_gpio4:pinctrl_gpio4 {
 		group0 {
 			/*comment out based on requirement */
-			pinmux = < PIN_P4_0__GPIO >,
-				 < PIN_P4_1__GPIO >,
-				 < PIN_P4_2__GPIO >,
-				 < PIN_P4_3__GPIO >,
-				 < PIN_P4_4__GPIO >,
-				 < PIN_P4_5__GPIO >,
-				 < PIN_P4_6__GPIO >,
-				 < PIN_P4_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P4_0__GPIO>,
+				 <PIN_P4_1__GPIO>,
+				 <PIN_P4_2__GPIO>,
+				 <PIN_P4_3__GPIO>,
+				 <PIN_P4_4__GPIO>,
+				 <PIN_P4_5__GPIO>,
+				 <PIN_P4_6__GPIO>,
+				 <PIN_P4_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_gpio5:pinctrl_gpio5 {
 		group0 {
 			/*comment out based on requirement */
-			pinmux = < PIN_P5_0__GPIO >,
-				 < PIN_P5_1__GPIO >,
-				 < PIN_P5_2__GPIO >,
-				 < PIN_P5_3__GPIO >,
-				 < PIN_P5_4__GPIO >,
-				 < PIN_P5_5__GPIO >,
-				 < PIN_P5_6__GPIO >,
-				 < PIN_P5_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P5_0__GPIO>,
+				 <PIN_P5_1__GPIO>,
+				 <PIN_P5_2__GPIO>,
+				 <PIN_P5_3__GPIO>,
+				 <PIN_P5_4__GPIO>,
+				 <PIN_P5_5__GPIO>,
+				 <PIN_P5_6__GPIO>,
+				 <PIN_P5_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_gpio6:pinctrl_gpio6 {
 		group0 {
 			/*comment out based on requirement */
-			pinmux = < PIN_P6_0__GPIO >,
-				 < PIN_P6_1__GPIO >,
-				 < PIN_P6_2__GPIO >,
-				 < PIN_P6_3__GPIO >,
-				 < PIN_P6_4__GPIO >,
-				 < PIN_P6_5__GPIO >,
-				 < PIN_P6_6__GPIO >,
-				 < PIN_P6_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P6_0__GPIO>,
+				 <PIN_P6_1__GPIO>,
+				 <PIN_P6_2__GPIO>,
+				 <PIN_P6_3__GPIO>,
+				 <PIN_P6_4__GPIO>,
+				 <PIN_P6_5__GPIO>,
+				 <PIN_P6_6__GPIO>,
+				 <PIN_P6_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_gpio7:pinctrl_gpio7 {
 		group0 {
 			/*comment out based on requirement */
-			pinmux = < PIN_P7_0__GPIO >,
-				 < PIN_P7_1__GPIO >,
-				 < PIN_P7_2__GPIO >,
-				 < PIN_P7_3__GPIO >,
-				 < PIN_P7_4__GPIO >,
-				 < PIN_P7_5__GPIO >,
-				 < PIN_P7_6__GPIO >,
-				 < PIN_P7_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P7_0__GPIO>,
+				 <PIN_P7_1__GPIO>,
+				 <PIN_P7_2__GPIO>,
+				 <PIN_P7_3__GPIO>,
+				 <PIN_P7_4__GPIO>,
+				 <PIN_P7_5__GPIO>,
+				 <PIN_P7_6__GPIO>,
+				 <PIN_P7_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_gpio8:pinctrl_gpio8 {
 		group0 {
 			/* comment out based on requirement */
-			pinmux = < PIN_P8_0__GPIO >,
-				 < PIN_P8_1__GPIO >,
-				 < PIN_P8_2__GPIO >,
-				 < PIN_P8_3__GPIO >,
-				 < PIN_P8_4__GPIO >,
-				 < PIN_P8_5__GPIO >,
-				 < PIN_P8_6__GPIO >,
-				 < PIN_P8_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P8_0__GPIO>,
+				 <PIN_P8_1__GPIO>,
+				 <PIN_P8_2__GPIO>,
+				 <PIN_P8_3__GPIO>,
+				 <PIN_P8_4__GPIO>,
+				 <PIN_P8_5__GPIO>,
+				 <PIN_P8_6__GPIO>,
+				 <PIN_P8_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_gpio9:pinctrl_gpio9 {
 		group0 {
 			/* comment out based on requirement */
-			pinmux = < PIN_P9_0__GPIO >,
-				 < PIN_P9_1__GPIO >,
-				 < PIN_P9_2__GPIO >,
-				 < PIN_P9_3__GPIO >,
-				 < PIN_P9_4__GPIO >,
-				 < PIN_P9_5__GPIO >,
-				 < PIN_P9_6__GPIO >,
-				 < PIN_P9_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P9_0__GPIO>,
+				 <PIN_P9_1__GPIO>,
+				 <PIN_P9_2__GPIO>,
+				 <PIN_P9_3__GPIO>,
+				 <PIN_P9_4__GPIO>,
+				 <PIN_P9_5__GPIO>,
+				 <PIN_P9_6__GPIO>,
+				 <PIN_P9_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_gpio10:pinctrl_gpio10 {
 		group0 {
 			/* comment out based on requirement */
-			pinmux = < PIN_P10_0__GPIO >,
-				 < PIN_P10_1__GPIO >,
-				 < PIN_P10_2__GPIO >,
-				 < PIN_P10_3__GPIO >,
-				 < PIN_P10_4__GPIO >,
-				 < PIN_P10_5__GPIO >,
-				 < PIN_P10_6__GPIO >,
-				 < PIN_P10_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P10_0__GPIO>,
+				 <PIN_P10_1__GPIO>,
+				 <PIN_P10_2__GPIO>,
+				 <PIN_P10_3__GPIO>,
+				 <PIN_P10_4__GPIO>,
+				 <PIN_P10_5__GPIO>,
+				 <PIN_P10_6__GPIO>,
+				 <PIN_P10_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_gpio11:pinctrl_gpio11 {
 		group0 {
 			/* comment out based on requirement */
-			pinmux = < PIN_P11_0__GPIO >,
-				 < PIN_P11_1__GPIO >,
-				 < PIN_P11_2__GPIO >,
-				 < PIN_P11_3__GPIO >,
-				 < PIN_P11_4__GPIO >,
-				 < PIN_P11_5__GPIO >,
-				 < PIN_P11_6__GPIO >,
-				 < PIN_P11_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P11_0__GPIO>,
+				 <PIN_P11_1__GPIO>,
+				 <PIN_P11_2__GPIO>,
+				 <PIN_P11_3__GPIO>,
+				 <PIN_P11_4__GPIO>,
+				 <PIN_P11_5__GPIO>,
+				 <PIN_P11_6__GPIO>,
+				 <PIN_P11_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_gpio12:pinctrl_gpio12 {
 		group0 {
 			/* comment out based on requirement */
-			pinmux = < PIN_P12_0__GPIO >,
-				 < PIN_P12_1__GPIO >,
-				 < PIN_P12_2__GPIO >,
-				 < PIN_P12_3__GPIO >,
-				 < PIN_P12_4__GPIO >,
-				 < PIN_P12_5__GPIO >,
-				 < PIN_P12_6__GPIO >,
-				 < PIN_P12_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P12_0__GPIO>,
+				 <PIN_P12_1__GPIO>,
+				 <PIN_P12_2__GPIO>,
+				 <PIN_P12_3__GPIO>,
+				 <PIN_P12_4__GPIO>,
+				 <PIN_P12_5__GPIO>,
+				 <PIN_P12_6__GPIO>,
+				 <PIN_P12_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_gpio13:pinctrl_gpio13 {
 		group0 {
 			/* comment out based on requirement */
-			pinmux = < PIN_P13_0__GPIO >,
-				 < PIN_P13_1__GPIO >,
-				 < PIN_P13_2__GPIO >,
-				 < PIN_P13_3__GPIO >,
-				 < PIN_P13_4__GPIO >,
-				 < PIN_P13_5__GPIO >,
-				 < PIN_P13_6__GPIO >,
-				 < PIN_P13_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P13_0__GPIO>,
+				 <PIN_P13_1__GPIO>,
+				 <PIN_P13_2__GPIO>,
+				 <PIN_P13_3__GPIO>,
+				 <PIN_P13_4__GPIO>,
+				 <PIN_P13_5__GPIO>,
+				 <PIN_P13_6__GPIO>,
+				 <PIN_P13_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 	pinctrl_gpio14:pinctrl_gpio14 {
 		group0 {
 			/* comment out based on requirement */
-			pinmux = < PIN_P14_0__GPIO >,
-				 < PIN_P14_1__GPIO >,
-				 < PIN_P14_2__GPIO >,
-				 < PIN_P14_3__GPIO >,
-				 < PIN_P14_4__GPIO >,
-				 < PIN_P14_5__GPIO >,
-				 < PIN_P14_6__GPIO >,
-				 < PIN_P14_7__GPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P14_0__GPIO>,
+				 <PIN_P14_1__GPIO>,
+				 <PIN_P14_2__GPIO>,
+				 <PIN_P14_3__GPIO>,
+				 <PIN_P14_4__GPIO>,
+				 <PIN_P14_5__GPIO>,
+				 <PIN_P14_6__GPIO>,
+				 <PIN_P14_7__GPIO>;
+			read-enable = <0x1>;
 		};
 	};
 
 	pinctrl_lpgpio:pinctrl_lpgpio {
 		group0 {
 			/* comment out based on requirement */
-			pinmux = < PIN_P15_0__LPGPIO >,
-				 < PIN_P15_1__LPGPIO >,
-				 < PIN_P15_2__LPGPIO >,
-				 < PIN_P15_3__LPGPIO >,
-				 < PIN_P15_4__LPGPIO >,
-				 < PIN_P15_5__LPGPIO >,
-				 < PIN_P15_6__LPGPIO >,
-				 < PIN_P15_7__LPGPIO >;
-			read_enable = < 0x1 >;
+			pinmux = <PIN_P15_0__LPGPIO>,
+				 <PIN_P15_1__LPGPIO>,
+				 <PIN_P15_2__LPGPIO>,
+				 <PIN_P15_3__LPGPIO>,
+				 <PIN_P15_4__LPGPIO>,
+				 <PIN_P15_5__LPGPIO>,
+				 <PIN_P15_6__LPGPIO>,
+				 <PIN_P15_7__LPGPIO>;
+			read-enable = <0x1>;
 		};
 	};
 
@@ -569,7 +602,7 @@
 			<PIN_P0_3__ANA_S3>,
 			<PIN_P0_4__ANA_S4>,
 			<PIN_P0_5__ANA_S5>;
-			read_enable = < 0x1 >;
+			read-enable = <0x1>;
 		};
 	};
 
@@ -581,7 +614,7 @@
 			<PIN_P1_1__ANA_S9>,
 			<PIN_P1_2__ANA_S10>,
 			<PIN_P1_3__ANA_S11>;
-			read_enable = < 0x1 >;
+			read-enable = <0x1>;
 		};
 	};
 
@@ -593,7 +626,7 @@
 			<PIN_P1_7__ANA_S15>,
 			<PIN_P2_0__ANA_S16>,
 			<PIN_P2_1__ANA_S17>;
-			read_enable = < 0x1 >;
+			read-enable = <0x1>;
 		};
 	};
 
@@ -607,227 +640,253 @@
 			<PIN_P0_5__ANA_S5>,
 			<PIN_P0_6__ANA_S6>,
 			<PIN_P0_7__ANA_S7>;
-			read_enable = < 0x1 >;
+			read-enable = <0x1>;
 		};
 	};
 
 	pinctrl_cmp0: pinctrl_cmp0 {
 		group0 {
-			pinmux = < PIN_P0_0__ANA_S0 >,
-				 < PIN_P0_4__ANA_S4 >,
-				 < PIN_P0_6__ANA_S6 >,
-				 < PIN_P1_4__ANA_S12 >,
-				 < PIN_P2_0__ANA_S16 >,
-				 < PIN_P2_1__ANA_S17 >,
-				 < PIN_P14_7__CMP0_OUT_B >;
+			pinmux = <PIN_P0_0__ANA_S0>,
+				 <PIN_P0_4__ANA_S4>,
+				 <PIN_P0_6__ANA_S6>,
+				 <PIN_P1_4__ANA_S12>,
+				 <PIN_P2_0__ANA_S16>,
+				 <PIN_P2_1__ANA_S17>,
+				 <PIN_P14_7__CMP0_OUT_B>;
 
-			read_enable = < 0x1 >;
+			read-enable = <0x1>;
 		};
 	};
 
 	pinctrl_cmp1: pinctrl_cmp1 {
 		group0 {
-			pinmux = < PIN_P0_1__ANA_S1 >,
-				 < PIN_P0_7__ANA_S7 >,
-				 < PIN_P0_5__ANA_S5 >,
-				 < PIN_P1_5__ANA_S13 >,
-				 < PIN_P2_0__ANA_S16 >,
-				 < PIN_P2_1__ANA_S17 >,
-				 < PIN_P14_6__CMP1_OUT_B >;
+			pinmux = <PIN_P0_1__ANA_S1>,
+				 <PIN_P0_7__ANA_S7>,
+				 <PIN_P0_5__ANA_S5>,
+				 <PIN_P1_5__ANA_S13>,
+				 <PIN_P2_0__ANA_S16>,
+				 <PIN_P2_1__ANA_S17>,
+				 <PIN_P14_6__CMP1_OUT_B>;
 
-			read_enable = < 0x1 >;
+			read-enable = <0x1>;
 		};
 	};
 
 	pinctrl_cmp2: pinctrl_cmp2 {
 		group0 {
-			pinmux = < PIN_P0_2__ANA_S2 >,
-				 < PIN_P1_0__ANA_S8 >,
-				 < PIN_P1_2__ANA_S10 >,
-				 < PIN_P1_6__ANA_S14 >,
-				 < PIN_P2_0__ANA_S16 >,
-				 < PIN_P2_1__ANA_S17 >,
-				 < PIN_P14_5__CMP2_OUT_B >;
+			pinmux = <PIN_P0_2__ANA_S2>,
+				 <PIN_P1_0__ANA_S8>,
+				 <PIN_P1_2__ANA_S10>,
+				 <PIN_P1_6__ANA_S14>,
+				 <PIN_P2_0__ANA_S16>,
+				 <PIN_P2_1__ANA_S17>,
+				 <PIN_P14_5__CMP2_OUT_B>;
 
-			read_enable = < 0x1 >;
+			read-enable = <0x1>;
 		};
 	};
 
 	pinctrl_cmp3: pinctrl_cmp3 {
 		group0 {
-			pinmux = < PIN_P0_3__ANA_S3 >,
-				 < PIN_P1_1__ANA_S9 >,
-				 < PIN_P1_3__ANA_S11 >,
-				 < PIN_P1_7__ANA_S15 >,
-				 < PIN_P2_0__ANA_S16 >,
-				 < PIN_P2_1__ANA_S17 >,
-				 < PIN_P14_4__CMP3_OUT_B >;
+			pinmux = <PIN_P0_3__ANA_S3>,
+				 <PIN_P1_1__ANA_S9>,
+				 <PIN_P1_3__ANA_S11>,
+				 <PIN_P1_7__ANA_S15>,
+				 <PIN_P2_0__ANA_S16>,
+				 <PIN_P2_1__ANA_S17>,
+				 <PIN_P14_4__CMP3_OUT_B>;
 
-			read_enable = < 0x1 >;
+			read-enable = <0x1>;
 		};
 	};
 
 	pinctrl_lpcmp: pinctrl_lpcmp {
 		group0 {
-			pinmux = < PIN_P2_4__LPCAM_D0_B >,
-				< PIN_P2_5__LPCAM_D1_B >,
-				< PIN_P2_6__LPCAM_D2_B >,
-				< PIN_P2_7__LPCAM_D3_B >,
-				< PIN_P2_0__ANA_S16 >,
-				< PIN_P2_1__ANA_S17 >,
-				< PIN_P2_2__ANA_S18 >;
+			pinmux = <PIN_P2_4__LPCAM_D0_B>,
+				<PIN_P2_5__LPCAM_D1_B>,
+				<PIN_P2_6__LPCAM_D2_B>,
+				<PIN_P2_7__LPCAM_D3_B>,
+				<PIN_P2_0__ANA_S16>,
+				<PIN_P2_1__ANA_S17>,
+				<PIN_P2_2__ANA_S18>;
 
-			read_enable = < 0x1 >;
+			read-enable = <0x1>;
 		};
 	};
 
 	pinctrl_cam16: pinctrl_cam16 {
 		/* CAM-16 interface. */
 		group0 {
-			pinmux = < PIN_P0_0__CAM_HSYNC_A >,
-				 < PIN_P0_1__CAM_VSYNC_A >,
-				 < PIN_P0_2__CAM_PCLK_A >,
-				 < PIN_P0_3__CAM_XVCLK_A >,
-				 < PIN_P8_0__CAM_D0_B >,
-				 < PIN_P8_1__CAM_D1_B >,
-				 < PIN_P8_2__CAM_D2_B >,
-				 < PIN_P8_3__CAM_D3_B >,
-				 < PIN_P8_4__CAM_D4_B >,
-				 < PIN_P8_5__CAM_D5_B >,
-				 < PIN_P8_6__CAM_D6_B >,
-				 < PIN_P8_7__CAM_D7_B >,
-				 < PIN_P9_0__CAM_D8_B >,
-				 < PIN_P9_1__CAM_D9_B >,
-				 < PIN_P9_2__CAM_D10_B >,
-				 < PIN_P9_3__CAM_D11_B >,
-				 < PIN_P9_4__CAM_D12_B >,
-				 < PIN_P9_5__CAM_D13_B >,
-				 < PIN_P9_6__CAM_D14_B >,
-				 < PIN_P9_7__CAM_D15_B >;
+			pinmux = <PIN_P0_0__CAM_HSYNC_A>,
+				 <PIN_P0_1__CAM_VSYNC_A>,
+				 <PIN_P0_2__CAM_PCLK_A>,
+				 <PIN_P0_3__CAM_XVCLK_A>,
+				 <PIN_P8_0__CAM_D0_B>,
+				 <PIN_P8_1__CAM_D1_B>,
+				 <PIN_P8_2__CAM_D2_B>,
+				 <PIN_P8_3__CAM_D3_B>,
+				 <PIN_P8_4__CAM_D4_B>,
+				 <PIN_P8_5__CAM_D5_B>,
+				 <PIN_P8_6__CAM_D6_B>,
+				 <PIN_P8_7__CAM_D7_B>,
+				 <PIN_P9_0__CAM_D8_B>,
+				 <PIN_P9_1__CAM_D9_B>,
+				 <PIN_P9_2__CAM_D10_B>,
+				 <PIN_P9_3__CAM_D11_B>,
+				 <PIN_P9_4__CAM_D12_B>,
+				 <PIN_P9_5__CAM_D13_B>,
+				 <PIN_P9_6__CAM_D14_B>,
+				 <PIN_P9_7__CAM_D15_B>;
 		};
 	};
 	pinctrl_cam8: pinctrl_cam8 {
 		/* CAM-8 interface. */
 		group0 {
-			pinmux = < PIN_P0_0__CAM_HSYNC_A >,
-				 < PIN_P0_1__CAM_VSYNC_A >,
-				 < PIN_P0_2__CAM_PCLK_A >,
-				 < PIN_P0_3__CAM_XVCLK_A >,
-				 < PIN_P8_0__CAM_D0_B >,
-				 < PIN_P8_1__CAM_D1_B >,
-				 < PIN_P8_2__CAM_D2_B >,
-				 < PIN_P8_3__CAM_D3_B >,
-				 < PIN_P8_4__CAM_D4_B >,
-				 < PIN_P8_5__CAM_D5_B >,
-				 < PIN_P8_6__CAM_D6_B >,
-				 < PIN_P8_7__CAM_D7_B >;
+			pinmux = <PIN_P0_0__CAM_HSYNC_A>,
+				 <PIN_P0_1__CAM_VSYNC_A>,
+				 <PIN_P0_2__CAM_PCLK_A>,
+				 <PIN_P0_3__CAM_XVCLK_A>,
+				 <PIN_P8_0__CAM_D0_B>,
+				 <PIN_P8_1__CAM_D1_B>,
+				 <PIN_P8_2__CAM_D2_B>,
+				 <PIN_P8_3__CAM_D3_B>,
+				 <PIN_P8_4__CAM_D4_B>,
+				 <PIN_P8_5__CAM_D5_B>,
+				 <PIN_P8_6__CAM_D6_B>,
+				 <PIN_P8_7__CAM_D7_B>;
 		};
 	};
 	pinctrl_cam_xvclk: pinctrl_cam_xvclk {
 		/* CAM XVCLK */
 		group0 {
-			pinmux = < PIN_P0_3__CAM_XVCLK_A >;
+			pinmux = <PIN_P0_3__CAM_XVCLK_A>;
 		};
 	};
 	pinctrl_lpcam: pinctrl_lpcam {
 		/* LP-CAM interface. */
 		group0 {
-			pinmux = < PIN_P0_0__LPCAM_HSYNC_B >,
-				 < PIN_P0_1__LPCAM_VSYNC_B >,
-				 < PIN_P0_2__LPCAM_PCLK_B >,
-				 < PIN_P0_3__LPCAM_XVCLK_B >,
-				 < PIN_P8_0__LPCAM_D0_A >,
-				 < PIN_P8_1__LPCAM_D1_A >,
-				 < PIN_P8_2__LPCAM_D2_A >,
-				 < PIN_P8_3__LPCAM_D3_A >,
-				 < PIN_P8_4__LPCAM_D4_A >,
-				 < PIN_P8_5__LPCAM_D5_A >,
-				 < PIN_P8_6__LPCAM_D6_A >,
-				 < PIN_P8_7__LPCAM_D7_A >;
+			pinmux = <PIN_P0_0__LPCAM_HSYNC_B>,
+				 <PIN_P0_1__LPCAM_VSYNC_B>,
+				 <PIN_P0_2__LPCAM_PCLK_B>,
+				 <PIN_P0_3__LPCAM_XVCLK_B>,
+				 <PIN_P8_0__LPCAM_D0_A>,
+				 <PIN_P8_1__LPCAM_D1_A>,
+				 <PIN_P8_2__LPCAM_D2_A>,
+				 <PIN_P8_3__LPCAM_D3_A>,
+				 <PIN_P8_4__LPCAM_D4_A>,
+				 <PIN_P8_5__LPCAM_D5_A>,
+				 <PIN_P8_6__LPCAM_D6_A>,
+				 <PIN_P8_7__LPCAM_D7_A>;
 		};
 	};
 	pinctrl_ut0:pinctrl_ut0 {
 		group0 {
-			pinmux = < PIN_P0_0__UT0_T0_A >,
-				 < PIN_P0_1__UT0_T1_A >;
-			read_enable = < 0x0 >;
+			pinmux = <PIN_P0_0__UT0_T0_A>,
+				 <PIN_P0_1__UT0_T1_A>;
+			read-enable = <0x0>;
 		};
 	};
 	pinctrl_ut1:pinctrl_ut1 {
 		group0 {
-			pinmux = < PIN_P0_2__UT1_T0_A >,
-				 < PIN_P0_3__UT1_T1_A >;
-			read_enable = < 0x0 >;
+			pinmux = <PIN_P0_2__UT1_T0_A>,
+				 <PIN_P0_3__UT1_T1_A>;
+			read-enable = <0x0>;
 		};
 	};
 	pinctrl_ut2:pinctrl_ut2 {
 		group0 {
-			pinmux = < PIN_P0_4__UT2_T0_A >,
-				 < PIN_P0_5__UT2_T1_A >;
-			read_enable = < 0x0 >;
+			pinmux = <PIN_P0_4__UT2_T0_A>,
+				 <PIN_P0_5__UT2_T1_A>;
+			read-enable = <0x0>;
 		};
 	};
 	pinctrl_ut3:pinctrl_ut3 {
 		group0 {
-			pinmux = < PIN_P0_6__UT3_T0_A >,
-				 < PIN_P0_7__UT3_T1_A >;
-			read_enable = < 0x0 >;
+			pinmux = <PIN_P0_6__UT3_T0_A>,
+				 <PIN_P0_7__UT3_T1_A>;
+			read-enable = <0x0>;
 		};
 	};
 	pinctrl_ut4:pinctrl_ut4 {
 		group0 {
-			pinmux = < PIN_P1_0__UT4_T0_A >,
-				 < PIN_P1_1__UT4_T1_A >;
-			read_enable = < 0x0 >;
+			pinmux = <PIN_P1_0__UT4_T0_A>,
+				 <PIN_P1_1__UT4_T1_A>;
+			read-enable = <0x0>;
 		};
 	};
 	pinctrl_ut5:pinctrl_ut5 {
 		group0 {
-			pinmux = < PIN_P6_2__UT5_T0_B >,
-				 < PIN_P6_3__UT5_T1_B >;
-			read_enable = < 0x0 >;
+			pinmux = <PIN_P6_2__UT5_T0_B>,
+				 <PIN_P6_3__UT5_T1_B>;
+			read-enable = <0x0>;
 		};
 	};
 	pinctrl_ut6:pinctrl_ut6 {
 		group0 {
-			pinmux = < PIN_P6_4__UT6_T0_B >,
-				 < PIN_P6_5__UT6_T1_B >;
-			read_enable = < 0x0 >;
+			pinmux = <PIN_P6_4__UT6_T0_B>,
+				 <PIN_P6_5__UT6_T1_B>;
+			read-enable = <0x0>;
 		};
 	};
 	pinctrl_ut7:pinctrl_ut7 {
 		group0 {
-			pinmux = < PIN_P6_6__UT7_T0_B >,
-				 < PIN_P6_7__UT7_T1_B >;
-			read_enable = < 0x0 >;
+			pinmux = <PIN_P6_6__UT7_T0_B>,
+				 <PIN_P6_7__UT7_T1_B>;
+			read-enable = <0x0>;
 		};
 	};
 	pinctrl_ut8:pinctrl_ut8 {
 		group0 {
-			pinmux = < PIN_P12_0__UT8_T0_C >,
-				 < PIN_P12_1__UT8_T1_C >;
-			read_enable = < 0x0 >;
+			pinmux = <PIN_P12_0__UT8_T0_C>,
+				 <PIN_P12_1__UT8_T1_C>;
+			read-enable = <0x0>;
 		};
 	};
 	pinctrl_ut9:pinctrl_ut9 {
 		group0 {
-			pinmux = < PIN_P12_2__UT9_T0_C >,
-				 < PIN_P12_3__UT9_T1_C >;
-			read_enable = < 0x0 >;
+			pinmux = <PIN_P12_2__UT9_T0_C>,
+				 <PIN_P12_3__UT9_T1_C>;
+			read-enable = <0x0>;
 		};
 	};
 	pinctrl_ut10:pinctrl_ut10 {
 		group0 {
-			pinmux = < PIN_P7_4__UT10_T0_B >,
-				 < PIN_P7_5__UT10_T1_B >;
-			read_enable = < 0x0 >;
+			pinmux = <PIN_P7_4__UT10_T0_B>,
+				 <PIN_P7_5__UT10_T1_B>;
+			read-enable = <0x0>;
 		};
 	};
 	pinctrl_ut11:pinctrl_ut11 {
 		group0 {
-			pinmux = < PIN_P2_6__UT11_T0_A >,
-				 < PIN_P2_7__UT11_T1_A >;
-			read_enable = < 0x0 >;
+			pinmux = <PIN_P2_6__UT11_T0_A>,
+				 <PIN_P2_7__UT11_T1_A>;
+			read-enable = <0x0>;
+		};
+	};
+
+	pinctrl_dac0: pinctrl_dac0 {
+		group0 {
+			pinmux = <PIN_P2_2__ANA_S18>;
+			read-enable = <0x0>;
+		};
+	};
+	pinctrl_dac1: pinctrl_dac1 {
+		group0 {
+			pinmux = <PIN_P2_3__ANA_S19>;
+			read-enable = <0x0>;
+		};
+	};
+
+	pinctrl_sdmmc:pinctrl_sdmmc {
+		group0 {
+			pinmux = <PIN_P7_0__SD_CMD_A>,
+				 <PIN_P7_1__SD_CLK_A>,
+				 <PIN_P5_0__SD_D0_A>,
+				 <PIN_P5_1__SD_D1_A>,
+				 <PIN_P5_2__SD_D2_A>,
+				 <PIN_P5_3__SD_D3_A>;
+			read-enable = <0x1>;
+			drive-strength = <8>;
 		};
 	};
 };
