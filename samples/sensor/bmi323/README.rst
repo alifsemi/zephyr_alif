@@ -40,15 +40,11 @@ For Alif boards:
         alif_e8_dk_rtss_hp
         alif_e3_dk_rtss_hp
         alif_e3_dk_rtss_he
+        alif_e8_ak_rtss_he
+        alif_e8_ak_rtss_hp
         alif_e1c_dk_rtss_he
         alif_b1_dk_rtss_he
    :goals: build flash
-
-Example command to builf for E7 board (RTSS_HE devkit):
-
-.. code-block::
-   west build -p auto -b alif_e7_dk/ae722f80f55d5xx/rtss_he \
-   samples/sensor/bmi323 -S alif-dk
 
 Sample Output
 =============
