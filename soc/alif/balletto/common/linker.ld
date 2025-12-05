@@ -1,4 +1,5 @@
-/* Copyright (c) 2025 Alif Semiconductor
+/*
+ * Copyright (c) 2013-2014 Wind River Systems, Inc.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -104,7 +105,6 @@ SECTIONS
 #include <zephyr/linker/rel-sections.ld>
 /* Included Alif non secure region ld script */
 #include "alif_ns.ld"
-#include "sram.ld"
 #ifdef CONFIG_LLEXT
 #include <zephyr/linker/llext-sections.ld>
 #endif
