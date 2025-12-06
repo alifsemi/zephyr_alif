@@ -20,6 +20,7 @@ struct clock_control_alif_config {
 	uint32_t vbat_clkctrl_base;
 	uint32_t m55he_clkctrl_base;
 	uint32_t m55hp_clkctrl_base;
+	uint32_t cgu_clkctrl_base;
 };
 
 /** register offset (from clkid cell) */
@@ -62,6 +63,9 @@ static int32_t alif_get_module_base(const struct device *dev, uint32_t module, u
 		break;
 	case ALIF_M55HP_CLKCTL_MODULE:
 		*base = config->m55hp_clkctrl_base;
+		break;
+	case ALIF_CGU_CLKCTL_MODULE:
+		*base = config->cgu_clkctrl_base;
 		break;
 	default:
 		LOG_ERR("ERROR: Un-supported clock module\n");
@@ -259,7 +263,8 @@ static const struct clock_control_alif_config config = {
 	.aon_clkctrl_base = DT_INST_REG_ADDR_BY_NAME(0, aon_clkctrl),
 	.vbat_clkctrl_base = DT_INST_REG_ADDR_BY_NAME(0, vbat_clkctrl),
 	.m55he_clkctrl_base = DT_INST_REG_ADDR_BY_NAME(0, m55he_clkctrl),
-	.m55hp_clkctrl_base = DT_INST_REG_ADDR_BY_NAME(0, m55hp_clkctrl)
+	.m55hp_clkctrl_base = DT_INST_REG_ADDR_BY_NAME(0, m55hp_clkctrl),
+	.cgu_clkctrl_base = DT_INST_REG_ADDR_BY_NAME(0, cgu_clkctrl)
 };
 
 DEVICE_DT_INST_DEFINE(0, NULL, NULL, NULL, &config, PRE_KERNEL_1,
