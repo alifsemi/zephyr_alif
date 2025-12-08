@@ -46,6 +46,16 @@
 			label = "SW0";
 		};
 	};
+
+	mipi_switch {
+		compatible = "mipi-lvds-mux";
+		camera_select: sensor_select {
+			select-gpios = <&gpio14 2 GPIO_ACTIVE_LOW>;
+		};
+		display_select: display_panel_select {
+			select-gpios = <&gpio14 2 GPIO_ACTIVE_HIGH>;
+		};
+	};
 };
 
 &lpgpio {
