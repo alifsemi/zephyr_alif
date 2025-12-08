@@ -1239,19 +1239,6 @@
 		status = "disabled";
 	};
 
-	lpcam: lpcam@43003000 {
-		compatible = "alif,cam";
-		reg = <0x43003000 0x1000>;
-		interrupts = <54 0>;
-		lp-cam;
-		clocks = <&clockctrl ALIF_LPCPI_CLK>;
-		clock-names = "cam_clk";
-		pinctrl-0 = <&pinctrl_lpcam>;
-		pinctrl-names = "default";
-
-		status = "disabled";
-	};
-
 	crc0: crc0@48107000 {
 		compatible = "alif,alif-crc";
 		reg = <0x48107000 0x1000>;
@@ -1750,7 +1737,7 @@
 		reg = <0x49032000 0x1000>;
 		interrupts = <343 0>;
 		cdc-if = <&cdc200>;
-		phy-if = <&dphy>;
+		phy-if = <&dphy 1>;
 
 		clocks = <&clockctrl ALIF_DSI_CLK>, <&clockctrl ALIF_CDC200_PIX_SYST_ACLK>,
 			<&clockctrl ALIF_MIPI_TXDPHY_CLK>;
@@ -1786,8 +1773,11 @@
 		      <0x4903f000 0x40>;
 		reg-names = "csi_reg", "dsi_reg", "expmst_reg";
 
-		clocks = <&clockctrl ALIF_MIPI_PLLREF_CLK>;
-		clock-names = "pllref-clk";
+		#dphy-cells = <1>;
+
+		clocks = <&clockctrl ALIF_MIPI_PLLREF_CLK>, <&clockctrl ALIF_MIPI_BYPASS_CLK>,
+			 <&clockctrl ALIF_MIPI_TXDPHY_CLK>, <&clockctrl ALIF_MIPI_RXDPHY_CLK>;
+		clock-names = "pllref-clk", "pllbypass-clk", "tx-dphy-clk", "rx-dphy-clk" ;
 
 		ref-frequency = <38400000>;
 		cfg-clk-frequency = <25000000>;

@@ -447,7 +447,6 @@ void dsi_dw_dpi_color_code(uintptr_t regs,
 	case MIPI_DSI_PIXFMT_RGB666:
 		sys_set_bits(regs + DSI_DPI_COLOR_CODING,
 				DSI_DPI_COLOR_CODING_LOOSELY_18_EN);
-		break;
 	case MIPI_DSI_PIXFMT_RGB666_PACKED:
 		reg_write_part(regs + DSI_DPI_COLOR_CODING,
 				DPI_COLOR_CODE_18B_CONFIG_2,
@@ -1150,13 +1149,6 @@ static int dsi_dw_enable_clocks(const struct device *dev)
 		return ret;
 	}
 
-	/* Enable TX-DPHY clock. */
-	ret = clock_control_on(config->clk_dev, config->txdphy_cid);
-	if (ret) {
-		LOG_ERR("Enable DSI clock source for APB interface failed! ret - %d", ret);
-		return ret;
-	}
-
 	return 0;
 
 }
@@ -1200,9 +1192,7 @@ static DEVICE_API(mipi_dsi, dsi_dw_api) = {
 		 .pix_cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,              \
 			 pixel_clk, clkid),                                                     \
 		 .dsi_cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,              \
-			 dsi_clk_en, clkid),                                                    \
-		 .txdphy_cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,           \
-			 tx_dphy_clk, clkid),))
+			 dsi_clk_en, clkid),))
 
 #define ALIF_MIPI_DSI_DEVICE(i)                                                                 \
 	static void dsi_dw_config_func_##i(const struct device *dev);				\
@@ -1210,7 +1200,7 @@ static DEVICE_API(mipi_dsi, dsi_dw_api) = {
 		DEVICE_MMIO_ROM_INIT(DT_DRV_INST(i)),						\
 												\
 		MIPI_DSI_GET_CLK(i)                                                             \
-		.tx_dphy = DEVICE_DT_GET_OR_NULL(DT_INST_PHANDLE(i, phy_if)),			\
+		.tx_dphy = DEVICE_DT_GET(DT_INST_PHANDLE(i, phy_if)),                              \
 		.irq = DT_INST_IRQN(i),								\
 		.irq_config_func = dsi_dw_config_func_##i,					\
 												\

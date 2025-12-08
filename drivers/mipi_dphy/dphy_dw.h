@@ -20,6 +20,7 @@
 #define dphy4txtester_DIG_RDWR_TX_CB_3			0x1ad
 #define dphy4txtester_DIG_RDWR_TX_DAC_0			0x1da
 #define dphy4txtester_DIG_RD_TX_DAC_0			0x1f2
+#define dphy4txtester_DIG_RDWR_TX_SLEW_0		0x26b
 #define dphy4txtester_DIG_RDWR_TX_SLEW_5		0x270
 #define dphy4txtester_DIG_RDWR_TX_SLEW_6		0x271
 #define dphy4txtester_DIG_RDWR_TX_SLEW_7		0x272
@@ -34,6 +35,7 @@
 #define dphy4txtester_DIG_RDWR_TX_PLL_0			0x15d
 #define dphy4txtester_DIG_RDWR_TX_PLL_1			0x15e
 #define dphy4txtester_DIG_RDWR_TX_PLL_5			0x162
+#define dphy4txtester_DIG_RDWR_TX_PLL_9			0x166
 #define dphy4txtester_DIG_RDWR_TX_PLL_10		0x167
 #define dphy4txtester_DIG_RDWR_TX_PLL_13		0x16a
 #define dphy4txtester_DIG_RDWR_TX_PLL_17		0x16e
@@ -80,6 +82,7 @@
 #define TX_DPHY_CTRL1					0x34
 #define RX_DPHY_CTRL0					0x38
 #define RX_DPHY_CTRL1					0x3c
+#define DSI_CTRL					0x44
 
 /* D-PHY DSI Registers */
 #define DSI_PHY_RSTZ					0xA0
@@ -95,6 +98,9 @@
 #define CSI_PHY_STOPSTATE				0x4C
 #define CSI_PHY_TEST_CTRL0				0x50
 #define CSI_PHY_TEST_CTRL1				0x54
+
+/* D-PHY mux bits. */
+#define DSI_CTRL_CAM2_EN				BIT(9)
 
 /* D-PHY DSI Registers bit-field */
 #define  DSI_PHY_RSTZ_PHY_FORCEPLL			BIT(3)
@@ -233,10 +239,11 @@ struct dphy_dw_config {
 	DEVICE_MMIO_NAMED_ROM(dsi_reg);
 	DEVICE_MMIO_NAMED_ROM(csi_reg);
 
-#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
 	const struct device *clk_dev;
 	clock_control_subsys_t pllref_cid;
-#endif /* DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks) */
+	clock_control_subsys_t pllbypass_cid;
+	clock_control_subsys_t txdphy_cid;
+	clock_control_subsys_t rxdphy_cid;
 
 	uint32_t ref_frequency;
 	uint32_t cfg_clk_frequency;
@@ -246,8 +253,6 @@ struct dphy_dw_data {
 	DEVICE_MMIO_NAMED_RAM(expmst_reg);
 	DEVICE_MMIO_NAMED_RAM(dsi_reg);
 	DEVICE_MMIO_NAMED_RAM(csi_reg);
-
-	bool is_dsi_initialized;
 };
 
 #endif /* _DPHY_DW_H_ */

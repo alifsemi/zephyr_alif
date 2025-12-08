@@ -202,24 +202,8 @@ static int dphy_dw_config_pll(const struct device *dev, struct dphy_dsi_settings
 	uintptr_t regs = DEVICE_MMIO_NAMED_GET(dev, expmst_reg);
 	uintptr_t test_ctrl0 = dsi_regs + DSI_PHY_TST_CTRL0;
 	uintptr_t test_ctrl1 = dsi_regs + DSI_PHY_TST_CTRL1;
-	uint8_t vco_cntrl = 0;
-	uint16_t pll_m = 0;
-	uint16_t pll_n = 0;
-	uint8_t pll_p = 0;
 	float temp_freq;
 	uint8_t tmp = 0;
-	int ret;
-
-	/*
-	 * Find the parameters for the PLL to be written to DPLL config
-	 */
-	ret = dphy_pll_calculate_mnp(config, phy->pll_fout, &pll_m, &pll_n, &pll_p, &vco_cntrl);
-	if (ret) {
-		LOG_ERR("Failed to set the frequency!");
-		return ret;
-	}
-
-	LOG_DBG("vco_cntrl: 0x%02x M: %d, N: %d P: %d", vco_cntrl, pll_m, pll_n, pll_p);
 
 	/*
 	 * PLL configuration mechanism:
@@ -243,9 +227,9 @@ static int dphy_dw_config_pll(const struct device *dev, struct dphy_dsi_settings
 
 	/* Set PLL m[9:0] to regs - 0x179, 0x17a */
 	mipi_dphy_mask_write_register(test_ctrl0, test_ctrl1, dphy4txtester_DIG_RDWR_TX_PLL_28,
-				      (uint8_t)pll_m, 0xff, 0x0);
+				      (uint8_t)phy->pll_m, 0xff, 0x0);
 	mipi_dphy_mask_write_register(test_ctrl0, test_ctrl1, dphy4txtester_DIG_RDWR_TX_PLL_29,
-				      (uint8_t)(pll_m >> 8), 0x3, 0x0);
+				      (uint8_t)(phy->pll_m >> 8), 0x3, 0x0);
 
 	tmp = mipi_dphy_read_register(test_ctrl0, test_ctrl1, dphy4txtester_DIG_RDWR_TX_PLL_30);
 	/* Override the feedback divider m with above written values. */
@@ -253,14 +237,14 @@ static int dphy_dw_config_pll(const struct device *dev, struct dphy_dsi_settings
 
 	/* Set up vco_cntrl value. */
 	tmp &= ~(0x3f << 1);
-	tmp |= (vco_cntrl & 0x3f) << 1;
+	tmp |= (phy->vco_cntrl & 0x3f) << 1;
 	tmp |= BIT(7);
 	mipi_dphy_write_register(test_ctrl0, test_ctrl1, dphy4txtester_DIG_RDWR_TX_PLL_30, tmp);
 
 	/* Set up n[3:0] */
 	tmp = mipi_dphy_read_register(test_ctrl0, test_ctrl1, dphy4txtester_DIG_RDWR_TX_PLL_27);
 	tmp &= ~(0xf << 3);
-	tmp |= (((pll_n - 1) & 0xf) << 3) | BIT(7);
+	tmp |= (((phy->pll_n - 1) & 0xf) << 3) | BIT(7);
 	mipi_dphy_write_register(test_ctrl0, test_ctrl1, dphy4txtester_DIG_RDWR_TX_PLL_27, tmp);
 
 	/* Setup charge-pump bias */
@@ -289,8 +273,8 @@ static int dphy_dw_config_pll(const struct device *dev, struct dphy_dsi_settings
 
 	/* Final PLL Frequency calibrated */
 	temp_freq = config->ref_frequency;
-	temp_freq /= (pll_n * (pll_p << 1));
-	temp_freq *= pll_m;
+	temp_freq /= (phy->pll_n * (phy->pll_p << 1));
+	temp_freq *= phy->pll_m;
 
 	phy->pll_fout = (uint32_t)temp_freq;
 	return 0;
@@ -304,19 +288,18 @@ int dphy_dw_master_setup(const struct device *dev, struct dphy_dsi_settings *phy
 	uint32_t bitrate_mbps = (phy->pll_fout / MHZ(1)) << 1;
 	uintptr_t test_ctrl0 = dsi_regs + DSI_PHY_TST_CTRL0;
 	uintptr_t test_ctrl1 = dsi_regs + DSI_PHY_TST_CTRL1;
-	struct dphy_dw_data *data = dev->data;
 	uint8_t cfgclkfreqrange = 0;
 	uint8_t hsfreq = 0;
 	uint32_t tmp = 0;
 	int ret = 0;
 	uint32_t i;
 
-	if (data->is_dsi_initialized) {
-		LOG_DBG("D-PHY Master already setup.");
-		return 0;
+	/* Enable TX-DPHY clock. */
+	ret = clock_control_on(config->clk_dev, config->txdphy_cid);
+	if (ret) {
+		LOG_ERR("Enable TX-DPHY clock source failed! ret - %d", ret);
+		return ret;
 	}
-
-	data->is_dsi_initialized = true;
 
 	for (i = 0; ((i < ARRAY_SIZE(frequency_range) - 1) &&
 		     (bitrate_mbps > frequency_range[i].bitrate_in_mbps));
@@ -436,6 +419,22 @@ int dphy_dw_master_setup(const struct device *dev, struct dphy_dsi_settings *phy
 	reg_write_part(regs + TX_DPHY_CTRL0, cfgclkfreqrange, DPHY_CTRL0_CFG_CLK_FREQ_RANGE_MASK,
 		       DPHY_CTRL0_CFG_CLK_FREQ_RANGE_SHIFT);
 
+	/*
+	 * Find the parameters for the PLL to be written to DPLL config
+	 */
+	ret = dphy_pll_calculate_mnp(config, phy->pll_fout,
+			&phy->pll_m, &phy->pll_n, &phy->pll_p, &phy->vco_cntrl);
+	if (ret) {
+		LOG_ERR("Failed to set the frequency!");
+		return ret;
+	}
+
+	LOG_DBG("vco_cntrl: 0x%02x M: %d, N: %d P: %d",
+		phy->vco_cntrl,
+		phy->pll_m,
+		phy->pll_n,
+		phy->pll_p);
+
 	/* Configure the PLL */
 	ret = dphy_dw_config_pll(dev, phy);
 	if (ret) {
@@ -494,8 +493,10 @@ int dphy_dw_master_setup(const struct device *dev, struct dphy_dsi_settings *phy
 	return 0;
 }
 
-int dphy_dw_slave_setup(const struct device *dev, struct dphy_csi2_settings *phy)
+int dphy_dw_slave_setup(const struct device *dev, struct dphy_csi2_settings *phy,
+		uint8_t dphy_id)
 {
+	uintptr_t dsi_regs = DEVICE_MMIO_NAMED_GET(dev, dsi_reg);
 	uintptr_t csi_regs = DEVICE_MMIO_NAMED_GET(dev, csi_reg);
 	uintptr_t regs = DEVICE_MMIO_NAMED_GET(dev, expmst_reg);
 	const struct dphy_dw_config *config = dev->config;
@@ -505,9 +506,37 @@ int dphy_dw_slave_setup(const struct device *dev, struct dphy_csi2_settings *phy
 	uint32_t osc_freq_target = 0;
 	uint8_t cfgclkfreqrange = 0;
 	uint8_t hsfreq = 0;
+	uintptr_t ctrl0;
+	uintptr_t ctrl1;
+	int ret;
 
 	uint32_t tmp = 0;
 	uint32_t i;
+
+	LOG_INF("RX-DDR clock: %d", phy->pll_fin);
+
+	/* Enable RX-DPHY clock. */
+	if (dphy_id == 0) {
+		ret = clock_control_on(config->clk_dev, config->rxdphy_cid);
+		if (ret) {
+			LOG_ERR("Enable RX-DPHY clock source failed! ret - %d", ret);
+			return ret;
+		}
+	} else {
+		/* Enable Bypass clock. */
+		ret = clock_control_on(config->clk_dev, config->pllbypass_cid);
+		if (ret) {
+			LOG_ERR("Enable Bypass clock source for TX DPHY failed! ret - %d", ret);
+			return ret;
+		}
+
+		/* Enable TX-DPHY clock. */
+		ret = clock_control_on(config->clk_dev, config->txdphy_cid);
+		if (ret) {
+			LOG_ERR("Enable TX-DPHY clock source failed! ret - %d", ret);
+			return ret;
+		}
+	}
 
 	for (i = 0; ((i < ARRAY_SIZE(frequency_range) - 1) &&
 		     (bitrate_mbps > frequency_range[i].bitrate_in_mbps));
@@ -518,6 +547,46 @@ int dphy_dw_slave_setup(const struct device *dev, struct dphy_csi2_settings *phy
 	osc_freq_target = frequency_range[i].osc_freq_target;
 	LOG_DBG("hsfrequency - %d, osc_freq - %x", hsfreq, osc_freq_target);
 
+	if (dphy_id == 0) {
+		/* CSI D-PHY for Rx */
+		sys_clear_bits(regs + DSI_CTRL, DSI_CTRL_CAM2_EN);
+		ctrl0 = RX_DPHY_CTRL0;
+		ctrl1 = RX_DPHY_CTRL1;
+		/*
+		 * Put D-PHY in shutdown mode prior to configuring the D-PHY.
+		 * Set RSTZ = 0, SHUTDOWNZ = 0
+		 */
+	} else {
+		/* DSI TX D-PHY in RX mode for CSI */
+		ctrl0 = TX_DPHY_CTRL0;
+		ctrl1 = TX_DPHY_CTRL1;
+
+		/*
+		 * Put D-PHY in shutdown mode prior to configuring the D-PHY.
+		 * Set RSTZ = 0, SHUTDOWNZ = 0
+		 */
+		sys_clear_bits(dsi_regs + DSI_PHY_RSTZ, DSI_PHY_RSTZ_PHY_RSTZ |
+				DSI_PHY_RSTZ_PHY_SHUTDOWNZ);
+
+		/*
+		 * Configure the Clock in no-clock state.
+		 */
+		sys_write32(0x10000, regs + DPHY_PLL_CTRL0);
+		sys_set_bits(regs + DPHY_PLL_CTRL0, DPHY_PLL_CTRL0_SHADOW_CONTROL);
+		k_busy_wait(1);
+		sys_set_bits(regs + DPHY_PLL_CTRL0, DPHY_PLL_CTRL0_SHADOW_CLR);
+		k_busy_wait(1);
+		sys_clear_bits(regs + DPHY_PLL_CTRL0, DPHY_PLL_CTRL0_SHADOW_CLR);
+		k_busy_wait(1);
+		sys_write32(0xF040, regs + DPHY_PLL_CTRL1);
+		sys_write32(0x03100400, regs + DPHY_PLL_CTRL2);
+		sys_set_bits(regs + DPHY_PLL_CTRL0, DPHY_PLL_CTRL0_UPDATE_PLL);
+		k_busy_wait(1);
+		sys_clear_bits(regs + DPHY_PLL_CTRL0, DPHY_PLL_CTRL0_UPDATE_PLL);
+
+		/* Camera-2 Enable. */
+		sys_set_bits(regs + DSI_CTRL, DSI_CTRL_CAM2_EN);
+	}
 	/*
 	 * Put D-PHY in shutdown mode prior to configuring the D-PHY.
 	 * Set RSTZ = 0, SHUTDOWNZ = 0
@@ -526,29 +595,35 @@ int dphy_dw_slave_setup(const struct device *dev, struct dphy_csi2_settings *phy
 	sys_clear_bits(csi_regs + CSI_PHY_SHUTDOWNZ, CSI_PHY_SHUTDOWNZ_PHY_SHUTDOWNZ);
 
 	/* Set txrxz = 0 to enable D-PHY slave side calibration. */
-	sys_clear_bits(regs + RX_DPHY_CTRL0, DPHY_CTRL0_TXRXZ);
+	sys_clear_bits(regs + ctrl0, DPHY_CTRL0_TXRXZ);
 
 	/*
 	 * Reset the Test Control interface.
 	 */
 	/* Select RX-Test Port. */
-	sys_set_bits(regs + RX_DPHY_CTRL0, DPHY_CTRL0_TESTPORT_SEL);
+	sys_set_bits(regs + ctrl0, DPHY_CTRL0_TESTPORT_SEL);
 	sys_set_bits(test_ctrl0, PHY_TST_CTRL0_CLR);
 	/* Select TX-Test Port. */
-	sys_clear_bits(regs + RX_DPHY_CTRL0, DPHY_CTRL0_TESTPORT_SEL);
+	sys_clear_bits(regs + ctrl0, DPHY_CTRL0_TESTPORT_SEL);
 	sys_set_bits(test_ctrl0, PHY_TST_CTRL0_CLR);
 
 	k_busy_wait(1);
 
 	/* Select RX-Test Port. */
-	sys_set_bits(regs + RX_DPHY_CTRL0, DPHY_CTRL0_TESTPORT_SEL);
+	sys_set_bits(regs + ctrl0, DPHY_CTRL0_TESTPORT_SEL);
 	sys_clear_bits(test_ctrl0, PHY_TST_CTRL0_CLR);
 	/* Select TX-Test Port. */
-	sys_clear_bits(regs + RX_DPHY_CTRL0, DPHY_CTRL0_TESTPORT_SEL);
+	sys_clear_bits(regs + ctrl0, DPHY_CTRL0_TESTPORT_SEL);
 	sys_clear_bits(test_ctrl0, PHY_TST_CTRL0_CLR);
 
-	/* Set-up HS-Frequency in RX_DPHY_CTRL0. */
-	reg_write_part(regs + RX_DPHY_CTRL0, hsfreq, DPHY_CTRL0_HS_FREQ_RANGE_MASK,
+	/*
+	 * Configure the DPHY as per the requirement for frequency settings.
+	 */
+	test_ctrl0 = csi_regs + CSI_PHY_TEST_CTRL0;
+	test_ctrl1 = csi_regs + CSI_PHY_TEST_CTRL1;
+
+	/* Set-up HS-Frequency in ctrl0. */
+	reg_write_part(regs + ctrl0, hsfreq, DPHY_CTRL0_HS_FREQ_RANGE_MASK,
 		       DPHY_CTRL0_HS_FREQ_RANGE_SHIFT);
 
 	/* Set TX register 0x16A: pll_mpll_prog_rw[1:0] on RX D-PHY side. */
@@ -563,8 +638,13 @@ int dphy_dw_slave_setup(const struct device *dev, struct dphy_csi2_settings *phy
 
 	mipi_dphy_write_register(test_ctrl0, test_ctrl1, dphy4txtester_DIG_RDWR_TX_CB_0, 0x53);
 
+	mipi_dphy_mask_write_register(test_ctrl0, test_ctrl1, dphy4txtester_DIG_RDWR_TX_PLL_9,
+				      1, 0x1, 3);
+
+	mipi_dphy_write_register(test_ctrl0, test_ctrl1, dphy4txtester_DIG_RDWR_TX_SLEW_0, 0x04);
+
 	/* Select RX-Test Port. */
-	sys_set_bits(regs + RX_DPHY_CTRL0, DPHY_CTRL0_TESTPORT_SEL);
+	sys_set_bits(regs + ctrl0, DPHY_CTRL0_TESTPORT_SEL);
 
 	/* Setup Clock lane control. */
 	mipi_dphy_mask_write_register(test_ctrl0, test_ctrl1,
@@ -586,15 +666,15 @@ int dphy_dw_slave_setup(const struct device *dev, struct dphy_csi2_settings *phy
 				      dphy4rxtester_DIG_RDWR_RX_RX_STARTUP_OVR_4, 1, 0x1, 0);
 
 	cfgclkfreqrange = ((config->cfg_clk_frequency / MHZ(1)) - 17) << 2;
-	reg_write_part(regs + RX_DPHY_CTRL0, cfgclkfreqrange, DPHY_CTRL0_CFG_CLK_FREQ_RANGE_MASK,
+	reg_write_part(regs + ctrl0, cfgclkfreqrange, DPHY_CTRL0_CFG_CLK_FREQ_RANGE_MASK,
 		       DPHY_CTRL0_CFG_CLK_FREQ_RANGE_SHIFT);
 
 	/* Set Base-direction of the slave D-PHY Lanes to RX. */
 	tmp = (1U << phy->num_lanes) - 1;
-	sys_set_bits(regs + RX_DPHY_CTRL0, tmp << DPHY_CTRL0_BASE_DIR_SHIFT);
+	sys_set_bits(regs + ctrl0, tmp << DPHY_CTRL0_BASE_DIR_SHIFT);
 
 	/* Set ForceRX bits to 1 per lane. */
-	sys_set_bits(regs + RX_DPHY_CTRL1, tmp << DPHY_CTRL1_FORCE_RX_MODE_SHIFT);
+	sys_set_bits(regs + ctrl1, tmp << DPHY_CTRL1_FORCE_RX_MODE_SHIFT);
 
 	/*
 	 * Enable Clock and put D-PHY in start-up.
@@ -604,34 +684,87 @@ int dphy_dw_slave_setup(const struct device *dev, struct dphy_csi2_settings *phy
 	k_busy_wait(1);
 	sys_set_bits(csi_regs + CSI_DPHY_RSTZ, CSI_DPHY_RSTZ_DPHY_RSTZ);
 
+	if (dphy_id == 1) {
+		sys_set_bits(dsi_regs + DSI_PHY_RSTZ, DSI_PHY_RSTZ_PHY_SHUTDOWNZ |
+			DSI_PHY_RSTZ_PHY_RSTZ | DSI_PHY_RSTZ_PHY_FORCEPLL |
+			DSI_PHY_RSTZ_PHY_ENABLECLK);
+	}
+
 	tmp = CSI_PHY_STOPSTATE_PHY_STOPSTATECLK | CSI_PHY_STOPSTATE_PHY_STOPSTATEDATA_0;
 	tmp = (phy->num_lanes == 2) ? (tmp | CSI_PHY_STOPSTATE_PHY_STOPSTATEDATA_1) : tmp;
 
-	for (int i = 0; (i < 1000000) && ((sys_read32(csi_regs + CSI_PHY_STOPSTATE) & tmp) != tmp);
+	for (int i = 0; (i < 10000) && ((sys_read32(csi_regs + CSI_PHY_STOPSTATE) & tmp) != tmp);
 	     i++) {
-		k_busy_wait(1);
+		uint8_t phy_state;
+
+		phy_state = mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x1E);
+		if (!dphy_id) {
+			LOG_DBG("RX DPHY state: 0x%x", phy_state);
+		} else {
+			LOG_DBG("TX DPHY as RX state: 0x%x", phy_state);
+		}
+		k_busy_wait(100);
 	}
 
+	if (dphy_id) {
+		LOG_DBG("TX DPHY as RX state: 0x%x, DPHY ID: %d",
+			mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x1E),
+			dphy_id);
+	} else {
+		LOG_DBG("RX DPHY state: 0x%x, DPHY ID: %d",
+			mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x1E),
+			dphy_id);
+	}
+
+	LOG_DBG("dphy4txtester_DIG_RDWR_TX_SLEW_0: 0x%x",
+		mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x26B));
+	LOG_DBG("dphy4txtester_DIG_RDWR_TX_SLEW_1: 0x%x ",
+		mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x26C));
+	LOG_DBG("dphy4txtester_DIG_RDWR_TX_SLEW_2: 0x%x ",
+		mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x26D));
+	LOG_DBG("dphy4txtester_DIG_RDWR_TX_SLEW_3: 0x%x ",
+		mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x26E));
+
 	if ((sys_read32(csi_regs + CSI_PHY_STOPSTATE) & tmp) != tmp) {
-		LOG_ERR("D-PHY not locked to Stop-state. PHY status - 0x%08x",
-			sys_read32(csi_regs + CSI_PHY_RX));
+		LOG_ERR("D-PHY not locked to Stop-state. PHY status - 0x%08x "
+			"DPHY ID: %d",
+			sys_read32(csi_regs + CSI_PHY_RX), dphy_id);
 		return -ETIMEDOUT;
 	}
 
 	/* Set ForceRX bits to zero per lane. */
 	tmp = (1U << phy->num_lanes) - 1;
-	sys_clear_bits(regs + RX_DPHY_CTRL1, tmp << DPHY_CTRL1_FORCE_RX_MODE_SHIFT);
+	sys_clear_bits(regs + ctrl1, tmp << DPHY_CTRL1_FORCE_RX_MODE_SHIFT);
 
 	return 0;
 }
 
-#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
+int dphy_dw_slave_select(const struct device *dev,
+		uint8_t slave_id)
+{
+	uintptr_t regs = DEVICE_MMIO_NAMED_GET(dev, expmst_reg);
+
+
+	if (slave_id == 1) {
+		LOG_INF("TX DPHY is selected");
+		sys_set_bits(regs + DSI_CTRL, DSI_CTRL_CAM2_EN);
+	} else if (!slave_id) {
+		LOG_INF("RX DPHY is selected");
+		sys_clear_bits(regs + DSI_CTRL, DSI_CTRL_CAM2_EN);
+	} else {
+		LOG_ERR("Unknown DPHY ID: %d", slave_id);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int dphy_dw_enable_clocks(const struct device *dev)
 {
 	const struct dphy_dw_config *config = dev->config;
 	int ret;
 
-	/* Enable TX-DPHY clock. */
+	/* Enable PLL-reference clock. */
 	ret = clock_control_on(config->clk_dev, config->pllref_cid);
 	if (ret) {
 		LOG_ERR("Enable DSI clock source for APB interface failed! ret - %d", ret);
@@ -641,7 +774,6 @@ static int dphy_dw_enable_clocks(const struct device *dev)
 	return 0;
 
 }
-#endif /* DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks) */
 
 static int dphy_dw_init(const struct device *dev)
 {
@@ -652,13 +784,11 @@ static int dphy_dw_init(const struct device *dev)
 	DEVICE_MMIO_NAMED_MAP(dev, dsi_reg, K_MEM_CACHE_NONE);
 	DEVICE_MMIO_NAMED_MAP(dev, csi_reg, K_MEM_CACHE_NONE);
 
-#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
 	ret = dphy_dw_enable_clocks(dev);
 	if (ret) {
 		LOG_ERR("DSI clock enable failed! Exiting! ret - %d", ret);
 		return ret;
 	}
-#endif /* DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks) */
 
 	LOG_DBG("MMIO Address expmst: 0x%08x", (uint32_t)DEVICE_MMIO_NAMED_GET(dev, expmst_reg));
 	LOG_DBG("MMIO Address dsi: 0x%08x", (uint32_t)DEVICE_MMIO_NAMED_GET(dev, dsi_reg));
@@ -672,7 +802,13 @@ static int dphy_dw_init(const struct device *dev)
 	IF_ENABLED(DT_INST_NODE_HAS_PROP(i, clocks),                                               \
 		(.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(i)),                                 \
 		 .pllref_cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,              \
-			 pllref_clk, clkid),))
+			 pllref_clk, clkid),                                                       \
+		 .pllbypass_cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,           \
+			 pllbypass_clk, clkid),                                                    \
+		 .rxdphy_cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,              \
+			 rx_dphy_clk, clkid),                                                      \
+		 .txdphy_cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,              \
+			 tx_dphy_clk, clkid),))
 
 
 #define ALIF_MIPI_DPHY_DEVICE(i)                                                                   \
@@ -687,9 +823,7 @@ static int dphy_dw_init(const struct device *dev)
 		.cfg_clk_frequency = DT_INST_PROP(i, cfg_clk_frequency),                           \
 	};                                                                                         \
                                                                                                    \
-	static struct dphy_dw_data data_##i = {                                                    \
-		.is_dsi_initialized = false,                                                       \
-	};                                                                                         \
+	static struct dphy_dw_data data_##i;                                                       \
                                                                                                    \
 	DEVICE_DT_INST_DEFINE(i, &dphy_dw_init, NULL, &data_##i, &config_##i, POST_KERNEL,         \
 			      CONFIG_MIPI_DPHY_INIT_PRIORITY, NULL);

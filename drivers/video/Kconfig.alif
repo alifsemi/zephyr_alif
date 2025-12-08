@@ -12,7 +12,7 @@ if VIDEO_ALIF_CAM
 
 config VIDEO_ALIF_CAM_INIT_PRIORITY
 	int "CPI Video initialization priority"
-	default 60
+	default 59
 	help
 	 System initialization priority for Alif Camera Driver.
 	 The default initialization priority for video devices is 60.

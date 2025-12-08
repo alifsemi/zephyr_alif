@@ -16,7 +16,53 @@ extern "C" {
 #endif
 
 #define VIDEO_CID_ALIF_CSI_DPHY_FREQ         (VIDEO_CID_PRIVATE_BASE + 0)
+#define VIDEO_CID_ALIF_CSI_CURR_CAM          (VIDEO_CID_PRIVATE_BASE + 1)
+
+/* Additional supported formats */
 #define VIDEO_PIX_FMT_RGB888_PLANAR_PRIVATE  (VIDEO_FOURCC('P', 'R', 'G', 'B'))
+#define VIDEO_PIX_FMT_BGGR10P                (VIDEO_FOURCC('p', 'B', 'A', 'A'))
+#define VIDEO_PIX_FMT_GBRG10P                (VIDEO_FOURCC('p', 'G', 'A', 'A'))
+#define VIDEO_PIX_FMT_GRBG10P                (VIDEO_FOURCC('p', 'g', 'A', 'A'))
+#define VIDEO_PIX_FMT_RGGB10P                (VIDEO_FOURCC('p', 'R', 'A', 'A'))
+#define VIDEO_PIX_FMT_BGGR12P                (VIDEO_FOURCC('p', 'B', 'C', 'C'))
+#define VIDEO_PIX_FMT_GBRG12P                (VIDEO_FOURCC('p', 'G', 'C', 'C'))
+#define VIDEO_PIX_FMT_GRBG12P                (VIDEO_FOURCC('p', 'g', 'C', 'C'))
+#define VIDEO_PIX_FMT_RGGB12P                (VIDEO_FOURCC('p', 'R', 'C', 'C'))
+#define VIDEO_PIX_FMT_BGGR14P                (VIDEO_FOURCC('p', 'B', 'E', 'E'))
+#define VIDEO_PIX_FMT_GBRG14P                (VIDEO_FOURCC('p', 'G', 'E', 'E'))
+#define VIDEO_PIX_FMT_GRBG14P                (VIDEO_FOURCC('p', 'g', 'E', 'E'))
+#define VIDEO_PIX_FMT_RGGB14P                (VIDEO_FOURCC('p', 'R', 'E', 'E'))
+#define VIDEO_PIX_FMT_BGGR10                 (VIDEO_FOURCC('B', 'G', '1', '0'))
+#define VIDEO_PIX_FMT_GBRG10                 (VIDEO_FOURCC('G', 'B', '1', '0'))
+#define VIDEO_PIX_FMT_GRBG10                 (VIDEO_FOURCC('B', 'A', '1', '0'))
+#define VIDEO_PIX_FMT_RGGB10                 (VIDEO_FOURCC('R', 'G', '1', '0'))
+#define VIDEO_PIX_FMT_BGGR12                 (VIDEO_FOURCC('B', 'G', '1', '2'))
+#define VIDEO_PIX_FMT_GBRG12                 (VIDEO_FOURCC('G', 'B', '1', '2'))
+#define VIDEO_PIX_FMT_GRBG12                 (VIDEO_FOURCC('B', 'A', '1', '2'))
+#define VIDEO_PIX_FMT_RGGB12                 (VIDEO_FOURCC('R', 'G', '1', '2'))
+#define VIDEO_PIX_FMT_BGGR14                 (VIDEO_FOURCC('B', 'G', '1', '4'))
+#define VIDEO_PIX_FMT_GBRG14                 (VIDEO_FOURCC('G', 'B', '1', '4'))
+#define VIDEO_PIX_FMT_GRBG14                 (VIDEO_FOURCC('G', 'R', '1', '4'))
+#define VIDEO_PIX_FMT_RGGB14                 (VIDEO_FOURCC('R', 'G', '1', '4'))
+#define VIDEO_PIX_FMT_BGGR16                 (VIDEO_FOURCC('B', 'Y', 'R', '2'))
+#define VIDEO_PIX_FMT_GBRG16                 (VIDEO_FOURCC('G', 'B', '1', '6'))
+#define VIDEO_PIX_FMT_GRBG16                 (VIDEO_FOURCC('G', 'R', '1', '6'))
+#define VIDEO_PIX_FMT_RGGB16                 (VIDEO_FOURCC('R', 'G', '1', '6'))
+#define VIDEO_PIX_FMT_Y10                    (VIDEO_FOURCC('Y', '1', '0', ' '))
+#define VIDEO_PIX_FMT_Y12                    (VIDEO_FOURCC('Y', '1', '2', ' '))
+#define VIDEO_PIX_FMT_Y14                    (VIDEO_FOURCC('Y', '1', '4', ' '))
+#define VIDEO_PIX_FMT_YVYU                   (VIDEO_FOURCC('Y', 'V', 'Y', 'U'))
+#define VIDEO_PIX_FMT_VYUY                   (VIDEO_FOURCC('V', 'Y', 'U', 'Y'))
+#define VIDEO_PIX_FMT_UYVY                   (VIDEO_FOURCC('U', 'Y', 'V', 'Y'))
+#define VIDEO_PIX_FMT_NV12                   (VIDEO_FOURCC('N', 'V', '1', '2'))
+#define VIDEO_PIX_FMT_NV21                   (VIDEO_FOURCC('N', 'V', '2', '1'))
+#define VIDEO_PIX_FMT_NV16                   (VIDEO_FOURCC('N', 'V', '1', '6'))
+#define VIDEO_PIX_FMT_NV61                   (VIDEO_FOURCC('N', 'V', '6', '1'))
+#define VIDEO_PIX_FMT_NV24                   (VIDEO_FOURCC('N', 'V', '2', '4'))
+#define VIDEO_PIX_FMT_NV42                   (VIDEO_FOURCC('N', 'V', '4', '2'))
+#define VIDEO_PIX_FMT_YUV422P                (VIDEO_FOURCC('4', '2', '2', 'P'))
+#define VIDEO_PIX_FMT_YUV420                 (VIDEO_FOURCC('Y', 'U', '1', '2'))
+#define VIDEO_PIX_FMT_YVU420                 (VIDEO_FOURCC('Y', 'V', '1', '2'))
 
 enum csi2_data_type {
 	/* Data Type Non-Image data */
@@ -112,6 +158,10 @@ static const struct cpi_csi2_mode_settings data_mode_settings[] = {
 	{CSI2_DT_RGB888, CSI2_IPI_MODE_48_BIT_IFX, CPI_COLOR_MODE_CONFIG_IPI48_XRGB888,
 	 CPI_DATA_MODE_32_BIT, 24},
 };
+
+size_t fourcc_to_plane_size(uint32_t fourcc, uint8_t plane_id, size_t buffer_size);
+int fourcc_to_numplanes(uint32_t fourcc);
+unsigned int pix_fmt_bpp(uint32_t fourcc);
 
 #ifdef __cplusplus
 }

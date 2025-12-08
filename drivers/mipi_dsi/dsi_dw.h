@@ -453,7 +453,6 @@ struct dsi_dw_config {
 	const struct device *clk_dev;
 	clock_control_subsys_t dsi_cid;
 	clock_control_subsys_t pix_cid;
-	clock_control_subsys_t txdphy_cid;
 #endif /* DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks) */
 
 	/* Allow EoTp Transmission/Reception in HS/LP mode. */
