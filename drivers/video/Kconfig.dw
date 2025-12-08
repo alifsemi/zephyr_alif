@@ -1,0 +1,23 @@
+# Alif MIPI-CSI2 bus controller driver configuration options
+
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config VIDEO_MIPI_CSI2_DW
+	bool "MIPI CSI-2 Host Controller for Alif"
+	default y
+	select MIPI_DPHY
+	depends on DT_HAS_SNPS_DESIGNWARE_DPHY_ENABLED
+	depends on DT_HAS_SNPS_DESIGNWARE_CSI_ENABLED
+	help
+	  Enable Alif MIPI CSI2 Host controller driver
+
+if VIDEO_MIPI_CSI2_DW
+
+config VIDEO_MIPI_CSI2_DW_INIT_PRIORITY
+	int "Initialization priority"
+	default 41
+	help
+	  MIPI CSI-2 Host Controllers initialization priority.
+
+endif

@@ -80,4 +80,6 @@ source "drivers/video/Kconfig.emul_rx"
 
 source "drivers/video/Kconfig.alif"
 
+source "drivers/video/Kconfig.dw"
+
 endif # VIDEO
