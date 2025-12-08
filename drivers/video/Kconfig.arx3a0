@@ -1,0 +1,12 @@
+# Alif ARX3A0 CMOS sensor driver configuration options
+
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config VIDEO_ARX3A0
+	bool "Onsemi ARX3A0 CMOS video sensor"
+	select I2C
+	depends on DT_HAS_ONNN_ARX3A0_ENABLED
+	default y
+	help
+	  Enable driver for ARX3A0 CMOS digital image sensor device.
