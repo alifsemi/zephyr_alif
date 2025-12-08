@@ -174,6 +174,27 @@
 		status = "disabled";
 	};
 
+	csi: csi@49033000 {
+		compatible = "snps,designware-csi";
+		reg = <0x49033000 0x1000>;
+		interrupts = <344 0>;
+
+		clocks = <&clockctrl ALIF_CSI_CLK>, <&clockctrl ALIF_CSI_PIX_SYST_ACLK>;
+		clock-names = "csi_clk", "pix_clk";
+		ipi-mode = "Camera";
+		phy-if = <&dphy 1>, <&dphy 0>;
+
+		csi-hsa = <5>;
+		csi-hbp = <10>;
+		csi-hsd = <280>;
+		csi-hact = <560>;
+		csi-vsa = <4>;
+		csi-vbp = <4>;
+		csi-vfp = <4>;
+		csi-vact = <560>;
+		status = "disabled";
+	};
+
 	ospi1: ospi1@83002000 {
 		compatible = "snps,designware-ospi";
 		#address-cells = <1>;
