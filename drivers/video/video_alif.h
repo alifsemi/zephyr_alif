@@ -90,13 +90,8 @@ enum cpi_data_mask {
 	CPI_DATA_MASK_14_BIT,
 };
 
-enum video_cam_device_state {
-	STATE_INIT,
-	STATE_CONFIGURED,
-	STATE_CONTROLLER_STOPPED,
-	STATE_STREAMING,
-	STATE_STANDBY,
-};
+#define CAM_INTERFACE_SERIAL   0
+#define CAM_INTERFACE_PARALLEL 1
 
 struct video_cam_config {
 	DEVICE_MMIO_ROM;
@@ -120,12 +115,13 @@ struct video_cam_config {
 	uint32_t capture_mode: 1;
 	uint32_t axi_bus_ep: 1;
 	uint32_t isp_ep: 1;
+	uint32_t interface: 1;
+	uint32_t reserved: 7;
 
 	const struct device *clk_dev;
 	clock_control_subsys_t cid;
 
-	const struct device *sensor;
-	const struct device *csi_bus;
+	const struct device *endpoint_dev;
 };
 
 struct video_cam_data {

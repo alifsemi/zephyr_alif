@@ -1,7 +1,8 @@
 # Copyright (C) 2024 Alif Semiconductor
 # SPDX-License-Identifier: Apache-2.0
 
-description: Designware MIPI D-PHY
+description: |
+  ALIF Devkit MIPI D-PHY from Synopsis.
 
 compatible: "snps,designware-dphy"
 
@@ -17,3 +18,12 @@ properties:
     type: int
     default: 25000000
     description: Configuration clock frequency for D-PHY.
+
+  "#dphy-cells":
+    type: int
+    required: true
+    const: 1
+    description: Provides the cell ID of DPHY to be used.
+
+dphy-cells:
+  - id

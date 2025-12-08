@@ -30,6 +30,11 @@ struct dphy_dsi_settings {
 	/* Data Lane HS->LP and LP->HS timings. */
 	uint16_t lane_hs2lp;
 	uint16_t lane_lp2hs;
+
+	uint16_t pll_m;
+	uint16_t pll_n;
+	uint8_t pll_p;
+	uint8_t vco_cntrl;
 };
 
 struct dphy_csi2_settings {
@@ -49,7 +54,11 @@ int dphy_dw_master_setup(const struct device *dev,
  * Setup the D-PHY as RX-PHY.
  */
 int dphy_dw_slave_setup(const struct device *dev,
-		struct dphy_csi2_settings *phy);
+		struct dphy_csi2_settings *phy,
+		uint8_t dphy_id);
+
+int dphy_dw_slave_select(const struct device *dev,
+		uint8_t slave_id);
 
 #ifdef __cplusplus
 }

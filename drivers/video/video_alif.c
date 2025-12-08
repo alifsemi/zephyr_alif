@@ -34,12 +34,14 @@ static void reg_write_part(uintptr_t reg, uint32_t data, uint32_t mask, uint8_t 
 
 static inline unsigned int pix_fmt_bpp(uint32_t fmt)
 {
+	uint32_t ret;
+
+	ret = video_bits_per_pixel(fmt);
+	if (ret) {
+		return ret;
+	}
+
 	switch (fmt) {
-	case VIDEO_PIX_FMT_BGGR8:
-	case VIDEO_PIX_FMT_GBRG8:
-	case VIDEO_PIX_FMT_GRBG8:
-	case VIDEO_PIX_FMT_RGGB8:
-		return 8;
 	case VIDEO_PIX_FMT_RGB565:
 	case VIDEO_PIX_FMT_YUYV:
 		return 16;
@@ -178,6 +180,7 @@ static int alif_cam_set_csi(const struct device *dev, uint32_t fourcc)
 static void alif_cam_work_helper(const struct device *dev)
 {
 	enum video_signal_result signal_status = VIDEO_BUF_DONE;
+	const struct video_cam_config *config = dev->config;
 	struct video_cam_data *data = dev->data;
 	uintptr_t regs = DEVICE_MMIO_GET(dev);
 	struct video_buffer *vbuf = NULL;
@@ -223,6 +226,7 @@ static void alif_cam_work_helper(const struct device *dev)
 			"Stopping Video Capture. If Re-queued, restart stream.");
 		data->curr_vid_buf = 0;
 		data->is_streaming = false;
+		video_stream_stop(config->endpoint_dev);
 		signal_status = VIDEO_BUF_DONE;
 		goto done;
 	}
@@ -262,7 +266,12 @@ static int alif_cam_set_fmt(const struct device *dev, enum video_endpoint_id ep,
 	uintptr_t regs = DEVICE_MMIO_GET(dev);
 	int ret;
 
-	if (!bits_pp || (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL)) {
+	/*
+	 * Bail out when either the bits per pixel is zero (un-supported format)
+	 * or endpoint is neither VIDEO_EP_OUT nor VIDEO_EP_ALL.
+	 */
+	if (!bits_pp || !(ep == VIDEO_EP_OUT || ep == VIDEO_EP_ALL)) {
+		LOG_ERR("Bits-per-pixel - %d, endpoint- %d", bits_pp, ep);
 		return -EINVAL;
 	}
 
@@ -275,24 +284,16 @@ static int alif_cam_set_fmt(const struct device *dev, enum video_endpoint_id ep,
 			    ((fmt->width & CAM_VIDEO_FCFG_DATA_MASK) << CAM_VIDEO_FCFG_DATA_SHIFT),
 		    regs + CAM_VIDEO_FCFG);
 
-	if (config->csi_bus) {
-		ret = video_set_format(config->csi_bus, ep, fmt);
-		if (ret) {
-			LOG_ERR("Failed to set CSI Format.");
-			return ret;
-		}
+	ret = video_set_format(config->endpoint_dev, ep, fmt);
+	if (ret) {
+		LOG_ERR("Failed to set sensor Format.");
+		return ret;
+	}
 
+	if (config->interface == CAM_INTERFACE_SERIAL) {
 		ret = alif_cam_set_csi(dev, fmt->pixelformat);
 		if (ret) {
 			LOG_ERR("Failed to configure CAM as per the CSI.");
-			return ret;
-		}
-	}
-
-	if (config->sensor) {
-		ret = video_set_format(config->sensor, ep, fmt);
-		if (ret) {
-			LOG_ERR("Failed to set sensor Format.");
 			return ret;
 		}
 	}
@@ -312,18 +313,18 @@ static int alif_cam_get_fmt(const struct device *dev, enum video_endpoint_id ep,
 		return -EINVAL;
 	}
 
-	if (config->sensor && !video_get_format(config->sensor, ep, fmt)) {
-		ret = alif_cam_set_fmt(dev, ep, fmt);
-		if (ret) {
-			return ret;
-		}
+	ret = video_get_format(config->endpoint_dev, ep, fmt);
+	if (ret) {
+		LOG_ERR("Failed to get format from Video pipeline!");
+		return ret;
 	}
 
-	if (config->csi_bus) {
-		ret = video_set_format(config->csi_bus, ep, fmt);
-		if (ret) {
-			return ret;
-		}
+	ret = alif_cam_set_fmt(dev, ep, fmt);
+	if (ret) {
+		return ret;
+	}
+
+	if (config->interface == CAM_INTERFACE_SERIAL) {
 		ret = alif_cam_set_csi(dev, fmt->pixelformat);
 		if (ret) {
 			return ret;
@@ -344,10 +345,11 @@ static int alif_cam_stream_start(const struct device *dev)
 	struct video_cam_data *data = dev->data;
 	uintptr_t regs = DEVICE_MMIO_GET(dev);
 	struct video_buffer *vbuf;
+	int ret;
 
 	if (data->is_streaming) {
 		LOG_DBG("Already streaming.");
-		return 0;
+		return -EBUSY;
 	}
 
 	if (sys_read32(regs + CAM_CTRL) & CAM_CTRL_BUSY) {
@@ -355,30 +357,28 @@ static int alif_cam_stream_start(const struct device *dev)
 		return -EBUSY;
 	}
 
-	/* Update the Video-buffer address to CPI-Controller. */
-	vbuf = k_fifo_peek_head(&data->fifo_in);
-	if (!vbuf) {
-		LOG_ERR("No empty video-buffer. Aborting!!!");
-		return -ENOBUFS;
-	}
+	if (((IS_ENABLED(CONFIG_VIDEO_ALIF_CAM_EXTENDED)) && config->axi_bus_ep) ||
+	    (!IS_ENABLED(CONFIG_VIDEO_ALIF_CAM_EXTENDED))) {
+		/* Update the Video-buffer address to CPI-Controller. */
+		vbuf = k_fifo_peek_head(&data->fifo_in);
+		if (!vbuf) {
+			LOG_ERR("No empty video-buffer. Aborting!!!");
+			return -ENOBUFS;
+		}
 
-	data->curr_vid_buf = (uint32_t)vbuf->buffer;
-	sys_write32(local_to_global(UINT_TO_POINTER(data->curr_vid_buf)),
-			regs + CAM_FRAME_ADDR);
+		data->curr_vid_buf = (uint32_t)vbuf->buffer;
+		sys_write32(local_to_global(UINT_TO_POINTER(data->curr_vid_buf)),
+				regs + CAM_FRAME_ADDR);
+	}
 
 	/* Setup the interrupts. */
 	hw_enable_interrupts(regs, INTR_VSYNC | INTR_BRESP_ERR | INTR_OUTFIFO_OVERRUN |
 					   INTR_INFIFO_OVERRUN | INTR_STOP);
 
 	/* Start the MIPI CSI-2 IP in case the MIPI CSI is available. */
-	if (config->csi_bus &&
-	    video_stream_start(config->csi_bus)) {
-		LOG_ERR("Failed to start CSI bus!");
-		return -EIO;
-	}
-
-	if (config->sensor && video_stream_start(config->sensor)) {
-		LOG_ERR("Failed to start camera sensor!");
+	ret = video_stream_start(config->endpoint_dev);
+	if (ret) {
+		LOG_ERR("Failed to start streaming of Video pipeline!");
 		return -EIO;
 	}
 
@@ -403,18 +403,10 @@ static int alif_cam_stream_stop(const struct device *dev)
 		return 0;
 	}
 
-	if (config->sensor) {
-		ret = video_stream_stop(config->sensor);
-		if (ret) {
-			LOG_ERR("Failed to stop camera sensor!");
-			return ret;
-		}
-	}
-
-	if (config->csi_bus &&
-	    video_stream_stop(config->csi_bus)) {
-		LOG_ERR("Failed to stop CSI Bus!");
-		return -EIO;
+	ret = video_stream_stop(config->endpoint_dev);
+	if (ret) {
+		LOG_ERR("Failed to stop streaming in Pipeline!");
+		return ret;
 	}
 
 	/* Disable Interrupts. */
@@ -578,37 +570,21 @@ static int alif_cam_dequeue(const struct device *dev, enum video_endpoint_id ep,
 static int alif_cam_set_ctrl(const struct device *dev, unsigned int cid, void *value)
 {
 	const struct video_cam_config *config = dev->config;
-	int ret_sensor = -ENOTSUP;
-	int ret_csi = -ENOTSUP;
+	int ret = -ENOTSUP;
 
-	if (config->csi_bus) {
-		ret_csi = video_set_ctrl(config->csi_bus, cid, value);
-	}
-
-	if (config->sensor) {
-		ret_sensor = video_set_ctrl(config->sensor, cid, value);
-	}
-
-	/* If some Control ID is supported and works for either CSI bus
-	 * or sensor, we send a success
-	 * else we will send Not supported CID status from the driver
-	 */
-	if (ret_sensor && ret_csi) {
+	ret = video_set_ctrl(config->endpoint_dev, cid, value);
+	if (ret) {
 		return -ENOTSUP;
 	}
+
 	return 0;
 }
 
 static int alif_cam_get_ctrl(const struct device *dev, unsigned int cid, void *value)
 {
 	const struct video_cam_config *config = dev->config;
-	int ret = -ENOTSUP;
 
-	if (config->sensor) {
-		ret = video_get_ctrl(config->sensor, cid, value);
-	}
-
-	return ret;
+	return video_get_ctrl(config->endpoint_dev, cid, value);
 }
 
 static int alif_cam_get_caps(const struct device *dev, enum video_endpoint_id ep,
@@ -622,11 +598,9 @@ static int alif_cam_get_caps(const struct device *dev, enum video_endpoint_id ep
 		return -EINVAL;
 	}
 
-	if (config->sensor) {
-		err = video_get_caps(config->sensor, ep, caps);
-	}
-
+	err = video_get_caps(config->endpoint_dev, ep, caps);
 	caps->min_vbuf_count = CPI_MIN_VBUF;
+
 	return err;
 }
 
@@ -724,7 +698,7 @@ static int alif_video_cam_set_config(const struct device *dev)
 	}
 
 	if ((config->data_mode >= CPI_DATA_MODE_32_BIT) &&
-	    (!config->csi_bus)) {
+	    (config->interface == CAM_INTERFACE_PARALLEL)) {
 		LOG_ERR("data modes 32-bit and 64-bit are reserved "
 			"for CSI-2 only.");
 		return -EINVAL;
@@ -824,11 +798,16 @@ static int alif_video_cam_init(const struct device *dev)
 	int ret = 0;
 
 	/*
-	 * In-case there is no sensor device attached to the CPI controller,
-	 * we need to abort.
+	 * In-case there is no sensor device or CSI controller attached to the
+	 * CPI controller, we need to abort.
 	 */
-	if (!config->sensor) {
+	if (!config->endpoint_dev) {
 		return -ENODEV;
+	}
+
+	if ((config->interface == CAM_INTERFACE_SERIAL) && config->is_lpcam) {
+		LOG_ERR("LP-CAM does not support Serial interface!");
+		return -EINVAL;
 	}
 
 	DEVICE_MMIO_MAP(dev, K_MEM_CACHE_NONE);
@@ -872,7 +851,8 @@ static int alif_video_cam_init(const struct device *dev)
 
 	LOG_DBG("irq: %d", config->irq);
 	LOG_DBG("Is LP-CPI controller - %d", config->is_lpcam);
-	LOG_DBG("Is Parallel interface - %d", (config->csi_bus == NULL));
+	LOG_DBG("Is Parallel interface - %d",
+			(config->interface == CAM_INTERFACE_PARALLEL));
 	switch (config->data_mode) {
 	case CPI_DATA_MODE_1_BIT:
 		LOG_DBG("Data-mode: 1-bit");
@@ -935,6 +915,9 @@ static int alif_video_cam_init(const struct device *dev)
 		 .cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i, \
 			 cam_clk, clkid),))
 
+#define REMOTE_DEVICE(i, id) \
+	DT_NODE_REMOTE_DEVICE(DT_INST_ENDPOINT_BY_ID(i, id, 0))
+
 #define CPI_DEFINE(i)                                                                              \
 	IF_ENABLED(CONFIG_PINCTRL,                                                                 \
 			(COND_CODE_1(DT_INST_PINCTRL_HAS_IDX(i, 0),                                \
@@ -945,8 +928,7 @@ static int alif_video_cam_init(const struct device *dev)
 		DEVICE_MMIO_ROM_INIT(DT_DRV_INST(i)),                                              \
                                                                                                    \
 		CAM_GET_CLK(i)                                                                     \
-		.sensor = DEVICE_DT_GET_OR_NULL(DT_INST_PHANDLE(i, sensor)),                       \
-		.csi_bus = DEVICE_DT_GET_OR_NULL(DT_INST_PHANDLE(i, csi_bus_if)),                  \
+		.endpoint_dev = DEVICE_DT_GET(REMOTE_DEVICE(i, 0)),                                \
                                                                                                    \
 		.irq = DT_INST_IRQN(i),                                                            \
 		.irq_config_func = cam_config_func_##i,                                            \
@@ -971,8 +953,9 @@ static int alif_video_cam_init(const struct device *dev)
 		.axi_bus_ep = DT_NODE_EXISTS(DT_INST_PORT_BY_ID(i, 1)),                            \
 		.isp_ep = DT_NODE_HAS_STATUS_OKAY(                                                 \
 				DT_NODE_REMOTE_DEVICE(                                             \
-					DT_INST_ENDPOINT_BY_ID(i, 2, 0))),                         \
+					DT_INST_ENDPOINT_BY_ID(i, 3, 0))),                         \
 		.csi_halt_en = DT_INST_PROP(i, csi_halt_en),                                       \
+		.interface = DT_INST_ENUM_IDX(i, cpi_interface),                                   \
 	};                                                                                         \
                                                                                                    \
 	static struct video_cam_data data_##i;                                                     \
