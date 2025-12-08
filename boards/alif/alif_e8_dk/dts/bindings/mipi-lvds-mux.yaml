@@ -1,0 +1,14 @@
+# Copyright (C) 2025 Alif Semiconductor.
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  This allows to define consumers for the MIPI lines
+
+compatible: "mipi-lvds-mux"
+
+child-binding:
+  description: MIPI switch child node
+  properties:
+    select-gpios:
+      type: phandle-array
+      required: true
