@@ -493,10 +493,10 @@ static void bt_uart_isr(const struct device *uart, void *user_data)
 	while (uart_irq_update(uart) && uart_irq_is_pending(uart)) {
 		if (uart_irq_tx_ready(uart)) {
 			process_tx(dev);
-		}
-
-		if (uart_irq_rx_ready(uart)) {
+		} else if (uart_irq_rx_ready(uart)) {
 			process_rx(dev);
+		} else {
+			break;
 		}
 	}
 }
