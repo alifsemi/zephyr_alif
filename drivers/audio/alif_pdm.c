@@ -310,6 +310,24 @@ static int dmic_alif_pdm_read(const struct device *dev, uint8_t stream, void **b
 	return rc;
 }
 
+static inline void pdm_error_handler(const struct device *dev)
+{
+	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
+
+	sys_clear_bits(reg_base + PDM_INTERRUPT_REGISTER, PDM_FIFO_OVERFLOW_IRQ);
+	(void)sys_read32(reg_base + PDM_ERROR_IRQ);
+}
+
+static inline void pdm_audio_det_handler(const struct device *dev)
+{
+	struct pdm_data *pdata = DEV_DATA(dev);
+	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
+
+	if (pdata->slab_missed != 0) {
+		sys_clear_bits(reg_base + PDM_INTERRUPT_REGISTER, PDM_AUDIO_DETECT_IRQ_STAT);
+	}
+	(void)sys_read32(reg_base + PDM_AUDIO_DETECT_IRQ);
+}
 /**
  * @fn		static void pdm_error_detect_irq_handler()
  * @brief	ISR to handle the error interrupt
@@ -318,10 +336,7 @@ static int dmic_alif_pdm_read(const struct device *dev, uint8_t stream, void **b
  */
 static __maybe_unused void pdm_error_detect_irq_handler(const struct device *dev)
 {
-	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
-
-	sys_clear_bits(reg_base + PDM_INTERRUPT_REGISTER, PDM_FIFO_OVERFLOW_IRQ);
-	(void)sys_read32(reg_base + PDM_ERROR_IRQ);
+	pdm_error_handler(dev);
 }
 
 /**
@@ -332,13 +347,7 @@ static __maybe_unused void pdm_error_detect_irq_handler(const struct device *dev
  */
 static __maybe_unused void pdm_audio_detect_irq_handler(const struct device *dev)
 {
-	struct pdm_data *pdata = DEV_DATA(dev);
-	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
-
-	if (pdata->slab_missed != 0) {
-		sys_clear_bits(reg_base + PDM_INTERRUPT_REGISTER, PDM_AUDIO_DETECT_IRQ_STAT);
-	}
-	(void)sys_read32(reg_base + PDM_AUDIO_DETECT_IRQ);
+	pdm_audio_det_handler(dev);
 }
 
 /**
@@ -405,6 +414,15 @@ static void alif_pdm_warning_isr(const struct device *dev)
 	intstatus = sys_read32(reg_base + PDM_WARN_IRQ);
 	num_items = sys_read32(reg_base + PDM_FIFO_STATUS_REGISTER);
 
+	/* LPPDM doesn't have separate error and audio detect isr handlers */
+	if (!DT_NODE_HAS_PROP(DT_NODELABEL(dev), error_intr)) {
+		pdm_error_handler(dev);
+	}
+
+	if (!DT_NODE_HAS_PROP(DT_NODELABEL(dev), audio_det_intr)) {
+		pdm_audio_det_handler(dev);
+	}
+
 	for (i = 0; i < num_items; i++) {
 		audio_ch_0_1 = sys_read32(reg_base + PDM_CH0_CH1_AUDIO_OUT);
 		audio_ch_2_3 = sys_read32(reg_base + PDM_CH2_CH3_AUDIO_OUT);
@@ -462,8 +480,8 @@ static void alif_pdm_warning_isr(const struct device *dev)
 		pdmdata->buf_index += data_bytes;
 	} else {
 		if (bytes_available > 0) {
-			memcpy((pdmdata->data_buffer + pdmdata->buf_index),
-				pdmdata->data, bytes_available);
+			memcpy((pdmdata->data_buffer + pdmdata->buf_index), pdmdata->data,
+			       bytes_available);
 		}
 		whole = data_bytes - bytes_available;
 
@@ -502,8 +520,7 @@ static int pdm_initialize(const struct device *dev)
 	}
 
 	/* Configure PDM clock sources */
-	ret = clock_control_configure(cfg->clk_dev,
-						cfg->clkid, NULL);
+	ret = clock_control_configure(cfg->clk_dev, cfg->clkid, NULL);
 	if (ret != 0) {
 		LOG_ERR("Unable to configure clock: err:%d", ret);
 		return ret;
@@ -551,30 +568,27 @@ static const struct _dmic_ops dmic_alif_pdm_api = {
 		.irq_config = pdm_irq_config_##n,                                                  \
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),                                         \
 		.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),                                  \
-		.clkid = (clock_control_subsys_t) DT_INST_CLOCKS_CELL(n, clkid),                   \
+		.clkid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, clkid),                    \
 	};                                                                                         \
 	static void pdm_irq_config_##n(void)                                                       \
 	{                                                                                          \
 		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, warning_intr, irq),                             \
-				DT_INST_IRQ_BY_NAME(n, warning_intr, priority),                    \
-				alif_pdm_warning_isr, DEVICE_DT_INST_GET(n), 0);                   \
+			    DT_INST_IRQ_BY_NAME(n, warning_intr, priority), alif_pdm_warning_isr,  \
+			    DEVICE_DT_INST_GET(n), 0);                                             \
 		irq_enable(DT_INST_IRQ_BY_NAME(n, warning_intr, irq));                             \
-		IF_ENABLED(DT_INST_IRQ_HAS_NAME(n, error_intr), (                                  \
-		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, error_intr, irq),                               \
-				DT_INST_IRQ_BY_NAME(n, error_intr, priority),                      \
-				pdm_error_detect_irq_handler, DEVICE_DT_INST_GET(n), 0);           \
-		irq_enable(DT_INST_IRQ_BY_NAME(n, error_intr, irq));                               \
-		)) \
-		IF_ENABLED(DT_INST_IRQ_HAS_NAME(n, audio_det_intr), (                              \
-		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, audio_det_intr, irq),                           \
-				DT_INST_IRQ_BY_NAME(n, audio_det_intr, priority),                  \
-				pdm_audio_detect_irq_handler, DEVICE_DT_INST_GET(n), 0);           \
-		irq_enable(DT_INST_IRQ_BY_NAME(n, audio_det_intr, irq));                           \
-		)) \
+		IF_ENABLED(DT_INST_IRQ_HAS_NAME(n, error_intr),                                    \
+			   (IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, error_intr, irq),                   \
+					DT_INST_IRQ_BY_NAME(n, error_intr, priority),              \
+					pdm_error_detect_irq_handler, DEVICE_DT_INST_GET(n), 0);   \
+			    irq_enable(DT_INST_IRQ_BY_NAME(n, error_intr, irq));))                 \
+		IF_ENABLED(DT_INST_IRQ_HAS_NAME(n, audio_det_intr),                                \
+			   (IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, audio_det_intr, irq),               \
+					DT_INST_IRQ_BY_NAME(n, audio_det_intr, priority),          \
+					pdm_audio_detect_irq_handler, DEVICE_DT_INST_GET(n), 0);   \
+			    irq_enable(DT_INST_IRQ_BY_NAME(n, audio_det_intr, irq));))             \
 	}                                                                                          \
 	DEVICE_DT_INST_DEFINE(n, pdm_initialize, NULL, &dmic_alif_pdm_data,                        \
-				&dmic_alif_pdm_cfg_##n, POST_KERNEL,                               \
-				CONFIG_AUDIO_DMIC_INIT_PRIORITY,                                   \
-				&dmic_alif_pdm_api);
+			      &dmic_alif_pdm_cfg_##n, POST_KERNEL,                                 \
+			      CONFIG_AUDIO_DMIC_INIT_PRIORITY, &dmic_alif_pdm_api);
 
 DT_INST_FOREACH_STATUS_OKAY(PDM_INIT)
