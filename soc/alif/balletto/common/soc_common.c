@@ -122,6 +122,14 @@ static int soc_init(void)
 	sys_set_bits(EXPMST_PERIPH_CLK_EN, BIT(16));
 #endif
 
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(usb), okay)
+	/* Enable phy pwr mask and Enable the phy Isolation. */
+	sys_clear_bits(VBAT_PWR_CTRL, BIT(16) | BIT(17));
+
+	/* USB power on reset clear */
+	sys_clear_bits(EXPMST_USB_CTRL2, BIT(8));
+#endif
+
 	return 0;
 }
 

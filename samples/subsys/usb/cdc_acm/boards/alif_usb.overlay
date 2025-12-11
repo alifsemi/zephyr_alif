@@ -1,0 +1,19 @@
+/*
+ * Copyright (c) 2025 Alif Semiconductor.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+ns: &ns {
+	status = "okay";
+};
+
+zephyr_udc0: &usb {
+	status = "okay";
+};
+
+&zephyr_udc0 {
+	cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+		label = "Zephyr USB CDC-ACM";
+	};
+};
