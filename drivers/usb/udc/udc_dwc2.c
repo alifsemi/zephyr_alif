@@ -794,13 +794,11 @@ static int dwc2_handle_evt_setup(const struct device *dev)
 	 */
 	k_event_clear(&priv->xfer_finished, BIT(0) | BIT(16));
 
-	buf = udc_buf_get_all(dev, USB_CONTROL_EP_OUT);
-	if (buf) {
+	while ((buf = udc_buf_get(dev, USB_CONTROL_EP_OUT)) != NULL) {
 		net_buf_unref(buf);
 	}
 
-	buf = udc_buf_get_all(dev, USB_CONTROL_EP_IN);
-	if (buf) {
+	while ((buf = udc_buf_get(dev, USB_CONTROL_EP_IN)) != NULL) {
 		net_buf_unref(buf);
 	}
 
@@ -1626,10 +1624,10 @@ static int udc_dwc2_ep_deactivate(const struct device *dev,
 	dwc2_set_epint(dev, cfg, false);
 
 	if (cfg->addr == USB_CONTROL_EP_OUT) {
-		struct net_buf *buf = udc_buf_get_all(dev, cfg->addr);
+		struct net_buf *buf;
 
 		/* Release the buffer allocated in dwc2_ctrl_feed_dout() */
-		if (buf) {
+		while ((buf = udc_buf_get(dev, cfg->addr)) != NULL) {
 			net_buf_unref(buf);
 		}
 	}
@@ -1715,14 +1713,9 @@ static int udc_dwc2_ep_enqueue(const struct device *dev,
 static int udc_dwc2_ep_dequeue(const struct device *dev,
 			       struct udc_ep_config *const cfg)
 {
-	struct net_buf *buf;
-
 	udc_dwc2_ep_disable(dev, cfg, false);
 
-	buf = udc_buf_get_all(dev, cfg->addr);
-	if (buf) {
-		udc_submit_ep_event(dev, buf, -ECONNABORTED);
-	}
+	udc_ep_cancel_queued(dev, cfg);
 
 	udc_ep_set_busy(dev, cfg->addr, false);
 

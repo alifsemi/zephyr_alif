@@ -862,14 +862,9 @@ static int udc_stm32_ep_enqueue(const struct device *dev,
 static int udc_stm32_ep_dequeue(const struct device *dev,
 				struct udc_ep_config *epcfg)
 {
-	struct net_buf *buf;
-
 	udc_stm32_ep_flush(dev, epcfg);
 
-	buf = udc_buf_get_all(dev, epcfg->addr);
-	if (buf) {
-		udc_submit_ep_event(dev, buf, -ECONNABORTED);
-	}
+	udc_ep_cancel_queued(dev, epcfg);
 
 	udc_ep_set_busy(dev, epcfg->addr, false);
 

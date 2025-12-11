@@ -640,7 +640,6 @@ static int udc_smartbond_ep_dequeue(const struct device *dev, struct udc_ep_conf
 {
 	const uint8_t ep = ep_cfg->addr;
 	unsigned int lock_key;
-	struct net_buf *buf;
 
 	LOG_INF("ep 0x%02x dequeue all", ep);
 
@@ -648,10 +647,7 @@ static int udc_smartbond_ep_dequeue(const struct device *dev, struct udc_ep_conf
 
 	udc_smartbond_ep_abort(dev, ep_cfg);
 
-	buf = udc_buf_get_all(dev, ep);
-	if (buf) {
-		udc_submit_ep_event(dev, buf, -ECONNABORTED);
-	}
+	udc_ep_cancel_queued(dev, ep_cfg);
 
 	udc_ep_set_busy(dev, ep, false);
 
@@ -1166,12 +1162,10 @@ static void empty_ep0_queues(const struct device *dev)
 {
 	struct net_buf *buf;
 
-	buf = udc_buf_get_all(dev, USB_CONTROL_EP_OUT);
-	if (buf) {
+	while ((buf = udc_buf_get(dev, USB_CONTROL_EP_OUT)) != NULL) {
 		net_buf_unref(buf);
 	}
-	buf = udc_buf_get_all(dev, USB_CONTROL_EP_IN);
-	if (buf) {
+	while ((buf = udc_buf_get(dev, USB_CONTROL_EP_IN)) != NULL) {
 		net_buf_unref(buf);
 	}
 }

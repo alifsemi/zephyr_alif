@@ -826,22 +826,10 @@ static int uac2_request(struct usbd_class_data *const c_data, struct net_buf *bu
 	if (is_feedback) {
 		ctx->fb_queued &= ~BIT(as_idx);
 	} else if (USB_EP_DIR_IS_OUT(ep)) {
-		struct net_buf *frag = buf;
-
-		/*
-		 * Each fragment represents a separately queued OUT request.
-		 */
-		while (frag != NULL) {
-			struct net_buf *next = frag->frags;
-
-			atomic_dec(&ctx->out_queued[as_idx]);
-			ctx->ops->data_recv_cb(dev, terminal,
-					       frag->__buf, frag->len,
-					       ctx->user_data);
-			frag = next;
-		}
-	} else if (!atomic_test_and_clear_bit(&ctx->as_queued, as_idx) ||
-		   buf->frags) {
+		atomic_dec(&ctx->out_queued[as_idx]);
+		ctx->ops->data_recv_cb(dev, terminal, buf->__buf, buf->len,
+				       ctx->user_data);
+	} else if (!atomic_test_and_clear_bit(&ctx->as_queued, as_idx)) {
 		atomic_clear_bit(&ctx->as_double, as_idx);
 	}
 

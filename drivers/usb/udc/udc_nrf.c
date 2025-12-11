@@ -188,15 +188,8 @@ static void udc_event_xfer_in(const struct device *dev,
 
 	case NRF_USBD_COMMON_EP_ABORTED:
 		LOG_WRN("aborted IN ep 0x%02x", ep);
-		buf = udc_buf_get_all(dev, ep);
-
-		if (buf == NULL) {
-			LOG_DBG("ep 0x%02x queue is empty", ep);
-			return;
-		}
-
 		udc_ep_set_busy(dev, ep, false);
-		udc_submit_ep_event(dev, buf, -ECONNABORTED);
+		udc_ep_cancel_queued(dev, udc_get_ep_cfg(dev, ep));
 		break;
 
 	default:
@@ -608,19 +601,11 @@ static int udc_nrf_ep_dequeue(const struct device *dev,
 
 	nrf_usbd_common_ep_abort(cfg->addr);
 	if (USB_EP_DIR_IS_OUT(cfg->addr) || !busy) {
-		struct net_buf *buf;
-
 		/*
 		 * HAL driver does not generate event for an OUT endpoint
 		 * or when IN endpoint is not busy.
 		 */
-		buf = udc_buf_get_all(dev, cfg->addr);
-		if (buf) {
-			udc_submit_ep_event(dev, buf, -ECONNABORTED);
-		} else {
-			LOG_INF("ep 0x%02x queue is empty", cfg->addr);
-		}
-
+		udc_ep_cancel_queued(dev, cfg);
 	}
 
 	udc_ep_set_busy(dev, cfg->addr, false);

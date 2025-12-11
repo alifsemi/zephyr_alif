@@ -2679,10 +2679,7 @@ static int udc_dwc3_ep_dequeue(const struct device *dev, struct udc_ep_config *e
 			udc_submit_ep_event(dev, buf, -ECONNABORTED);
 		}
 	} else {
-		buf = udc_buf_get_all(dev, epcfg->addr);
-		if (buf != NULL) {
-			udc_submit_ep_event(dev, buf, -ECONNABORTED);
-		}
+		udc_ep_cancel_queued(dev, epcfg);
 	}
 
 	udc_ep_set_busy(dev, epcfg->addr, false);
@@ -2733,13 +2730,11 @@ static void udc_dwc3_drop_control_transfers(const struct device *dev)
 {
 	struct net_buf *buf;
 
-	buf = udc_buf_get_all(dev, USB_CONTROL_EP_OUT);
-	if (buf != NULL) {
+	while ((buf = udc_buf_get(dev, USB_CONTROL_EP_OUT)) != NULL) {
 		net_buf_unref(buf);
 	}
 
-	buf = udc_buf_get_all(dev, USB_CONTROL_EP_IN);
-	if (buf != NULL) {
+	while ((buf = udc_buf_get(dev, USB_CONTROL_EP_IN)) != NULL) {
 		net_buf_unref(buf);
 	}
 }

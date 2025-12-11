@@ -493,7 +493,6 @@ static int it82xx2_ep_dequeue(const struct device *dev, struct udc_ep_config *co
 	const struct usb_it82xx2_config *config = dev->config;
 	struct usb_it82xx2_regs *const usb_regs = config->base;
 	struct it82xx2_usb_ep_fifo_regs *ff_regs = usb_regs->fifo_regs;
-	struct net_buf *buf;
 	unsigned int lock_key;
 	uint8_t fifo_idx;
 
@@ -506,10 +505,7 @@ static int it82xx2_ep_dequeue(const struct device *dev, struct udc_ep_config *co
 	}
 	irq_unlock(lock_key);
 
-	buf = udc_buf_get_all(dev, cfg->addr);
-	if (buf) {
-		udc_submit_ep_event(dev, buf, -ECONNABORTED);
-	}
+	udc_ep_cancel_queued(dev, cfg);
 
 	udc_ep_set_busy(dev, cfg->addr, false);
 

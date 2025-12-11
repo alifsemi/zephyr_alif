@@ -94,21 +94,6 @@ struct net_buf *udc_buf_get(const struct device *dev,
 			    const uint8_t ep);
 
 /**
- * @brief Get all UDC request from endpoint FIFO.
- *
- * Get all UDC request from endpoint FIFO as single-linked list.
- * This function removes all request from endpoint FIFO and
- * is typically used to dequeue endpoint FIFO.
- *
- * @param[in] dev    Pointer to device struct of the driver instance
- * @param[in] ep     Endpoint address
- *
- * @return pointer to UDC request or NULL on error.
- */
-struct net_buf *udc_buf_get_all(const struct device *dev,
-				const uint8_t ep);
-
-/**
  * @brief Peek request at the head of endpoint FIFO.
  *
  * Return request from the head of endpoint FIFO without removing.
@@ -240,6 +225,19 @@ bool udc_ep_buf_has_zlp(const struct net_buf *const buf);
  * @param[in] buf    Pointer to UDC request buffer
  */
 void udc_ep_buf_clear_zlp(const struct net_buf *const buf);
+
+/**
+ * @brief Cancel all queued UDC requests
+ *
+ * UDC driver must ensure that driver will not access any of queued endpoint
+ * buffers before calling this funcition.
+ *
+ * Remove all queued requests from endpoint FIFO and submit them to USB stack.
+ *
+ * @param[in] dev Pointer to device struct of the driver instance
+ * @param[in] cfg Pointer to endpoint configuration
+ */
+void udc_ep_cancel_queued(const struct device *dev, struct udc_ep_config *const cfg);
 
 /**
  * @brief Locking function for the drivers.
