@@ -4,9 +4,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-name: alif-dk
+name: alif-ak-dk
 append:
-  EXTRA_CONF_FILE: alif-dk.conf
+  EXTRA_CONF_FILE: alif-ak-dk.conf
 
 boards:
   /alif_(b1|e1c)_dk/.*/rtss_he/:
@@ -17,6 +17,6 @@ boards:
     append:
       EXTRA_DTC_OVERLAY_FILE: alif_e3_e7_dk.overlay
 
-  /alif_(e4|e8)_dk/.*/rtss_(hp|he)/:
+  /alif_(e4|e8)_(ak|dk)/.*/rtss_(hp|he)/:
     append:
-      EXTRA_DTC_OVERLAY_FILE: alif_e4_e8_dk.overlay
+      EXTRA_DTC_OVERLAY_FILE: alif_e4_e8_ak_dk.overlay
