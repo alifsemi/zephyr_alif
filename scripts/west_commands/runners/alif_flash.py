@@ -406,19 +406,31 @@ class AlifImageBinaryRunner(ZephyrBinaryRunner):
         """
         Ensure that required tool exists under base_dir.
 
-        Tools are distributed in two forms: prebuilt binary or Python script.
-        Alif_flash falls back in that order.
+        The tool can be provided as:
+        - native executable (tool_name)
+        - Python fallback script (<base_name>.py)
+
+        Platform-specific executable resolution is handled in CTOR default values by calling _get_alif_tool_defaults
         """
-        base_path = os.path.join(base_dir, tool_name)
-        py_path = base_path + ".py"
+        base_name = os.path.splitext(os.path.basename(tool_name))[0]
 
-        if os.path.exists(base_path):
-            return tool_name
+        candidates = [
+            os.path.join(base_dir, tool_name),
+            os.path.join(base_dir, base_name + ".py"),
+        ]
 
-        if os.path.exists(py_path):
-            self.logger.info(f"Using Python fallback for tool: {tool_name}.py")
-            return tool_name + ".py"
+        for path in candidates:
+            if os.path.exists(path):
+                chosen = os.path.basename(path)
+                self.logger.info(f"Using tool: {chosen}")
+                return chosen
+
+        tried = ", ".join(os.path.basename(p) for p in candidates)
+
+        self.logger.error(
+            f"Required tool not found in '{base_dir}'. Tried: {tried}"
+        )
 
         raise FileNotFoundError(
-            f"Required tool not found in {base_dir}: '{tool_name}' or '{tool_name}.py'"
+            f"Required tool not found in '{base_dir}'. Tried: {tried}"
         )
