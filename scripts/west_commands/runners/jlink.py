@@ -26,39 +26,52 @@ try:
 except ImportError:
     MISSING_REQUIREMENTS = True
 
-if sys.platform == 'win32':
-    # JLink.exe can collide with the JDK executable of the same name
-    # Look in the usual locations before falling back to $PATH
-    for root in [os.environ["ProgramFiles"], os.environ["ProgramFiles(x86)"], str(Path.home())]:  # noqa SIM112
-        # SEGGER folder can contain a single "JLink" folder
-        _direct = Path(root) / "SEGGER" / "JLink" / "JLink.exe"
-        if _direct.exists():
-            DEFAULT_JLINK_EXE = str(_direct)
-            del _direct
-        else:
-            # SEGGER folder can contain multiple versions such as:
-            #   JLink_V796b
-            #   JLink_V796t
-            #   JLink_V798c
-            # Find the latest version
-            _versions = glob.glob(str(Path(root) / "SEGGER" / "JLink_V*"))
-            if len(_versions) == 0:
-                continue
-            _expected_jlink = Path(_versions[-1]) / "JLink.exe"
-            if not _expected_jlink.exists():
-                continue
-            DEFAULT_JLINK_EXE = str(_expected_jlink)
-            # Cleanup variables
-            del _versions
-            del _expected_jlink
-        break
-    else:
-        # Not found in the normal locations, hope that $PATH is correct
-        DEFAULT_JLINK_EXE = "JLink.exe"
-        DEFAULT_JLINK_GDB_SERVER = "JLinkGDBServerCL.exe"
+
+if sys.platform.startswith(("win", "msys", "cygwin")):
+    # Windows defaults
+    DEFAULT_JLINK_EXE = "JLink.exe"
+    DEFAULT_JLINK_GDB_SERVER = "JLinkGDBServerCL.exe"
+
+    search_roots = [
+        os.environ.get("ProgramFiles"),
+        os.environ.get("ProgramFiles(x86)"),
+        str(Path.home()),
+    ]
+
+    found = False
+
+    for root in filter(None, search_roots):
+        segger_root = Path(root) / "SEGGER"
+
+        # --- Single install ---
+        direct_dir = segger_root / "JLink"
+        jlink = direct_dir / "JLink.exe"
+        gdb   = direct_dir / "JLinkGDBServerCL.exe"
+
+        if jlink.is_file() and gdb.is_file():
+            DEFAULT_JLINK_EXE = str(jlink)
+            DEFAULT_JLINK_GDB_SERVER = str(gdb)
+            found = True
+            break
+
+        # --- Versioned installs ---
+        for vdir in sorted(segger_root.glob("JLink_V*"), reverse=True):
+            jlink = vdir / "JLink.exe"
+            gdb   = vdir / "JLinkGDBServerCL.exe"
+
+            if jlink.is_file() and gdb.is_file():
+                DEFAULT_JLINK_EXE = str(jlink)
+                DEFAULT_JLINK_GDB_SERVER = str(gdb)
+                found = True
+                break
+
+        if found:
+            break
+
 else:
     DEFAULT_JLINK_GDB_SERVER = "JLinkGDBServer"
     DEFAULT_JLINK_EXE = "JLinkExe"
+
 DEFAULT_JLINK_GDB_PORT = 2331
 DEFAULT_JLINK_RTT_PORT = 19021
 
