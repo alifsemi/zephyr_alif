@@ -20,16 +20,6 @@ properties:
   clock-names:
     required: true
 
-  sensor:
-    required: true
-    type: phandle
-    description: phandle of connected sensor device
-
-  csi-bus-if:
-    required: false
-    type: phandle
-    description: phandle to connected MIPI CSI-2 bus device.
-
   lp-cam:
     type: boolean
     description: Signifies if the current CPI IP is LPCPI or normal CPI.
@@ -110,6 +100,12 @@ properties:
     type: boolean
     description: Enable MIPI-CSI halt function when FIFO is almost full.
 
+  cpi-interface:
+    type: string
+    description: Specifies the interface that CPI has. The interface can be either Serial or parallel.
+    default: "serial"
+    enum: ["serial", "parallel"]
+
 child-binding:
   child-binding:
     child-binding:
@@ -118,6 +114,8 @@ child-binding:
         reg:
           type: int
           enum:
-            - 0 # CSI-2/Camera EP
+            - 0 # Camera/CSI-2 EP
             - 1 # Memory dump EP
             - 2 # ISP EP
+          description: Use only one of CSI-2 or Camera EP at a time for each device.
+            Only one of these is supported at a time by the CPI interface.

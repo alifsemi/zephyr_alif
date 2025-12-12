@@ -1,0 +1,31 @@
+# Copyright (C) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: GPIO controlled SPDT switch based I2C mux.
+
+compatible: "gpio-i2c-mux"
+
+include: base.yaml
+
+properties:
+  "#address-cells":
+    required: true
+    const: 1
+  "#size-cells":
+    required: true
+    const: 0
+
+  ctrl-gpios:
+    type: phandle-array
+    required: true
+    description: |
+      The GPIO used to control the I2C Multiplexer.
+
+  i2c-inst:
+    type: phandle
+    required: true
+    description: I2C controller node to send commands through.
+
+child-binding:
+  compatible: "gpio-i2c-mux-channel"
+  include: [i2c-controller.yaml]

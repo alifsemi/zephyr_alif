@@ -16,6 +16,7 @@ extern "C" {
 #endif
 
 #define VIDEO_CID_ALIF_CSI_DPHY_FREQ         (VIDEO_CID_PRIVATE_BASE + 0)
+#define VIDEO_CID_ALIF_CSI_CURR_CAM          (VIDEO_CID_PRIVATE_BASE + 1)
 #define VIDEO_PIX_FMT_RGB888_PLANAR_PRIVATE  (VIDEO_FOURCC('P', 'R', 'G', 'B'))
 
 enum csi2_data_type {

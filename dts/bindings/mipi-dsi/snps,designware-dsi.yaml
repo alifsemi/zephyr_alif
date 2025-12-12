@@ -17,8 +17,9 @@ properties:
     description: Instance of CDC200 peripheral
 
   phy-if:
-    type: phandle
+    type: phandle-array
     required: true
+    specifier-space: dphy
     description:
       Handle to the PHY interface.
 
