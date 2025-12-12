@@ -385,7 +385,16 @@ class JLinkBinaryRunner(ZephyrBinaryRunner):
             if not self.gdb_host:
                 self.require(self.gdbserver)
                 self.print_gdbserver_message()
-                self.run_server_and_client(server_cmd, client_cmd)
+                server_proc = self.popen_ignore_int(server_cmd, **kwargs)
+                try:
+                    if sys.platform.startswith(("win", "msys", "cygwin")):
+                        self.logger.debug("Delaying GDB client start to avoid J-Link startup race")
+                        time.sleep(2.0)
+                    self.run_client(client_cmd, **kwargs)
+                finally:
+                    server_proc.terminate()
+                    server_proc.wait()
+
             else:
                 self.run_client(client_cmd)
 
