@@ -108,23 +108,25 @@ static int soc_init(void)
 	}
 #endif
 
-	if (IS_ENABLED(CONFIG_SPI_DW)) {
-		/*
-		 * Setting expansion master0 SPI control register values
-		 * 0xf at 8-11 bit is setting all 4 SPI instances as master
-		 * bit 0-3; ss_in_sel; 0 - from io pad; 1 - from ssi_in_val
-		 * bit 8-11; ss_in_val; when ss_in_sel=1, feed ss_in_val to SSI,
-		 * each bit controls one SSI instance.
-		 * For setting an spi instance as slave, put 0 in the corresponding
-		 * bit position of both 8-11 and 0-3 bit fields.
-		 * For example if we want to set SPI1 as master and
-		 * remaining instances as slave, set the 1st bit for ss_in_sel, which will
-		 * make ss_in_val to feed to SSI, and set the corresponding ss_in_val bit.
-		 * here for SPI1 as master set the 9th bit. So the value to feed SPI1 as
-		 * master and remaining as slave is 0x0202.
-		 */
-		sys_write32(0x0202, EXPSLV_SSI_CTRL);
+#if IS_ENABLED(CONFIG_SPI_DW) /* SPI */
+	/* SPI: Enable Master Mode and SS Value */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi0), okay) && !DT_PROP(DT_NODELABEL(spi0), serial_target)
+	sys_set_bits(EXPSLV_SSI_CTRL, BIT(0) | BIT(8));
+#endif /* spi0 */
 
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi1), okay) && !DT_PROP(DT_NODELABEL(spi1), serial_target)
+	sys_set_bits(EXPSLV_SSI_CTRL, BIT(1) | BIT(9));
+#endif /* spi1 */
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi2), okay) && !DT_PROP(DT_NODELABEL(spi2), serial_target)
+	sys_set_bits(EXPSLV_SSI_CTRL, BIT(2) | BIT(10));
+#endif /* spi2 */
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi3), okay) && !DT_PROP(DT_NODELABEL(spi3), serial_target)
+	sys_set_bits(EXPSLV_SSI_CTRL, BIT(3) | BIT(11));
+#endif /* spi3 */
+
+	/* LP-SPI */
 #if (DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(spi4), okay))
 		/*Clock : LP-SPI*/
 		sys_set_bits(M55HE_CFG_HE_CLK_ENA, BIT(16));
@@ -139,7 +141,8 @@ static int soc_init(void)
 #endif /* (DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(spi4),
 	* okay))
 	*/
-	}
+
+#endif /* defined(CONFIG_SPI_DW) */
 
 	/* Enable DMA */
 #if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma0), arm_dma_pl330, okay) /* dma0 */
