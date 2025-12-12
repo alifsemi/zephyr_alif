@@ -66,7 +66,7 @@ static int hwsem_trylock(const struct device *d, const uint32_t id)
 
 	if ((reg_status->lock_r == data->id) && reg_status->unlock_r) {
 		/* HWSEM is already taken */
-		LOG_INF("%s: Already locked HWSEM is locked again\n",
+		LOG_WRN("%s: Already locked HWSEM is locked again\n",
 			 __func__);
 		reg_status->lock_r = data->id;
 		return 0;
@@ -77,7 +77,7 @@ static int hwsem_trylock(const struct device *d, const uint32_t id)
 		while (count) {
 			if (data->flag) {
 				/* HWSEM is locked */
-				LOG_INF("%s: HWSEM locked!\n", __func__);
+				LOG_DBG("%s: HWSEM locked!\n", __func__);
 				break;
 			}
 			--count;
@@ -85,7 +85,7 @@ static int hwsem_trylock(const struct device *d, const uint32_t id)
 
 		if (!count) {
 			irq_disable(drv_cfg->irq_num);
-			LOG_INF("%s: Timeout!\n", __func__);
+			LOG_WRN("%s: Timeout!\n", __func__);
 			return -EBUSY;
 		}
 
@@ -116,7 +116,7 @@ static int hwsem_unlock(const struct device *d, const uint32_t id)
 			irq_disable(drv_cfg->irq_num);
 			compiler_barrier();
 		}
-		LOG_INF("%s: HWSEM unlocked!\n", __func__);
+		LOG_DBG("%s: HWSEM unlocked!\n", __func__);
 		reg_status->unlock_r = data->id;
 		return 0;
 	}
@@ -140,7 +140,7 @@ static int hwsem_lock(const struct device *d, const uint32_t id)
 	/* HWSEM is already locked */
 	if ((reg_status->lock_r == data->id) && reg_status->unlock_r) {
 		/* HWSEM is already taken */
-		LOG_INF("%s: Already locked HWSEM is locked again\n",
+		LOG_WRN("%s: Already locked HWSEM is locked again\n",
 			__func__);
 		reg_status->lock_r = data->id;
 		return 0;
@@ -155,7 +155,7 @@ static int hwsem_lock(const struct device *d, const uint32_t id)
 				irq_enable(drv_cfg->irq_num);
 			}
 		}
-		LOG_INF("%s: HWSEM locked!\n", __func__);
+		LOG_DBG("%s: HWSEM locked!\n", __func__);
 		return 0;
 	}
 }
