@@ -51,9 +51,12 @@ class AlifImageBinaryRunner(ZephyrBinaryRunner):
         # Load J-Link defaults (raises if unavailable)
         default_jlink_exe, default_jlink_gdb_port, default_jlink_gdb_server, default_jlink_rtt_port = self._get_jlink_defaults()
 
+        # Load ALIF tool defaults
+        default_gen_toc, default_write_toc = self._get_alif_tool_defaults()
+
         self.com_port = com_port or ''
-        self.gen_toc = toc_create or 'app-gen-toc'
-        self.write_toc = toc_write or 'app-write-mram'
+        self.gen_toc = toc_create or default_gen_toc
+        self.write_toc = toc_write or default_write_toc
         self.gdbserver = gdbserver or default_jlink_gdb_server
         self.gdb_host = gdb_host or ''
         self.gdb_port = gdb_port or default_jlink_gdb_port
@@ -378,6 +381,25 @@ class AlifImageBinaryRunner(ZephyrBinaryRunner):
             gdb_port=self.gdb_port,
             tui=len(self.tui_arg) > 0,
             tool_opt=self.tool_opt,
+        )
+
+    @staticmethod
+    def _get_alif_tool_defaults():
+        """
+        Return default ALIF SE tool names.
+
+        Platform-specific executable suffix handling is done here,
+        similar to J-Link defaults.
+        """
+        if sys.platform.startswith(("win", "msys", "cygwin")):
+            return (
+                "app-gen-toc.exe",
+                "app-write-mram.exe",
+            )
+
+        return (
+            "app-gen-toc",
+            "app-write-mram",
         )
 
     def _require_tool(self, tool_name: str, base_dir: str) -> str:
