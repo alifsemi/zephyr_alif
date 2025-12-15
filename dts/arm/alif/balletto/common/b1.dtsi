@@ -137,36 +137,36 @@
 	};
 
 	peripheral@40000000 {
-		#address-cells = < 0x1 >;
-		#size-cells = < 0x1 >;
-		ranges = < 0x0 0x40000000 0x2000000 >;
+		#address-cells = <0x1>;
+		#size-cells = <0x1>;
+		ranges = <0x0 0x40000000 0x2000000>;
 
 		seservice0r: mhu@40040000 {
 			compatible = "arm,mhuv2";
-			reg = < 0x40040000 0x1000 >;
-			interrupts = < 37 ALIF_DEFAULT_IRQ_PRIORITY >;
+			reg = <0x40040000 0x1000>;
+			interrupts = <37 ALIF_DEFAULT_IRQ_PRIORITY>;
 			interrupt-names = "rx";
 		};
 
 		seservice0s: mhu@40050000 {
 			compatible = "arm,mhuv2";
-			reg = < 0x40050000 0x1000 >;
-			interrupts = < 38 ALIF_DEFAULT_IRQ_PRIORITY >;
+			reg = <0x40050000 0x1000>;
+			interrupts = <38 ALIF_DEFAULT_IRQ_PRIORITY>;
 			interrupt-names = "tx";
 		};
 
 		seservice1r: mhu@40060000 {
 			compatible = "arm,mhuv2";
-			reg = < 0x40060000 0x1000 >;
-			interrupts = < 39 ALIF_DEFAULT_IRQ_PRIORITY >;
+			reg = <0x40060000 0x1000>;
+			interrupts = <39 ALIF_DEFAULT_IRQ_PRIORITY>;
 			interrupt-names = "rx";
 			status = "disabled";
 		};
 
 		seservice1s: mhu@40070000 {
 			compatible = "arm,mhuv2";
-			reg = < 0x40070000 0x1000 >;
-			interrupts = < 40 ALIF_DEFAULT_IRQ_PRIORITY >;
+			reg = <0x40070000 0x1000>;
+			interrupts = <40 ALIF_DEFAULT_IRQ_PRIORITY>;
 			interrupt-names = "tx";
 			status = "disabled";
 		};
@@ -307,7 +307,7 @@
 			     <184 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <185 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <186 ALIF_DEFAULT_IRQ_PRIORITY>;
-		pinctrl-0 = < &pinctrl_gpio0 >;
+		pinctrl-0 = <&pinctrl_gpio0>;
 		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
@@ -326,7 +326,7 @@
 			     <192 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <193 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <194 ALIF_DEFAULT_IRQ_PRIORITY>;
-		pinctrl-0 = < &pinctrl_gpio1 >;
+		pinctrl-0 = <&pinctrl_gpio1>;
 		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
@@ -345,7 +345,7 @@
 			     <200 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <201 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <202 ALIF_DEFAULT_IRQ_PRIORITY>;
-		pinctrl-0 = < &pinctrl_gpio2 >;
+		pinctrl-0 = <&pinctrl_gpio2>;
 		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
@@ -364,7 +364,7 @@
 			     <208 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <209 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <210 ALIF_DEFAULT_IRQ_PRIORITY>;
-		pinctrl-0 = < &pinctrl_gpio3 >;
+		pinctrl-0 = <&pinctrl_gpio3>;
 		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
@@ -383,7 +383,7 @@
 			     <216 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <217 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <218 ALIF_DEFAULT_IRQ_PRIORITY>;
-		pinctrl-0 = < &pinctrl_gpio4 >;
+		pinctrl-0 = <&pinctrl_gpio4>;
 		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
@@ -402,7 +402,7 @@
 			     <224 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <225 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <226 ALIF_DEFAULT_IRQ_PRIORITY>;
-		pinctrl-0 = < &pinctrl_gpio5 >;
+		pinctrl-0 = <&pinctrl_gpio5>;
 		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
@@ -421,7 +421,7 @@
 			     <232 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <233 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <234 ALIF_DEFAULT_IRQ_PRIORITY>;
-		pinctrl-0 = < &pinctrl_gpio6 >;
+		pinctrl-0 = <&pinctrl_gpio6>;
 		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
@@ -440,7 +440,7 @@
 			     <240 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <241 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <242 ALIF_DEFAULT_IRQ_PRIORITY>;
-		pinctrl-0 = < &pinctrl_gpio7 >;
+		pinctrl-0 = <&pinctrl_gpio7>;
 		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
@@ -459,7 +459,7 @@
 			     <248 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <249 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <250 ALIF_DEFAULT_IRQ_PRIORITY>;
-		pinctrl-0 = < &pinctrl_gpio8 >;
+		pinctrl-0 = <&pinctrl_gpio8>;
 		pinctrl-names = "default";
 		gpio-controller;
 		#gpio-cells = <2>;
@@ -724,7 +724,7 @@
 		compatible = "snps,designware-spi";
 		#address-cells = <1>;
 		#size-cells = <0>;
-		pinctrl-0 = < &pinctrl_spi0 >;
+		pinctrl-0 = <&pinctrl_spi0>;
 		pinctrl-names = "default";
 		reg = <0x48103000 0x1000>;
 		interrupt-parent = <&nvic>;
@@ -741,7 +741,7 @@
 		compatible = "snps,designware-spi";
 		#address-cells = <1>;
 		#size-cells = <0>;
-		pinctrl-0 = < &pinctrl_spi1 >;
+		pinctrl-0 = <&pinctrl_spi1>;
 		pinctrl-names = "default";
 		reg = <0x48104000 0x1000>;
 		interrupt-parent = <&nvic>;
@@ -758,7 +758,7 @@
 		compatible = "snps,designware-spi";
 		#address-cells = <1>;
 		#size-cells = <0>;
-		pinctrl-0 = < &pinctrl_spi2 >;
+		pinctrl-0 = <&pinctrl_spi2>;
 		pinctrl-names = "default";
 		reg = <0x48105000 0x1000>;
 		interrupt-parent = <&nvic>;
@@ -774,7 +774,7 @@
 		compatible = "snps,designware-spi";
 		#address-cells = <1>;
 		#size-cells = <0>;
-		pinctrl-0 = < &pinctrl_lpspi0 >;
+		pinctrl-0 = <&pinctrl_lpspi0>;
 		pinctrl-names = "default";
 		reg = <0x43000000 0x1000>;
 		interrupt-parent = <&nvic>;
@@ -783,6 +783,22 @@
 		fifo-depth = <16>;
 		max-xfer-size = <32>;
 		rx-delay = <4>;
+		status = "disabled";
+	};
+
+	lpspi1: lpspi1@43004000 { /* LPSPI1 Slave mode only. */
+		compatible = "snps,designware-spi";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-0 = <&pinctrl_lpspi0>;
+		pinctrl-names = "default";
+		reg = <0x43004000 0x1000>;
+		interrupt-parent = <&nvic>;
+		interrupts = <46 ALIF_DEFAULT_IRQ_PRIORITY>;
+		clocks = <&syst_core>;
+		fifo-depth = <16>;
+		max-xfer-size = <32>;
+		serial-target;
 		status = "disabled";
 	};
 
@@ -833,7 +849,7 @@
 				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <0>;
 		clocks = <&clockctrl ALIF_UTIMER_CLK>;
-		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
+		counter-direction = <ALIF_UTIMER_COUNTER_DIRECTION_UP>;
 		status = "disabled";
 
 		counter {
@@ -874,7 +890,7 @@
 				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <1>;
 		clocks = <&clockctrl ALIF_UTIMER_CLK>;
-		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
+		counter-direction = <ALIF_UTIMER_COUNTER_DIRECTION_UP>;
 		status = "disabled";
 
 		counter {
@@ -915,7 +931,7 @@
 				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <2>;
 		clocks = <&clockctrl ALIF_UTIMER_CLK>;
-		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
+		counter-direction = <ALIF_UTIMER_COUNTER_DIRECTION_UP>;
 		status = "disabled";
 
 		counter {
@@ -956,7 +972,7 @@
 				"comp_b_buf2", "underflow", "overflow";
 		timer-id = <3>;
 		clocks = <&clockctrl ALIF_UTIMER_CLK>;
-		counter-direction = < ALIF_UTIMER_COUNTER_DIRECTION_UP >;
+		counter-direction = <ALIF_UTIMER_COUNTER_DIRECTION_UP>;
 		status = "disabled";
 
 		counter {
@@ -1037,7 +1053,7 @@
 				  "bus_error_1",
 				  "reg_reload_0",
 				  "reg_reload_1";
-		pinctrl-0 = < &pinctrl_cdc200 >;
+		pinctrl-0 = <&pinctrl_cdc200>;
 		pinctrl-names = "default";
 
 		clocks = <&clockctrl ALIF_DPI_CLK>, <&clockctrl ALIF_CDC200_PIX_SYST_ACLK>;
