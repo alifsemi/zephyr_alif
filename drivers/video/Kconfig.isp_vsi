@@ -1,0 +1,9 @@
+# Alif ISP controller driver configuration options
+
+# Copyright (C) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config VIDEO_ISP_VSI
+	bool "ISP controller driver for Verisilicon ISP Pico"
+	default y
+	depends on DT_HAS_VSI_ISP_PICO_ENABLED
