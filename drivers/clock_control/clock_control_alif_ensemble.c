@@ -65,8 +65,11 @@ struct clock_control_alif_config {
 #define ALIF_CLOCK_S32K_CLK_FREQ OSC_CLOCK_SRC_FREQ(lfrc)
 #endif
 
+#if defined(CONFIG_ENSEMBLE_GEN2)
+/* CLK_ENA register config */
+#define ALIF_CLK_ENA_CLK76P8M_BIT 24U
+#else
 /* EXPMST0 control register config */
-#if !defined(CONFIG_ENSEMBLE_GEN2)
 #define ALIF_EXPMST0_CTRL_IPCLK_FORCE_BIT BIT(31U)
 #define ALIF_EXPMST0_CTRL_PCLK_FORCE_BIT  BIT(30U)
 #endif
@@ -283,7 +286,7 @@ static int alif_clock_control_on(const struct device *dev,
 			clock_control_subsys_t sub_system)
 {
 	uint32_t clk_id = (uint32_t) sub_system;
-	uint32_t module_base, reg_addr;
+	uint32_t cgu_module_base, module_base, reg_addr;
 	int32_t ret;
 
 	if (!ALIF_CLOCK_CFG_EN_MASK(clk_id)) {
@@ -297,9 +300,23 @@ static int alif_clock_control_on(const struct device *dev,
 		return ret;
 	}
 
-#if !defined(CONFIG_ENSEMBLE_GEN2)
-	/* Force enable ipclk and pclk as uart requires it */
 	switch (clk_id) {
+#if defined(CONFIG_ENSEMBLE_GEN2)
+	case ALIF_PDM_76M8_CLK:
+	case ALIF_LPPDM_76M8_CLK:
+		ret = alif_get_module_base(dev, ALIF_CGU_MODULE,
+					&cgu_module_base);
+		if (ret) {
+			return ret;
+		}
+		reg_addr = cgu_module_base + ALIF_CLK_ENA_REG;
+
+		/* enable the HFOSCx2 clock */
+		sys_set_bit(reg_addr, ALIF_CLK_ENA_CLK76P8M_BIT);
+		break;
+#else
+	ARG_UNUSED(cgu_module_base);
+	/* Force enable ipclk and pclk as uart requires it */
 	case ALIF_UART0_SYST_PCLK:
 	case ALIF_UART1_SYST_PCLK:
 	case ALIF_UART2_SYST_PCLK:
@@ -314,10 +331,10 @@ static int alif_clock_control_on(const struct device *dev,
 			    ALIF_EXPMST0_CTRL_PCLK_FORCE_BIT),
 			    reg_addr);
 		break;
+#endif
 	default:
 		break;
 	}
-#endif
 
 	reg_addr = module_base + ALIF_CLOCK_CFG_REG(clk_id);
 
