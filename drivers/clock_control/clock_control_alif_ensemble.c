@@ -13,6 +13,7 @@
 LOG_MODULE_REGISTER(alif_clock_control, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 
 struct clock_control_alif_config {
+	uint32_t cgu_base;
 	uint32_t clkctl_per_mst_base;
 	uint32_t clkctl_per_slv_base;
 	uint32_t aon_base;
@@ -227,6 +228,9 @@ static int32_t alif_get_module_base(const struct device *dev, uint32_t module, u
 	switch (module) {
 	case ALIF_DUMMY_MODULE:
 		break;
+	case ALIF_CGU_MODULE:
+		*base = config->cgu_base;
+		break;
 	case ALIF_CLKCTL_PER_MST_MODULE:
 		*base = config->clkctl_per_mst_base;
 		break;
@@ -292,9 +296,6 @@ static int alif_clock_control_on(const struct device *dev,
 	if (ret) {
 		return ret;
 	}
-	reg_addr = module_base + ALIF_CLOCK_CFG_REG(clk_id);
-
-	sys_set_bit(reg_addr, ALIF_CLOCK_CFG_ENABLE(clk_id));
 
 #if !defined(CONFIG_ENSEMBLE_GEN2)
 	/* Force enable ipclk and pclk as uart requires it */
@@ -317,6 +318,11 @@ static int alif_clock_control_on(const struct device *dev,
 		break;
 	}
 #endif
+
+	reg_addr = module_base + ALIF_CLOCK_CFG_REG(clk_id);
+
+	sys_set_bit(reg_addr, ALIF_CLOCK_CFG_ENABLE(clk_id));
+
 	return 0;
 }
 
@@ -486,6 +492,7 @@ static DEVICE_API(clock_control, alif_clock_control_driver_api) = {
 };
 
 static const struct clock_control_alif_config config = {
+	.cgu_base = DT_INST_REG_ADDR_BY_NAME(0, cgu),
 	.clkctl_per_mst_base = DT_INST_REG_ADDR_BY_NAME(0, clkctl_per_mst),
 	.clkctl_per_slv_base = DT_INST_REG_ADDR_BY_NAME(0, clkctl_per_slv),
 	.aon_base = DT_INST_REG_ADDR_BY_NAME(0, aon),

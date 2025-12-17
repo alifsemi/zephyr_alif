@@ -42,20 +42,22 @@
 		status = "disabled";
 	};
 
-	clockctrl: clock-controller@4903f000 {
+	clockctrl: clock-controller@1a602000 {
 		compatible = "alif,clockctrl";
-		reg = <0x4903F000 0xB0
+		reg = <0x1A602000 0x2C
+			0x4903F000 0xB0
 			0x4902F000 0xBC
 			0x1A604000 0x44
 			0x1A609000 0x14
 			0x43007000 0x2C
 			0x400F0000 0x14>;
-		reg-names = "clkctl_per_mst",
-				"clkctl_per_slv",
-				"aon",
-				"vbat",
-				"m55he_cfg",
-				"m55hp_cfg";
+		reg-names = "cgu",
+			    "clkctl_per_mst",
+			    "clkctl_per_slv",
+			    "aon",
+			    "vbat",
+			    "m55he_cfg",
+			    "m55hp_cfg";
 		#clock-cells = <1>;
 		status = "okay";
 	};

@@ -70,12 +70,23 @@
 #define ALIF_CLK(value)  ALIF_CLK_CFG(DUMMY, DUMMY, value, 0U, 0U, 0U, 0U)
 
 /* Clock modules */
-#define ALIF_CLKCTL_PER_MST_MODULE	0x1U
-#define ALIF_CLKCTL_PER_SLV_MODULE	0x2U
-#define ALIF_AON_MODULE			0x3U
-#define ALIF_VBAT_MODULE		0x4U
-#define ALIF_M55HE_CFG_MODULE		0x5U
-#define ALIF_M55HP_CFG_MODULE		0x6U
+#define ALIF_CGU_MODULE			0x1U
+#define ALIF_CLKCTL_PER_MST_MODULE	0x2U
+#define ALIF_CLKCTL_PER_SLV_MODULE	0x3U
+#define ALIF_AON_MODULE			0x4U
+#define ALIF_VBAT_MODULE		0x5U
+#define ALIF_M55HE_CFG_MODULE		0x6U
+#define ALIF_M55HP_CFG_MODULE		0x7U
+
+/* register offset for CGU_CLKCTL module */
+#define ALIF_OSC_CTRL_REG              0x0U
+#define ALIF_PLL_LOCK_CTRL_REG         0x4U
+#define ALIF_PLL_CLK_SEL_REG           0x8U
+#define ALIF_ESCLK_SEL_REG             0x10U
+#define ALIF_CLK_ENA_REG               0x14U
+#define ALIF_CGU_IRQ_REG               0x20U
+#define ALIF_MISC_CLK_CTRL_REG         0x24U
+#define ALIF_SHMEM_CLK_CTRL_REG        0x28U
 
 /* register offset for PER_MST_CLKCTL module */
 #define ALIF_CAMERA_PIXCLK_CTRL_REG    0x0U
