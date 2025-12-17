@@ -661,9 +661,7 @@ static void hci_alif_uart_isr(const struct device *unused, void *user_data)
 	while (uart_irq_update(hci_alif_dev) && uart_irq_is_pending(hci_alif_dev)) {
 		if (uart_irq_tx_ready(hci_alif_dev)) {
 			process_tx();
-		}
-
-		if (uart_irq_rx_ready(hci_alif_dev)) {
+		} else if (uart_irq_rx_ready(hci_alif_dev)) {
 
 			int read = uart_fifo_read(hci_alif_dev, temp_rx_buf, 64);
 
@@ -672,6 +670,8 @@ static void hci_alif_uart_isr(const struct device *unused, void *user_data)
 				ring_buf_put(&hci_ring_buf, temp_rx_buf, read);
 				hci_data_parse();
 			}
+		} else {
+			break;
 		}
 	}
 }
