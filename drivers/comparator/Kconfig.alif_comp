@@ -1,0 +1,16 @@
+# Copyright (C) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config COMPARATOR_ALIF_COMP
+	bool "Alif CMP driver"
+	depends on DT_HAS_ALIF_CMP_ENABLED
+	default y
+	help
+	  Enable driver for Alif CMP
+
+config CMP_INT_STATUS_MASK
+	int
+	default 3 if ENSEMBLE_GEN2
+	default 3 if SOC_SERIES_E1C
+	default 3 if SOC_SERIES_B1
+	default 1
