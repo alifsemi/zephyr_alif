@@ -1422,6 +1422,102 @@
 		status = "disabled";
 	};
 
+	cmp0: cmp0@49023000 {
+		compatible = "alif,cmp";
+		reg = <0x49023000 0x1000>,
+			<0x49023000 0x100>,
+			<0x4902A000 0x100>,
+			<0x4902B000 0x100>;
+		reg-names	 = "cmp_reg", "config_reg","dac6_reg","adc_vref";
+		clocks		 = <&clockctrl ALIF_CMP0_CLK>;
+		pinctrl-0	 = < &pinctrl_cmp0 >;
+		pinctrl-names	 = "default";
+		driver_instance	 = "CMP_INSTANCE_0";
+		filter_taps	 = <3>;
+		prescaler	 = <8>;
+		positive_input	 = "CMP_POS_IN0";
+		negative_input	 = "CMP_NEG_IN3";
+		hysteresis_level = "42mV";
+		interrupts	 = <167 0>;
+		cmp-gpios	 = <&gpio14 7 GPIO_ACTIVE_HIGH>;
+		status = "disabled";
+	};
+
+	cmp1: cmp1@49024000 {
+		compatible = "alif,cmp";
+		reg = <0x49024000 0x1000>,
+			<0x49023000 0x100>,
+			<0x4902A000 0x100>,
+			<0x4902B000 0x100>;
+		reg-names	 = "cmp_reg", "config_reg","dac6_reg","adc_vref";
+		clocks		 = <&clockctrl ALIF_CMP1_CLK>;
+		pinctrl-0	 = < &pinctrl_cmp1 >;
+		pinctrl-names	 = "default";
+		driver_instance	 = "CMP_INSTANCE_1";
+		filter_taps	 = <3>;
+		prescaler	 = <8>;
+		positive_input	 = "CMP_POS_IN0";
+		negative_input	 = "CMP_NEG_IN3";
+		hysteresis_level = "42mV";
+		interrupts	 = <168 0>;
+		cmp-gpios	 = <&gpio14 6 GPIO_ACTIVE_HIGH>;
+		status = "disabled";
+	};
+	cmp2: cmp2@49025000 {
+		compatible = "alif,cmp";
+		reg = <0x49025000 0x1000>,
+			<0x49023000 0x100>,
+			<0x4902A000 0x100>,
+			<0x4902B000 0x100>;
+		reg-names	 = "cmp_reg", "config_reg","dac6_reg","adc_vref";
+		clocks		 = <&clockctrl ALIF_CMP2_CLK>;
+		pinctrl-0	 = < &pinctrl_cmp2 >;
+		pinctrl-names	 = "default";
+		driver_instance	 = "CMP_INSTANCE_2";
+		filter_taps	 = <3>;
+		prescaler	 = <8>;
+		positive_input	 = "CMP_POS_IN0";
+		negative_input	 = "CMP_NEG_IN3";
+		hysteresis_level = "42mV";
+		interrupts	 = <169 0>;
+		cmp-gpios	 = <&gpio14 5 GPIO_ACTIVE_HIGH>;
+		status = "disabled";
+	};
+	cmp3: cmp3@49026000 {
+		compatible = "alif,cmp";
+		reg = <0x49026000 0x1000>,
+			<0x49023000 0x100>,
+			<0x4902A000 0x100>,
+			<0x4902B000 0x100>;
+		reg-names	 = "cmp_reg", "config_reg","dac6_reg","adc_vref";
+		clocks		 = <&clockctrl ALIF_CMP3_CLK>;
+		pinctrl-0	 = < &pinctrl_cmp3 >;
+		pinctrl-names	 = "default";
+		driver_instance	 = "CMP_INSTANCE_3";
+		filter_taps	 = <3>;
+		prescaler	 = <8>;
+		positive_input	 = "CMP_POS_IN0";
+		negative_input	 = "CMP_NEG_IN3";
+		hysteresis_level = "42mV";
+		interrupts	 = <170 0>;
+		cmp-gpios	 = <&gpio14 4 GPIO_ACTIVE_HIGH>;
+		status = "disabled";
+	};
+	lpcmp: lpcmp@1a60a03c {
+		compatible = "alif,cmp";
+		reg = <0x1A60A03C 0x10>,
+			  <0x1A60A03C 0x10>;
+		reg-names = "cmp_reg", "config_reg";
+		pinctrl-0	 = < &pinctrl_lpcmp >;
+		pinctrl-names	 = "default";
+		driver_instance	 = "CMP_INSTANCE_LP";
+		positive_input	 = "CMP_POS_IN0";
+		negative_input	 = "CMP_NEG_IN0";
+		hysteresis_level = "42mV";
+		interrupts	 = <56 0>;
+		status = "disabled";
+	};
+
 	i2c0: i2c0@49010000 {
 		compatible = "snps,designware-i2c";
 		clock-frequency = <I2C_BITRATE_STANDARD>;

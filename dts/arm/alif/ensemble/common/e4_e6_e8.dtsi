@@ -15,6 +15,8 @@
 	reset-gpios = <&gpio14 7 GPIO_ACTIVE_HIGH>;
 };
 
+/delete-node/ &lpcmp;
+
 &{/soc} {
 
 	ethosu1: ethosu85@49042000 {
@@ -172,6 +174,20 @@
 		i3c-scl-hz      = <12500000>;
 		i2c-scl-hz      = <400000>;
 		status          = "disabled";
+	};
+	lpcmp: lpcmp@42003000 {
+		compatible = "alif,cmp";
+		reg = <0x42003000 0x10>,
+			  <0x1A60A03C 0x10>;
+		reg-names = "cmp_reg", "config_reg";
+		pinctrl-0	 = <&pinctrl_lpcmp>;
+		pinctrl-names	 = "default";
+		driver_instance	 = "CMP_INSTANCE_LP";
+		positive_input	 = "CMP_POS_IN0";
+		negative_input	 = "CMP_NEG_IN0";
+		hysteresis_level = "42mV";
+		interrupts	 = <56 0>;
+		status = "disabled";
 	};
 
 };
