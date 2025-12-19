@@ -17,6 +17,16 @@
 
 &{/soc} {
 
+	ethosu0: ethosu55@400e1000 {
+		compatible = "arm,ethos-u";
+		reg = <0x400e1000 0x1000>;
+		interrupts = <55 0>;
+		interrupt-parent = <&nvic>;
+		secure-enable;
+		privilege-enable;
+		status = "disabled";
+	};
+
 	ethosu1: ethosu85@49042000 {
 		compatible = "arm,ethos-u";
 		reg = <0x49042000 0x1000>;
