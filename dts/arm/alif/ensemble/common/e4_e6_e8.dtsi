@@ -15,6 +15,10 @@
 	reset-gpios = <&gpio14 7 GPIO_ACTIVE_HIGH>;
 };
 
+&mipi_dsi {
+	cam-disp-mux-gpios = <&gpio14 2 GPIO_ACTIVE_HIGH>;
+};
+
 /delete-node/ &lpcmp;
 
 &usb {

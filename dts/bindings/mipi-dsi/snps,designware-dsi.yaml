@@ -22,6 +22,12 @@ properties:
     description:
       Handle to the PHY interface.
 
+  cam-disp-mux-gpios:
+    type: phandle-array
+    description: |
+      cam-disp-mux gpio is set to high to enable access to DPHY lanes and
+      clock by MIPI DSI.
+
   eotp-lp-tx-en:
     type: boolean
     description:
