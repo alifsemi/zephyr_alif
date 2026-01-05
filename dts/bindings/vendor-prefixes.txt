@@ -725,6 +725,7 @@ vitesse	Vitesse Semiconductor Corporation
 vivante	Vivante Corporation
 vnd	A stand-in for a real vendor which can be used in examples and tests
 vngiotlab	VNGIoTLab
+vsi	VeriSilicon
 vocore	VoCore Studio
 voipac	Voipac Technologies s.r.o.
 vot	Vision Optical Technology Co., Ltd.
