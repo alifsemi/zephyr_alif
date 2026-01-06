@@ -8,6 +8,7 @@
 
 #include <zephyr/device.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/drivers/clock_control.h>
 
 #include <zephyr/drivers/mipi_dphy/dphy_dw.h>
 
@@ -334,6 +335,14 @@ struct csi2_dw_config {
 
 	const struct device *rx_dphy;
 	uint32_t ipi_mode: 1;
+
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
+	const struct device *clk_dev;
+	clock_control_subsys_t csi_cid;
+	clock_control_subsys_t pix_cid;
+	clock_control_subsys_t rxdphy_cid;
+	clock_control_subsys_t cfg_cid;
+#endif /* DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks) */
 
 	uint32_t irq;
 	void (*irq_config_func)(const struct device *dev);
