@@ -39,8 +39,9 @@
 /* Expansion Slave registers. */
 #define EXPSLV_BASE			0x4902F000
 #define EXPSLV_UART_CTRL		(EXPSLV_BASE + 0x8)
+#define EXPSLV_SSI_CTRL			(EXPSLV_BASE + 0x28)
 #define EXPSLV_ADC_CTRL			(EXPSLV_BASE + 0x30)
-#define EXPSLV_DAC_CTRL                 (EXPSLV_BASE + 0x34)
+#define EXPSLV_DAC_CTRL			(EXPSLV_BASE + 0x34)
 #define EXPSLV_CMP_CTRL			(EXPSLV_BASE + 0x38)
 #define EXPSLV_OSPI_CTRL		(EXPSLV_BASE + 0x3C)
 
