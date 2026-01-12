@@ -11,3 +11,4 @@
 /delete-node/ &uart5;
 /delete-node/ &uart6;
 /delete-node/ &uart7;
+/delete-node/ &ethernet;
