@@ -79,6 +79,7 @@ static int32_t read_status_reg(const struct device *dev, uint8_t command, uint8_
 
 	struct alif_flash_ospi_dev_data *dev_data = dev->data;
 
+	dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_0_BITS;
 	dev_data->trans_conf.ddr_enable = OSPI_DDR_ENABLE;
 	dev_data->trans_conf.wait_cycles = 8;
 
