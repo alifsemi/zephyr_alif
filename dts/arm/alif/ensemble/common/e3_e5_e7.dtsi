@@ -184,7 +184,7 @@
 		interrupt-parent = <&nvic>;
 		interrupts = <97 ALIF_DEFAULT_IRQ_PRIORITY>;
 		aes-reg = <0x83003000 0x100>;
-		bus-speed = <10000000>;
+		bus-speed = <100000000>;
 		clock-frequency = <400000000>;
 		cs-pin = <0>;
 		ddr-drive-edge = <1>;
