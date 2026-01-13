@@ -1,0 +1,6 @@
+board:
+  name: alif_e1c_sk
+  full_name: alif e1c StarterKit
+  vendor: alif
+  socs:
+  - name: 'ae1c1f4051920hh'
