@@ -1236,11 +1236,12 @@
 		interrupt-parent = <&nvic>;
 		interrupts = <96 ALIF_DEFAULT_IRQ_PRIORITY>;
 		aes-reg = <0x83001000 0x100>;
-		bus-speed = <10000000>;
+		bus-speed = <80000000>;
 		clock-frequency = <160000000>;
 		cs-pin = <1>;
 		ddr-drive-edge = <1>;
 		rx-ds-delay = <11>;
+		baud2-delay = <1>;
 		tx-fifo-threshold = <64>;
 		xip-rxds-vl-en;
 		xip-wait-cycles = <15>;
@@ -1254,7 +1255,7 @@
 			num-of-sector = <16384>;
 			page-size = <4096>;
 			sector-size = <4096>;
-			write-block-size = <1>;
+			write-block-size = <2>;
 
 			/* Flash Size 64MB */
 			#address-cells = <1>;
@@ -1264,7 +1265,7 @@
 				compatible = "soc-nv-flash";
 				reg = <0x0 DT_SIZE_M(64)>;
 				erase-block-size = <DT_SIZE_K(4)>;
-				write-block-size = <1>;
+				write-block-size = <2>;
 			};
 		};
 	};

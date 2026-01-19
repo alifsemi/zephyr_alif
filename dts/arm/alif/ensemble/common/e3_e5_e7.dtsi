@@ -222,7 +222,7 @@
 			num-of-sector = <16384>;
 			page-size = <4096>;
 			sector-size = <4096>;
-			write-block-size = <1>;
+			write-block-size = <2>;
 
 			/* Flash Size 64MB */
 			#address-cells = <1>;
@@ -232,7 +232,7 @@
 				compatible = "soc-nv-flash";
 				reg = <0x0 DT_SIZE_M(64)>;
 				erase-block-size = <DT_SIZE_K(4)>;
-				write-block-size = <1>;
+				write-block-size = <2>;
 			};
 		};
 	};
