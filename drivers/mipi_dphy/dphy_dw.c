@@ -517,6 +517,11 @@ int dphy_dw_slave_setup(const struct device *dev, struct dphy_csi2_settings *phy
 
 	/* Enable RX-DPHY clock. */
 	if (dphy_id == 0) {
+		if (!config->rxdphy_cid) {
+			LOG_ERR("RX DPHY clock not provided!");
+			return -EINVAL;
+		}
+
 		ret = clock_control_on(config->clk_dev, config->rxdphy_cid);
 		if (ret) {
 			LOG_ERR("Enable RX-DPHY clock source failed! ret - %d", ret);
@@ -805,8 +810,10 @@ static int dphy_dw_init(const struct device *dev)
 			 pllref_clk, clkid),                                                       \
 		 .pllbypass_cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,           \
 			 pllbypass_clk, clkid),                                                    \
-		 .rxdphy_cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,              \
-			 rx_dphy_clk, clkid),                                                      \
+		 .rxdphy_cid = COND_CODE_1(DT_INST_CLOCKS_HAS_NAME(i, rx_dphy_clk),                \
+			 ((clock_control_subsys_t)                                                 \
+			  DT_INST_CLOCKS_CELL_BY_NAME(i, rx_dphy_clk, clkid)),                     \
+			  ((clock_control_subsys_t)0)),                                            \
 		 .txdphy_cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,              \
 			 tx_dphy_clk, clkid),))
 

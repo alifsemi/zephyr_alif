@@ -1162,8 +1162,10 @@
 
 		#dphy-cells = <1>;
 
-		clocks = <&clockctrl ALIF_MIPI_PLLREF_CLK>;
-		clock-names = "pllref-clk";
+		clocks = <&clockctrl ALIF_MIPI_PLLREF_CLK>,
+			 <&clockctrl ALIF_MIPI_BYPASS_CLK>,
+			 <&clockctrl ALIF_MIPI_TXDPHY_CLK>;
+		clock-names = "pllref-clk", "pllbypass-clk", "tx-dphy-clk";
 
 		ref-frequency = <38400000>;
 		cfg-clk-frequency = <25000000>;
