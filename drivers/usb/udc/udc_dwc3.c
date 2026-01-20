@@ -1784,14 +1784,14 @@ void dwc3_data_out_cb(udc_dwc3_driver_t *drv, uint8_t ep_num)
 	}
 }
 
-static int udc_dwc3_lock(const struct device *dev)
+static void udc_dwc3_lock(const struct device *dev)
 {
-	return udc_lock_internal(dev, K_FOREVER);
+	udc_lock_internal(dev, K_FOREVER);
 }
 
-static int  udc_dwc3_unlock(const struct device *dev)
+static void udc_dwc3_unlock(const struct device *dev)
 {
-	return udc_unlock_internal(dev);
+	udc_unlock_internal(dev);
 }
 
 static int udc_dwc3_init(const struct device *dev)
