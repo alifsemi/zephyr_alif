@@ -831,85 +831,68 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 	switch (I2C_SPEED_GET(dw->app_config)) {
 	case I2C_SPEED_STANDARD:
 		/* Following the directions on DW spec page 59, IC_SS_SCL_LCNT
-		 * must have register values larger than IC_FS_SPKLEN + 7
+		 * must have minimum register value of 6 when IC_CLK_FREQ_OPTIMIZATION = 1
 		 */
-		value = I2C_STD_LCNT + rom->lcnt_offset;
-		if (value <= (read_fs_spklen(reg_base) + 7)) {
-			value = read_fs_spklen(reg_base) + 8;
-		}
-
+		value = I2C_ENSURE_MIN_SCL_LCNT(I2C_STD_LCNT + rom->lcnt_offset);
 		dw->lcnt = value;
 
-		/* Following the directions on DW spec page 59, IC_SS_SCL_HCNT
-		 * must have register values larger than IC_FS_SPKLEN + 5
+		/* Following the directions on DW spec page 59, the minimum
+		 * SCL HIGH period should be 5 ic_clk periods
+		 * when IC_CLK_FREQ_OPTIMIZATION = 1.
+		 * SCL High Period = IC_SS_SCL_HCNT + IC_FS_SPKLEN + 3
 		 */
 		value = I2C_STD_HCNT + rom->hcnt_offset;
-		if (value <= (read_fs_spklen(reg_base) + 5)) {
-			value = read_fs_spklen(reg_base) + 6;
-		}
-
+		value = I2C_ENSURE_MIN_SCL_HCNT(value, read_fs_spklen(reg_base));
 		dw->hcnt = value;
 		break;
 	case I2C_SPEED_FAST:
-		/*
-		 * Following the directions on DW spec page 59, IC_FS_SCL_LCNT
-		 * must have register values larger than IC_FS_SPKLEN + 7
+		/* Following the directions on DW spec page 59, IC_FS_SCL_LCNT
+		 * must have minimum register value of 6 when IC_CLK_FREQ_OPTIMIZATION = 1
 		 */
-		value = I2C_FS_LCNT + rom->lcnt_offset;
-		if (value <= (read_fs_spklen(reg_base) + 7)) {
-			value = read_fs_spklen(reg_base) + 8;
-		}
-
+		value = I2C_ENSURE_MIN_SCL_LCNT(I2C_FS_LCNT + rom->lcnt_offset);
 		dw->lcnt = value;
 
-		/*
-		 * Following the directions on DW spec page 59, IC_FS_SCL_HCNT
-		 * must have register values larger than IC_FS_SPKLEN + 5
+		/* Following the directions on DW spec page 59, the minimum
+		 * SCL HIGH period should be 5 ic_clk periods
+		 * when IC_CLK_FREQ_OPTIMIZATION = 1.
+		 * SCL High Period = IC_FS_SCL_HCNT + IC_FS_SPKLEN + 3
 		 */
 		value = I2C_FS_HCNT + rom->hcnt_offset;
-		if (value <= (read_fs_spklen(reg_base) + 5)) {
-			value = read_fs_spklen(reg_base) + 6;
-		}
-
+		value = I2C_ENSURE_MIN_SCL_HCNT(value, read_fs_spklen(reg_base));
 		dw->hcnt = value;
 		break;
 	case I2C_SPEED_FAST_PLUS:
-		/*
-		 * Following the directions on DW spec page 59, IC_FS_SCL_LCNT
-		 * must have register values larger than IC_FS_SPKLEN + 7
+		/* Following the directions on DW spec page 59, IC_FSP_SCL_LCNT
+		 * must have minimum register value of 6 when IC_CLK_FREQ_OPTIMIZATION = 1
 		 */
-		value = I2C_FSP_LCNT + rom->lcnt_offset;
-		if (value <= (read_fs_spklen(reg_base) + 7)) {
-			value = read_fs_spklen(reg_base) + 8;
-		}
-
+		value = I2C_ENSURE_MIN_SCL_LCNT(I2C_FSP_LCNT + rom->lcnt_offset);
 		dw->lcnt = value;
 
-		/*
-		 * Following the directions on DW spec page 59, IC_FS_SCL_HCNT
-		 * must have register values larger than IC_FS_SPKLEN + 5
+		/* Following the directions on DW spec page 59, the minimum
+		 * SCL HIGH period should be 5 ic_clk periods
+		 * when IC_CLK_FREQ_OPTIMIZATION = 1.
+		 * SCL High Period = IC_FS_SCL_HCNT + IC_FS_SPKLEN + 3
 		 */
 		value = I2C_FSP_HCNT + rom->hcnt_offset;
-		if (value <= (read_fs_spklen(reg_base) + 5)) {
-			value = read_fs_spklen(reg_base) + 6;
-		}
-
+		value = I2C_ENSURE_MIN_SCL_HCNT(value, read_fs_spklen(reg_base));
 		dw->hcnt = value;
 		break;
 	case I2C_SPEED_HIGH:
 		if (dw->support_hs_mode) {
-			value = I2C_HS_LCNT + rom->lcnt_offset;
-			if (value <= (read_hs_spklen(reg_base) + 7)) {
-				value = read_hs_spklen(reg_base) + 8;
-			}
-
+			/* Following the directions on DW spec page 59, IC_HS_SCL_LCNT
+			 * must have minimum register value of 6
+			 * when IC_CLK_FREQ_OPTIMIZATION = 1
+			 */
+			value = I2C_ENSURE_MIN_SCL_LCNT(I2C_HS_LCNT + rom->lcnt_offset);
 			dw->lcnt = value;
 
+			/* Following the directions on DW spec page 59, the minimum
+			 * SCL HIGH period should be 5 ic_clk periods
+			 * when IC_CLK_FREQ_OPTIMIZATION = 1.
+			 * SCL High Period = IC_HS_SCL_HCNT + IC_HS_SPKLEN + 3
+			 */
 			value = I2C_HS_HCNT + rom->hcnt_offset;
-			if (value <= (read_hs_spklen(reg_base) + 5)) {
-				value = read_hs_spklen(reg_base) + 6;
-			}
-
+			value = I2C_ENSURE_MIN_SCL_HCNT(value, read_hs_spklen(reg_base));
 			dw->hcnt = value;
 		} else {
 			rc = -EINVAL;
