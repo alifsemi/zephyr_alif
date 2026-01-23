@@ -610,6 +610,7 @@ static int i2c_dw_setup(const struct device *dev, uint16_t slave_address)
 		LOG_DBG("I2C: speed set to STANDARD");
 		write_ss_scl_lcnt(dw->lcnt, reg_base);
 		write_ss_scl_hcnt(dw->hcnt, reg_base);
+		write_fs_spklen(rom->fs_spike_len, reg_base);
 		ic_con.bits.speed = I2C_DW_SPEED_STANDARD;
 
 		break;
@@ -619,6 +620,7 @@ static int i2c_dw_setup(const struct device *dev, uint16_t slave_address)
 		LOG_DBG("I2C: speed set to FAST or FAST_PLUS");
 		write_fs_scl_lcnt(dw->lcnt, reg_base);
 		write_fs_scl_hcnt(dw->hcnt, reg_base);
+		write_fs_spklen(rom->fs_spike_len, reg_base);
 		ic_con.bits.speed = I2C_DW_SPEED_FAST;
 
 		break;
@@ -630,6 +632,7 @@ static int i2c_dw_setup(const struct device *dev, uint16_t slave_address)
 		LOG_DBG("I2C: speed set to HIGH");
 		write_hs_scl_lcnt(dw->lcnt, reg_base);
 		write_hs_scl_hcnt(dw->hcnt, reg_base);
+		write_hs_spklen(rom->hs_spike_len, reg_base);
 		ic_con.bits.speed = I2C_DW_SPEED_HIGH;
 
 		break;
@@ -842,7 +845,7 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		 * SCL High Period = IC_SS_SCL_HCNT + IC_FS_SPKLEN + 3
 		 */
 		value = I2C_STD_HCNT + rom->hcnt_offset;
-		value = I2C_ENSURE_MIN_SCL_HCNT(value, read_fs_spklen(reg_base));
+		value = I2C_ENSURE_MIN_SCL_HCNT(value, rom->fs_spike_len);
 		dw->hcnt = value;
 		break;
 	case I2C_SPEED_FAST:
@@ -858,7 +861,7 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		 * SCL High Period = IC_FS_SCL_HCNT + IC_FS_SPKLEN + 3
 		 */
 		value = I2C_FS_HCNT + rom->hcnt_offset;
-		value = I2C_ENSURE_MIN_SCL_HCNT(value, read_fs_spklen(reg_base));
+		value = I2C_ENSURE_MIN_SCL_HCNT(value, rom->fs_spike_len);
 		dw->hcnt = value;
 		break;
 	case I2C_SPEED_FAST_PLUS:
@@ -874,7 +877,7 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		 * SCL High Period = IC_FS_SCL_HCNT + IC_FS_SPKLEN + 3
 		 */
 		value = I2C_FSP_HCNT + rom->hcnt_offset;
-		value = I2C_ENSURE_MIN_SCL_HCNT(value, read_fs_spklen(reg_base));
+		value = I2C_ENSURE_MIN_SCL_HCNT(value, rom->fs_spike_len);
 		dw->hcnt = value;
 		break;
 	case I2C_SPEED_HIGH:
@@ -892,7 +895,7 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 			 * SCL High Period = IC_HS_SCL_HCNT + IC_HS_SPKLEN + 3
 			 */
 			value = I2C_HS_HCNT + rom->hcnt_offset;
-			value = I2C_ENSURE_MIN_SCL_HCNT(value, read_hs_spklen(reg_base));
+			value = I2C_ENSURE_MIN_SCL_HCNT(value, rom->hs_spike_len);
 			dw->hcnt = value;
 		} else {
 			rc = -EINVAL;
@@ -1303,6 +1306,8 @@ static int i2c_dw_initialize(const struct device *dev)
 		.rx_tl = DT_INST_PROP(n, rx_threshold),                                            \
 		.lcnt_offset = (int16_t)DT_INST_PROP_OR(n, lcnt_offset, 0),                        \
 		.hcnt_offset = (int16_t)DT_INST_PROP_OR(n, hcnt_offset, 0),                        \
+		.fs_spike_len = (uint8_t)DT_INST_PROP_OR(n, fs_spike_len, DW_IC_SPKLEN_MIN),       \
+		.hs_spike_len = (uint8_t)DT_INST_PROP_OR(n, hs_spike_len, DW_IC_SPKLEN_MIN),       \
 		RESET_DW_CONFIG(n) PINCTRL_DW_CONFIG(n) I2C_DW_INIT_PCIE(n)                        \
 			I2C_CONFIG_DMA_INIT(n)};                                                   \
 	static struct i2c_dw_dev_config i2c_##n##_runtime;                                         \
