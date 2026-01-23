@@ -19,6 +19,7 @@
 
 /* VBAT Modules */
 #define VBAT_BASE                       0x1A609000UL
+#define VBAT_GPIO_CTRL_EN               (VBAT_BASE + 0x0)
 #define VBAT_PWR_CTRL                   (VBAT_BASE + 0x8)
 #define LPRTC0_CLK_EN                   (VBAT_BASE + 0x10)
 #define LPRTC1_CLK_EN                   (VBAT_BASE + 0x14)
@@ -59,10 +60,6 @@
 #define M55HE_CFG_BASE			0x43007000UL
 #define HE_PER_CLK_EN			(M55HE_CFG_BASE + 0x10)
 #define HE_CAMERA_PIXCLK		(M55HE_CFG_BASE + 0x20)
-
-/* VBAT Modules */
-#define VBAT_REG_BASE			0x1A609000UL
-#define VBAT_GPIO_CTRL_EN		(VBAT_REG_BASE + 0x0)
 
 /* LPGPIO Base address for LPTIMER pin config */
 #define LPGPIO_BASE			0x42002008UL
