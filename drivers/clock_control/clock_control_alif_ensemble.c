@@ -75,6 +75,8 @@ struct clock_control_alif_config {
 #define ALIF_EXPMST0_CTRL_PCLK_FORCE_BIT  BIT(30U)
 #endif
 
+#define ALIF_CLK_ENA_CLK38P4M_BIT 23U
+
 /** register offset (from clkid cell) */
 #define ALIF_CLOCK_CFG_REG(id) (((id) >> ALIF_CLOCK_REG_SHIFT) & ALIF_CLOCK_REG_MASK)
 /** enable bit (from clkid cell) */
@@ -147,6 +149,15 @@ static uint32_t alif_get_input_clock(uint32_t clock_name)
 	case ALIF_UART6_SYST_PCLK:
 	case ALIF_UART7_SYST_PCLK:
 		return ALIF_CLOCK_SYST_PCLK_FREQ;
+	case ALIF_UART0_38M4_CLK:
+	case ALIF_UART1_38M4_CLK:
+	case ALIF_UART2_38M4_CLK:
+	case ALIF_UART3_38M4_CLK:
+	case ALIF_UART4_38M4_CLK:
+	case ALIF_UART5_38M4_CLK:
+	case ALIF_UART6_38M4_CLK:
+	case ALIF_UART7_38M4_CLK:
+		return ALIF_CLOCK_HFOSC_CLK_FREQ;
 	case ALIF_LPUART_CLK:
 		return ALIF_CLOCK_SYST_CORE_FREQ;
 	case ALIF_I3C_CLK:
@@ -283,6 +294,32 @@ static uint32_t alif_get_clock_divisor(mem_addr_t reg_addr, uint32_t mask,
 	return freq_div;
 }
 
+static void alif_set_cgu_clock_gate_on(const struct device *dev, uint32_t clk_id)
+{
+	uint32_t reg_addr;
+	uint32_t control_bit;
+
+	switch (clk_id) {
+	case ALIF_UART0_38M4_CLK:
+	case ALIF_UART1_38M4_CLK:
+	case ALIF_UART2_38M4_CLK:
+	case ALIF_UART3_38M4_CLK:
+	case ALIF_UART4_38M4_CLK:
+	case ALIF_UART5_38M4_CLK:
+	case ALIF_UART6_38M4_CLK:
+	case ALIF_UART7_38M4_CLK:
+		control_bit = ALIF_CLK_ENA_CLK38P4M_BIT;
+		break;
+	default:
+		return;
+	}
+
+	alif_get_module_base(dev, ALIF_CGU_MODULE, &reg_addr);
+
+	reg_addr += ALIF_CLK_ENA_REG;
+	sys_set_bit(reg_addr, control_bit);
+}
+
 static int alif_clock_control_on(const struct device *dev,
 			clock_control_subsys_t sub_system)
 {
@@ -334,6 +371,14 @@ static int alif_clock_control_on(const struct device *dev,
 	case ALIF_UART5_SYST_PCLK:
 	case ALIF_UART6_SYST_PCLK:
 	case ALIF_UART7_SYST_PCLK:
+	case ALIF_UART0_38M4_CLK:
+	case ALIF_UART1_38M4_CLK:
+	case ALIF_UART2_38M4_CLK:
+	case ALIF_UART3_38M4_CLK:
+	case ALIF_UART4_38M4_CLK:
+	case ALIF_UART5_38M4_CLK:
+	case ALIF_UART6_38M4_CLK:
+	case ALIF_UART7_38M4_CLK:
 		reg_addr = module_base + ALIF_EXPMST0_CTRL_REG;
 
 		sys_write32((ALIF_EXPMST0_CTRL_IPCLK_FORCE_BIT |
@@ -349,6 +394,7 @@ static int alif_clock_control_on(const struct device *dev,
 
 	sys_set_bit(reg_addr, ALIF_CLOCK_CFG_ENABLE(clk_id));
 
+	alif_set_cgu_clock_gate_on(dev, clk_id);
 	return 0;
 }
 
