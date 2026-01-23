@@ -838,8 +838,8 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		 * must have register values larger than IC_FS_SPKLEN + 7
 		 */
 		value = I2C_STD_LCNT + rom->lcnt_offset;
-		if (value <= (read_fs_spklen(reg_base) + 7)) {
-			value = read_fs_spklen(reg_base) + 8;
+		if (value <= (rom->fs_spk_len + 7)) {
+			value = rom->fs_spk_len + 8;
 		}
 
 		dw->lcnt = value;
@@ -848,8 +848,8 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		 * must have register values larger than IC_FS_SPKLEN + 5
 		 */
 		value = I2C_STD_HCNT + rom->hcnt_offset;
-		if (value <= (read_fs_spklen(reg_base) + 5)) {
-			value = read_fs_spklen(reg_base) + 6;
+		if (value <= (rom->fs_spk_len + 5)) {
+			value = rom->fs_spk_len + 6;
 		}
 
 		dw->hcnt = value;
@@ -860,8 +860,8 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		 * must have register values larger than IC_FS_SPKLEN + 7
 		 */
 		value = I2C_FS_LCNT + rom->lcnt_offset;
-		if (value <= (read_fs_spklen(reg_base) + 7)) {
-			value = read_fs_spklen(reg_base) + 8;
+		if (value <= (rom->fs_spk_len + 7)) {
+			value = rom->fs_spk_len + 8;
 		}
 
 		dw->lcnt = value;
@@ -871,8 +871,8 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		 * must have register values larger than IC_FS_SPKLEN + 5
 		 */
 		value = I2C_FS_HCNT + rom->hcnt_offset;
-		if (value <= (read_fs_spklen(reg_base) + 5)) {
-			value = read_fs_spklen(reg_base) + 6;
+		if (value <= (rom->fs_spk_len + 5)) {
+			value = rom->fs_spk_len + 6;
 		}
 
 		dw->hcnt = value;
@@ -883,8 +883,8 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		 * must have register values larger than IC_FS_SPKLEN + 7
 		 */
 		value = I2C_FSP_LCNT + rom->lcnt_offset;
-		if (value <= (read_fs_spklen(reg_base) + 7)) {
-			value = read_fs_spklen(reg_base) + 8;
+		if (value <= (rom->fs_spk_len + 7)) {
+			value = rom->fs_spk_len + 8;
 		}
 
 		dw->lcnt = value;
@@ -894,8 +894,8 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		 * must have register values larger than IC_FS_SPKLEN + 5
 		 */
 		value = I2C_FSP_HCNT + rom->hcnt_offset;
-		if (value <= (read_fs_spklen(reg_base) + 5)) {
-			value = read_fs_spklen(reg_base) + 6;
+		if (value <= (rom->fs_spk_len + 5)) {
+			value = rom->fs_spk_len + 6;
 		}
 
 		dw->hcnt = value;
@@ -903,15 +903,15 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 	case I2C_SPEED_HIGH:
 		if (dw->support_hs_mode) {
 			value = I2C_HS_LCNT + rom->lcnt_offset;
-			if (value <= (read_hs_spklen(reg_base) + 7)) {
-				value = read_hs_spklen(reg_base) + 8;
+			if (value <= (rom->hs_spk_len + 7)) {
+				value = rom->hs_spk_len + 8;
 			}
 
 			dw->lcnt = value;
 
 			value = I2C_HS_HCNT + rom->hcnt_offset;
-			if (value <= (read_hs_spklen(reg_base) + 5)) {
-				value = read_hs_spklen(reg_base) + 6;
+			if (value <= (rom->hs_spk_len + 5)) {
+				value = rom->hs_spk_len + 6;
 			}
 
 			dw->hcnt = value;
@@ -1223,6 +1223,10 @@ static int i2c_dw_initialize(const struct device *dev)
 
 	rom->config_func(dev);
 
+	/* Set spike length */
+	write_fs_spklen(rom->fs_spk_len, reg_base);
+	write_hs_spklen(rom->hs_spk_len, reg_base);
+
 	dw->app_config = I2C_MODE_CONTROLLER | i2c_map_dt_bitrate(rom->bitrate);
 
 	if (i2c_dw_runtime_configure(dev, dw->app_config) != 0) {
@@ -1400,6 +1404,8 @@ static int i2c_dw_pm_action(const struct device *dev, enum pm_device_action acti
 		.rx_tl = DT_INST_PROP(n, rx_threshold),                                            \
 		.lcnt_offset = (int16_t)DT_INST_PROP_OR(n, lcnt_offset, 0),                        \
 		.hcnt_offset = (int16_t)DT_INST_PROP_OR(n, hcnt_offset, 0),                        \
+		.fs_spk_len = MAX((uint8_t)DT_INST_PROP_OR(n, fs_spike_len, 0), DW_IC_SPKLEN_MIN), \
+		.hs_spk_len = MAX((uint8_t)DT_INST_PROP_OR(n, hs_spike_len, 0), DW_IC_SPKLEN_MIN), \
 		RESET_DW_CONFIG(n) PINCTRL_DW_CONFIG(n) I2C_DW_INIT_PCIE(n)                        \
 			I2C_CONFIG_DMA_INIT(n)};                                                   \
 	static struct i2c_dw_dev_config i2c_##n##_runtime;                                         \
