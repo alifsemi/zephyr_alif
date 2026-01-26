@@ -1,0 +1,13 @@
+/* Copyright (c) Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/ {
+	chosen {
+		zephyr,uart-pipe = &uart2;
+		/* Disable console on uart2 to avoid collisions with uart-pipe */
+		/delete-property/ zephyr,console;
+		/delete-property/ zephyr,shell-uart;
+	};
+};
