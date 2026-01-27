@@ -67,6 +67,7 @@ struct alif_flash_ospi_config {
 	struct flash_parameters flash_param;   /* Flash Parameter */
 	struct flash_pages_layout       flash_layout;
 	const struct pinctrl_dev_config *pcfg; /* PINCTRL */
+	uint32_t rw_dfs;                       /* Retrieved from write block size*/
 };
 
 /**Device Data */
