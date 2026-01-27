@@ -28,6 +28,20 @@ LOG_MODULE_REGISTER(OSPI_FLASH, CONFIG_FLASH_LOG_LEVEL);
 
 static void flash_alif_ospi_irq_config_func(const struct device *dev);
 
+static int get_dfs(int block_size)
+{
+	switch (block_size) {
+	case 1:
+		return OSPI_DFS_BITS_8;
+	case 2:
+		return OSPI_DFS_BITS_16;
+	case 4:
+		return OSPI_DFS_BITS_32;
+	default:
+		return 0;
+	}
+}
+
 static inline int32_t err_map_alif_hal_to_zephyr(int32_t err)
 {
 	int e_code;
@@ -190,11 +204,10 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 {
 	uint32_t cmd[4], data_cnt, event;
 	uint8_t *data_ptr;
-	int32_t cnt;
 	int32_t ret;
 
-	const struct alif_flash_ospi_config *dev_config = dev->config;
-	const struct flash_parameters *f_param = &dev_config->flash_param;
+	const struct alif_flash_ospi_config *dev_cfg = dev->config;
+	const struct flash_parameters *f_param = &dev_cfg->flash_param;
 	struct alif_flash_ospi_dev_data *dev_data = dev->data;
 
 	/*Verify Address boundary*/
@@ -204,35 +217,28 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 		return -EINVAL;
 	}
 
+	/*In DDR Mode bytes and length should be in multiple of write_block_size */
+	if (length % f_param->write_block_size
+		|| !(IS_ALIGNED(buffer, f_param->write_block_size))) {
+		return -EINVAL;
+	}
+
 	/* Lock */
 	ret = k_sem_take(&dev_data->sem, K_MSEC(MAX_SEM_TIMEOUT));
 	if (ret != 0) {
 		return ret;
 	}
 
-	cnt = length;
-	data_ptr = (uint8_t *)buffer;
-	dev_data->trans_conf.wait_cycles = 0;
-	dev_data->trans_conf.addr_len = 0;
-
 	LOG_DBG("read address %u length to read %d", (uint32_t) address, length);
 
-	ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle, &dev_data->trans_conf);
-	if (ret != 0) {
-		ret = err_map_alif_hal_to_zephyr(ret);
-		k_sem_give(&dev_data->sem);
-		return ret;
-	}
+	/* number of block count */
+	length /= f_param->write_block_size;
 
-	ret = set_write_enable(dev, OSPI_DFS_BITS_16);
-	if (ret != 0) {
-		k_sem_give(&dev_data->sem);
-		return ret;
-	}
+	data_ptr = (uint8_t *) buffer;
 
 	dev_data->trans_conf.wait_cycles = 16;
 	dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_32_BITS;
-	dev_data->trans_conf.frame_size = OSPI_DFS_BITS_8;
+	dev_data->trans_conf.frame_size = dev_cfg->rw_dfs;
 
 	/* Prepare Interface and update Configuration */
 	ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle, &dev_data->trans_conf);
@@ -282,9 +288,11 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 			break;
 		}
 
-		address += data_cnt;
 		length -= data_cnt;
-		data_ptr += data_cnt;
+
+		/* Update address and data offset with configured block size*/
+		address += (data_cnt * f_param->write_block_size);
+		data_ptr += (data_cnt * f_param->write_block_size);
 	}
 
 	k_sem_give(&dev_data->sem);
@@ -299,8 +307,8 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 	uint32_t event, data_cnt, index, i, cnt, data_i = 0;
 	uint8_t val;
 
-	const struct alif_flash_ospi_config *dev_config = dev->config;
-	const struct flash_parameters *f_param = &dev_config->flash_param;
+	const struct alif_flash_ospi_config *dev_cfg = dev->config;
+	const struct flash_parameters *f_param = &dev_cfg->flash_param;
 	struct alif_flash_ospi_dev_data *dev_data = dev->data;
 
 	LOG_DBG("write address %u length to write %d", (uint32_t) address, length);
@@ -312,13 +320,20 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		return -EINVAL;
 	}
 
+	/*In DDR Mode bytes and length should be in multiple of write_block_size */
+	if (length % f_param->write_block_size
+		|| !(IS_ALIGNED(buffer, f_param->write_block_size))) {
+		return -EINVAL;
+	}
+
 	ret = k_sem_take(&dev_data->sem, K_MSEC(MAX_SEM_TIMEOUT));
 	if (ret != 0) {
 		return ret;
 	}
 
-	data_ptr = buffer;
-	cnt = length;
+	/* number of block count */
+	cnt = length / f_param->write_block_size;
+	data_ptr = (uint8_t *) buffer;
 
 	while (cnt) {
 		dev_data->trans_conf.wait_cycles = 0;
@@ -347,12 +362,25 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		index = 2;
 
 		for (i = 0; i < data_cnt; i++) {
-			dev_data->cmd_buf[index++] = data_ptr[data_i++];
+			switch (dev_cfg->rw_dfs) {
+			case OSPI_DFS_BITS_8:
+				dev_data->cmd_buf[index++] = data_ptr[data_i];
+				break;
+			case OSPI_DFS_BITS_16:
+				dev_data->cmd_buf[index++] =
+					*(uint16_t *) (data_ptr + (data_i * sizeof(uint16_t)));
+				break;
+			case OSPI_DFS_BITS_32:
+				dev_data->cmd_buf[index++] =
+					*(uint32_t *) (data_ptr + (data_i * sizeof(uint32_t)));
+				break;
+			}
+			data_i++;
 		}
 
 		dev_data->trans_conf.wait_cycles = 0;
 		dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_32_BITS;
-		dev_data->trans_conf.frame_size = OSPI_DFS_BITS_8;
+		dev_data->trans_conf.frame_size = dev_cfg->rw_dfs;
 
 		ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle, &dev_data->trans_conf);
 		if (ret != 0) {
@@ -386,7 +414,8 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 			break;
 		}
 
-		address += data_cnt;
+		/* Update address offset with configured block size */
+		address += (data_cnt * f_param->write_block_size);
 		cnt -= data_cnt;
 
 		ret = set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
@@ -610,7 +639,7 @@ static int flash_is25wx_ospi_erase(const struct device *dev, off_t addr, size_t 
 
 static int flash_is25wx_ospi_init(const struct device *dev)
 {
-	int ret;
+	int ret, dfs;
 	uint32_t event;
 
 	struct alif_flash_ospi_config *dev_cfg = (struct alif_flash_ospi_config *)dev->config;
@@ -731,6 +760,15 @@ static int flash_is25wx_ospi_init(const struct device *dev)
 	dev_data->cmd_buf[1] = WAIT_CYCLE_ADDRESS;
 	dev_data->cmd_buf[2] = DEFAULT_WAIT_CYCLES;
 	dev_data->cmd_buf[3] = DEFAULT_WAIT_CYCLES;
+
+	/** Update DFS */
+	dfs = get_dfs(dev_cfg->flash_param.write_block_size);
+	if (dfs == 0) {
+		return -EINVAL;
+	}
+
+	/** R-W FrameSize */
+	dev_cfg->rw_dfs = dfs;
 
 	dev_data->trans_conf.frame_size = OSPI_DFS_BITS_16;
 	dev_data->trans_conf.frame_format = OSPI_FRF_OCTAL;
