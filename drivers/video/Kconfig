@@ -82,6 +82,8 @@ source "drivers/video/Kconfig.emul_rx"
 
 source "drivers/video/Kconfig.arx3a0"
 
+source "drivers/video/Kconfig.ov5675"
+
 source "drivers/video/Kconfig.hm0360"
 
 source "drivers/video/Kconfig.alif"

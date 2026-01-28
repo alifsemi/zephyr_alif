@@ -1,0 +1,11 @@
+# OmniVision OV5675 MIPI sensor driver configuration options
+# SPDX-FileCopyrightText: Copyright Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config VIDEO_OV5675
+	bool "OmniVision OV5675 MIPI video sensor"
+	select I2C
+	depends on DT_HAS_OVTI_OV5675_ENABLED
+	default y
+	help
+	  Enable driver for OV5675 MIPI digital image sensor device.
