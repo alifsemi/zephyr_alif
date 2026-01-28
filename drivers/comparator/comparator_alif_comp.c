@@ -242,6 +242,9 @@ static void lpcmp_set_config(const struct device *dev)
 		config->negative_inp << COMP_LP0_IN_NEG_SEL_POS |
 		config->hysteresis_level << COMP_LP0_HYST_POS;
 
+	/* Enable LPCMP CLK */
+	data |= LPCMP_CTRL_CLKEN;
+
 #if defined(CONFIG_ANALOG_ALIASING)
 	sys_write32(data, regs);
 #else
@@ -251,7 +254,6 @@ static void lpcmp_set_config(const struct device *dev)
 	value |= data;
 	sys_write32(value, regs);
 #endif
-
 }
 
 static void cmp_set_config(const struct device *dev)
@@ -381,30 +383,33 @@ static int alif_comp_set_trigger(const struct device *dev,
 {
 	uintptr_t regs;
 	struct cmp_data *data = dev->data;
+	const struct cmp_config *config = dev->config;
 
 	regs = DEVICE_MMIO_NAMED_GET(dev, cmp_reg);
 
-	switch (trigger) {
-	case COMPARATOR_TRIGGER_NONE:
-		data->interrupt_mask = 0;
-		break;
+	if (config->drv_inst != CMP_INSTANCE_LP) {
+		switch (trigger) {
+		case COMPARATOR_TRIGGER_NONE:
+			data->interrupt_mask = 0;
+			break;
 
-	case COMPARATOR_TRIGGER_RISING_EDGE:
-		data->interrupt_mask = CMP_FILTER_EVENT0;
-		break;
+		case COMPARATOR_TRIGGER_RISING_EDGE:
+			data->interrupt_mask = CMP_FILTER_EVENT0;
+			break;
 
-	case COMPARATOR_TRIGGER_FALLING_EDGE:
-		data->interrupt_mask = CMP_FILTER_EVENT1;
-		break;
+		case COMPARATOR_TRIGGER_FALLING_EDGE:
+			data->interrupt_mask = CMP_FILTER_EVENT1;
+			break;
 
-	case COMPARATOR_TRIGGER_BOTH_EDGES:
-		data->interrupt_mask = CMP_FILTER_EVENT0 |
-				       CMP_FILTER_EVENT1;
-		break;
-	}
+		case COMPARATOR_TRIGGER_BOTH_EDGES:
+			data->interrupt_mask = CMP_FILTER_EVENT0 |
+					       CMP_FILTER_EVENT1;
+			break;
+		}
 
-	if (data->callback != NULL) {
-		cmp_enable_interrupt(regs, data->interrupt_mask);
+		if (data->callback != NULL) {
+			cmp_enable_interrupt(regs, data->interrupt_mask);
+		}
 	}
 
 	enable_cmp(dev);
@@ -484,11 +489,9 @@ static int cmp_init(const struct device *dev)
 
 	if (config->drv_inst == CMP_INSTANCE_LP) {
 
-		/*Enable LPCMP clock*/
-		sys_write32(LPCMP_CTRL_CLKEN, regs);
-
 		/* LPCMP configuration value to the Vbat reg2 */
 		lpcmp_set_config(dev);
+
 	} else {
 		/* check device availability */
 		if (!device_is_ready(config->clk_dev)) {
