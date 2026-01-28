@@ -355,7 +355,6 @@ static void cmp_irq_handler(const struct device *dev)
 	}
 
 	if (data->callback) {
-		*(uint8_t *)data->user_data =  gpio_pin_get_dt(&config->cmp_gpio);
 		data->callback(dev, data->user_data);
 	}
 }
