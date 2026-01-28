@@ -18,6 +18,12 @@
 #endif
 #include LV_STDLIB_INCLUDE
 
+#if IS_ENABLED(CONFIG_MIPI_DSI)
+#include <zephyr/drivers/mipi_dsi/dsi_dw.h>
+#endif
+#if IS_ENABLED(CONFIG_CDC200)
+#include <zephyr/drivers/display/cdc200.h>
+#endif
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(lvgl, CONFIG_LV_Z_LOG_LEVEL);
 
@@ -27,6 +33,19 @@ struct lvgl_disp_data disp_data = {
 };
 
 #define DISPLAY_NODE          DT_CHOSEN(zephyr_display)
+
+#if IS_ENABLED(CONFIG_CDC200)
+#define IS_ENABLED_CDC200 DT_NODE_HAS_COMPAT(DISPLAY_NODE, tes_cdc_2_1)
+#else
+#define IS_ENABLED_CDC200 0
+#endif
+
+#if IS_ENABLED(CONFIG_MIPI_DSI)
+#define IS_ENABLED_MIPI_DSI DT_HAS_ALIAS(mipi_dsi)
+#else
+#define IS_ENABLED_MIPI_DSI 0
+#endif
+
 #define IS_MONOCHROME_DISPLAY ((CONFIG_LV_Z_BITS_PER_PIXEL == 1) || (CONFIG_LV_COLOR_DEPTH_1 == 1))
 #define ALLOC_MONOCHROME_CONV_BUFFER                                                               \
 	((IS_MONOCHROME_DISPLAY == 1) && (CONFIG_LV_Z_MONOCHROME_CONVERSION_BUFFER == 1))
@@ -224,6 +243,12 @@ lv_result_t lv_mem_test_core(void)
 int lvgl_init(void)
 {
 	const struct device *display_dev = DEVICE_DT_GET(DISPLAY_NODE);
+#if IS_ENABLED_MIPI_DSI
+	const struct device *dsi = DEVICE_DT_GET(DT_ALIAS(mipi_dsi));
+	#endif
+#if IS_ENABLED_CDC200
+	struct cdc200_display_caps cdc200_caps;
+	#endif
 
 	int err = 0;
 
@@ -231,6 +256,24 @@ int lvgl_init(void)
 		LOG_ERR("Display device not ready.");
 		return -ENODEV;
 	}
+
+#if IS_ENABLED_MIPI_DSI
+	if (!device_is_ready(dsi)) {
+		LOG_ERR("DSI device not ready.");
+		return -ENODEV;
+	}
+
+	err = dsi_dw_set_mode(dsi, DSI_DW_VIDEO_MODE);
+	if (err) {
+		LOG_ERR("Could not set DSI Host controller to video mode: %d.", err);
+		return err;
+	}
+#endif
+
+#if IS_ENABLED_CDC200
+	cdc200_set_enable(display_dev, true);
+	cdc200_get_capabilities(display_dev, &cdc200_caps);
+#endif
 
 #if CONFIG_LV_Z_LOG_LEVEL != 0
 	lv_log_register_print_cb(lvgl_log);
@@ -245,6 +288,25 @@ int lvgl_init(void)
 
 	disp_data.display_dev = display_dev;
 	display_get_capabilities(display_dev, &disp_data.cap);
+
+#if IS_ENABLED_CDC200
+	int chosen = -1;
+
+	for (int i = 0; i < ARRAY_SIZE(cdc200_caps.layer); ++i) {
+		if (cdc200_caps.layer[i].layer_en) {
+			chosen = i;
+			break; /* pick first enabled layer */
+		}
+	}
+
+	if (chosen >= 0) {
+		disp_data.cap.current_pixel_format =
+			cdc200_caps.layer[chosen].current_pixel_format;
+	} else {
+		LOG_ERR("CDC200 display has no enabled layers.");
+		return -ENODEV;
+	}
+#endif
 
 	display = lv_display_create(disp_data.cap.x_resolution, disp_data.cap.y_resolution);
 	if (!display) {
