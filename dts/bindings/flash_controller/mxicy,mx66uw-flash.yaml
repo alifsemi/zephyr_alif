@@ -1,0 +1,45 @@
+# Copyright (C) 2026 Alif Semiconductor.
+# SPDX-License-Identifier: Apache-2.0
+
+description: Macronix MX66UWXXXX flash memory
+
+compatible: "mxicy,mx66uw-flash"
+
+include: flash-controller.yaml
+
+#on-bus: ospi
+
+properties:
+  erase-value:
+    type: int
+    description: block size to write
+    required: true
+    default: 0xff
+
+  num-of-sector:
+    type: int
+    description: available sectors in the connected NOR Flash
+    required: true
+
+  page-size:
+    type: int
+    description: Page Size
+    required: true
+
+  sector-size:
+    type: int
+    description: number of bytes in each sector
+    required: true
+
+  write-block-size:
+    type: int
+    description: number of bytes in each sector
+    required: true
+
+  def-wait-cycle:
+    type: int
+    description: default number of wait cycles depends on the bus speed
+
+  read-wait-cycle:
+    type: int
+    description: number of wait cycles before sampling data depends on the bus speed
