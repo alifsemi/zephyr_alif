@@ -210,3 +210,21 @@
 	};
 
 };
+
+&{/} {
+	clocks {
+		clk_76p8M: clk_76p8M {
+			compatible = "fixed-clock";
+			clock-frequency = <76800000>;
+			status = "disabled";
+			#clock-cells = <0>;
+		};
+
+		clk_10m: clk_10m {
+			compatible = "fixed-clock";
+			clock-frequency = <10000000>;
+			status = "disabled";
+			#clock-cells = <0>;
+		};
+	};
+};
