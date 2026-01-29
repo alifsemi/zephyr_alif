@@ -121,6 +121,7 @@ canaan	Canaan, Inc.
 caninos	Caninos Loucos Program
 capella	Capella Microsystems, Inc
 cascoda	Cascoda, Ltd.
+cast	CAST, Inc.
 catalyst	Catalyst Semiconductor, Inc.
 cavium	Cavium, Inc.
 cdns	Cadence Design Systems Inc.
