@@ -706,6 +706,44 @@
 		status          = "disabled";
 	};
 
+	can0: can@49036000 {
+		#address-cells  = <1>;
+		#size-cells     = <1>;
+		compatible      = "cast,can";
+		reg             = <0x49036000 0x1000 0x49037000 0x1000>;
+		reg-names       = "can_reg", "can_cnt_reg";
+		interrupt-parent= <&nvic>;
+		interrupts      = <104 0>;
+		interrupt-names = "can_interrupt";
+		clocks          = <&clockctrl ALIF_CANFD0_160M_CLK>;
+		clk-speed       = <20000000>;
+		pinctrl-0       = <&pinctrl_can0>;
+		pinctrl-names   = "default";
+		can-fd;
+		can-fd-ctrl-reg	= <0x4902F00C>;
+		can-fd-bit	= <10>;
+		status          = "disabled";
+	};
+
+	can1: can@49038000 {
+		#address-cells  = <1>;
+		#size-cells     = <1>;
+		compatible      = "cast,can";
+		reg             = <0x49038000 0x1000 0x49039000 0x1000>;
+		reg-names       = "can_reg", "can_cnt_reg";
+		interrupt-parent= <&nvic>;
+		interrupts      = <105 0>;
+		interrupt-names = "can_interrupt";
+		clocks          = <&clockctrl ALIF_CANFD1_160M_CLK>;
+		clk-speed       = <20000000>;
+		pinctrl-0       = <&pinctrl_can1>;
+		pinctrl-names   = "default";
+		can-fd;
+		can-fd-ctrl-reg	= <0x4902F00C>;
+		can-fd-bit	= <26>;
+		status          = "disabled";
+	};
+
 	lpuart: uart@43008000 {
 		compatible = "ns16550";
 		reg = <0x43008000 0x100>;
