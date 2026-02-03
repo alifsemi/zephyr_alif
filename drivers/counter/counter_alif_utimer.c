@@ -157,7 +157,7 @@ static int set_compare(const struct device *dev, uint8_t chan, uint32_t val,
 	uint32_t now, diff, max_rel_val;
 	int err = 0;
 
-	__ASSERT(alif_utimer_check_interrupt_enabled(dev, evt_bit) == 0,
+	__ASSERT(alif_utimer_check_interrupt_enabled(timer_base, evt_bit) == 0,
 				"Expected that CC interrupt is disabled.");
 
 	alif_utimer_enable_compare_match(timer_base, chan);
