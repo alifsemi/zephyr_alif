@@ -50,6 +50,16 @@ LOG_MODULE_DECLARE(soc, CONFIG_SOC_LOG_LEVEL);
 #define WICCONTROL_IWIC_Pos	(9U)
 #define WICCONTROL_IWIC_Msk	(1U << WICCONTROL_IWIC_Pos)
 
+/**
+ * @brief Low power state values for LPSTATE field
+ */
+enum pm_lpstate {
+	PM_LPSTATE_ON,         /* ON */
+	PM_LPSTATE_ON_CLK_OFF, /* ON, clock is off */
+	PM_LPSTATE_RET,        /* Retention (not supported) */
+	PM_LPSTATE_OFF         /* OFF */
+};
+
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(lpgpio), okay)
 /**
  * @fn           uint32_t pm_prepare_lpgpio_nvic_mask(void)
@@ -191,6 +201,49 @@ static void pm_core_enter_wic_sleep(uint32_t wic)
 	 */
 	pm_restore_lpgpio_nvic_mask(lpgpio_nvic_mask_state);
 #endif
+}
+
+/**
+ * @fn       void pm_core_enter_deep_sleep(void)
+ * @brief    Power management API which performs deep sleep operation
+ * @note     This function should be called with interrupts disabled
+ *           This enters the deepest possible CPU sleep state, without
+ *           losing CPU state. All CPU clocks can be stopped, including
+ *           SysTick. CPU and subsystem power will remain on, and the
+ *           clock continues to run to the Internal Wakeup Interrupt
+ *           Controller (IWIC), which manages the wakeup.
+ * @note     Possible IWIC wake sources are events, NMI, debug events
+ *           and interrupts 0-63 only, subject to NVIC interrupt
+ *           enable controls.
+ * @return   This function returns nothing
+ */
+void pm_core_enter_deep_sleep(void)
+{
+	/* Entering any WIC sleep could potentially cause state loss,
+	 * as it enables power saving on PDCORE. Unlike the other domains,
+	 * there is no separate mechanism to indicate "retention" beyond
+	 * setting CLPSTATE, so as we want a sleep call we need to
+	 * ensure CLPSTATE is RET or higher. (See M55 TRM section 7.5)
+	 *
+	 * Further, in our design, the IWIC is actually in the same power domain
+	 * as the CPU, so we need the IWIC+CPU to stay on to be able to wake,
+	 * which means our minimum is actually ON with clock off.
+	 *
+	 * If caller has set CLPSTATE to RET or OFF (deeper sleep states),
+	 * we temporarily raise it to ON_CLK_OFF to prevent state loss.
+	 * After wakeup, we restore the original setting.
+	 *
+	 */
+	uint32_t old_cpdlpstate = PWRMODCTL->CPDLPSTATE;
+
+	PWRMODCTL->CPDLPSTATE = (old_cpdlpstate & ~PWRMODCTL_CPDLPSTATE_CLPSTATE_Msk) |
+		_VAL2FLD(PWRMODCTL_CPDLPSTATE_CLPSTATE, PM_LPSTATE_ON_CLK_OFF);
+
+	/* Trigger the IWIC sleep */
+	pm_core_enter_wic_sleep(PM_WIC_IS_IWIC);
+
+	/* Restore low power state (probably to all OFF) */
+	PWRMODCTL->CPDLPSTATE = old_cpdlpstate;
 }
 
 /**
@@ -399,6 +452,14 @@ __weak void pm_state_set(enum pm_state state, uint8_t substate_id)
 
 		break;
 #endif
+	case PM_STATE_SUSPEND_TO_IDLE:
+		__disable_irq();
+		__set_BASEPRI(0);
+
+		/* Enter IWIC sleep - lighter than EWIC, no context save needed */
+		pm_core_enter_deep_sleep();
+
+		break;
 	case PM_STATE_SOFT_OFF:
 		__disable_irq();
 		__set_BASEPRI(0);
@@ -424,6 +485,9 @@ __weak void pm_state_exit_post_ops(enum pm_state state, uint8_t substate_id)
 		__enable_irq();
 		break;
 #endif
+	case PM_STATE_SUSPEND_TO_IDLE:
+		__enable_irq();
+		break;
 	case PM_STATE_SOFT_OFF:
 		__enable_irq();
 		break;

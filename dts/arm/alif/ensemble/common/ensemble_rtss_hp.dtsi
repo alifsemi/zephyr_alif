@@ -74,6 +74,15 @@
 
 &{/} {
 	power-states {
+		suspend_idle: suspend_idle {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-idle";
+			min-residency-us = <2500>;
+			exit-latency-us = <500>;
+			substate-id = <0>;
+			zephyr,pm-device-disabled;
+			status = "disabled";
+		};
 		subsys_off: subsys_off {
 			compatible = "zephyr,power-state";
 			power-state-name = "soft-off";
@@ -92,7 +101,7 @@
 			d-cache-line-size = <32>;
 			i-cache-line-size = <32>;
 			reg = <0>;
-			cpu-power-states = <&subsys_off>;
+			cpu-power-states = <&suspend_idle &subsys_off>;
 		};
 	};
 
