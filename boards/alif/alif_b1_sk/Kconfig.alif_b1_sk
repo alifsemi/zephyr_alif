@@ -1,0 +1,12 @@
+# Copyright (c) 2026 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config BOARD_ALIF_B1_SK
+	select SOC_AB1C1F4M51820PH0_RTSS_HE if BOARD_ALIF_B1_SK_AB1C1F4M51820PH0_RTSS_HE
+
+if BOARD_ALIF_B1_SK
+
+config UART_DMA_ENABLE
+	bool
+endif
