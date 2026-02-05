@@ -1,8 +1,8 @@
-# Copyright (c) 2025 Alif Semiconductor
+# Copyright (c) 2026 Alif Semiconductor
 #
 # SPDX-License-Identifier: Apache-2.0
 
-if SOC_AE1C1F4051920HH_RTSS_HE
+if SOC_AE1C1F40519205H0_RTSS_HE
 
 config NUM_IRQS
 	default 480
@@ -10,4 +10,4 @@ config NUM_IRQS
 config SYS_CLOCK_HW_CYCLES_PER_SEC
 	default 160000000
 
-endif # SOC_AE1C1F4051920HH_RTSS_HE
+endif # SOC_AE1C1F40519205H0_RTSS_HE
