@@ -38,3 +38,12 @@ family:
           - name: ae1c1f40519205h0
             cpuclusters:
               - name: rtss_he
+          - name: ae1c1f1041010hh0
+            cpuclusters:
+              - name: rtss_he
+          - name: ae1c1f1041010ph0
+            cpuclusters:
+              - name: rtss_he
+          - name: ae1c1f10410105h0
+            cpuclusters:
+              - name: rtss_he
