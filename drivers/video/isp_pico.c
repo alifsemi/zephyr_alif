@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 Alif Semiconductor.
+ * Copyright (C) 2026 Alif Semiconductor.
  * SPDX-License-Identifier: Apache-2.0
  */
 #define DT_DRV_COMPAT vsi_isp_pico
@@ -16,6 +16,7 @@ LOG_MODULE_REGISTER(ISP, CONFIG_VIDEO_LOG_LEVEL);
 #include "isp_pico.h"
 #include <zephyr/drivers/video/video_alif.h>
 #include <soc_memory_map.h>
+#include <zephyr/cache.h>
 
 #define WORKQ_STACK_SIZE 1024
 #define WORKQ_PRIORITY   7
@@ -802,6 +803,8 @@ static int isp_enqueue(const struct device *dev, enum video_endpoint_id ep,
 
 	LOG_DBG("Enqueued buffer: Addr - 0x%x, size - %d, bytesused - %d",
 		(uint32_t)buf->buffer, buf->size, buf->bytesused);
+
+	(void)sys_cache_data_flush_and_invd_range(buf->buffer, buf->size);
 
 	return 0;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 Alif Semiconductor.
+ * Copyright (C) 2026 Alif Semiconductor.
  * SPDX-License-Identifier: Apache-2.0
  */
 #define DT_DRV_COMPAT alif_cam
@@ -14,6 +14,7 @@
 #include "video_alif.h"
 #include <zephyr/drivers/video/video_alif.h>
 #include <soc_memory_map.h>
+#include <zephyr/cache.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(CPI, CONFIG_VIDEO_LOG_LEVEL);
@@ -655,7 +656,6 @@ static int alif_cam_enqueue(const struct device *dev, enum video_endpoint_id ep,
 {
 	const struct video_cam_config *config = dev->config;
 	struct video_cam_data *data = dev->data;
-	struct video_buffer *tmp_buf = NULL;
 	uint32_t to_read;
 	uint32_t tmp;
 
@@ -683,9 +683,10 @@ static int alif_cam_enqueue(const struct device *dev, enum video_endpoint_id ep,
 
 	k_fifo_put(&data->fifo_in, buf);
 
-	tmp_buf = k_fifo_peek_tail(&data->fifo_in);
 	LOG_DBG("Enqueued buffer: Addr - 0x%x, size - %d, bytesused - %d",
-		(uint32_t)tmp_buf->buffer, tmp_buf->size, tmp_buf->bytesused);
+		(uint32_t)buf->buffer, buf->size, buf->bytesused);
+
+	(void)sys_cache_data_flush_and_invd_range(buf->buffer, buf->size);
 
 	return 0;
 }
