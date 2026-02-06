@@ -4,8 +4,9 @@ pipeline {
     agent any
 
     environment {
-        GITHUB_USER_OR_ORG_NAME = "alifsemi"
-        GITHUB_REPO_NAME        = "zephyr_alif"
+        GITHUB_USER_OR_ORG_NAME = sh(script: 'echo ${CHANGE_URL:-alifsemi}    | sed -E "s#https://github.com/([^/]+)/([^/]+)/.*#\\1#"', returnStdout: true).trim()
+        GITHUB_REPO_NAME        = sh(script: 'echo ${CHANGE_URL:-zephyr_alif} | sed -E "s#https://github.com/([^/]+)/([^/]+)/.*#\\2#"', returnStdout: true).trim()
+        CHANGE_TARGET           = sh(script: 'echo ${CHANGE_TARGET:-main}', returnStdout: true).trim()
         PATH="${env.WEST_BIN_PATH}:${env.PATH}"
     }
 
