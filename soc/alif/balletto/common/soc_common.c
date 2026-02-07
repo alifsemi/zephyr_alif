@@ -12,6 +12,43 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 
+#include <zephyr/pm/policy.h>
+
+/*
+ * Lock deeper power states during early boot to prevent premature sleep
+ *
+ * During driver initialization, some drivers may trigger idle conditions
+ * that could cause the PM subsystem to enter deep sleep states before the
+ * system is ready. This locks all deeper states, allowing only
+ * PM_STATE_RUNTIME_IDLE during boot. Locks are released at APPLICATION phase.
+ */
+static int soc_pm_lock_boot_states(void)
+{
+	/* Lock all deeper power states, allowing only RUNTIME_IDLE during boot */
+	for (enum pm_state state = PM_STATE_SUSPEND_TO_IDLE; state < PM_STATE_COUNT; state++) {
+		pm_policy_state_lock_get(state, PM_ALL_SUBSTATES);
+	}
+
+	return 0;
+}
+SYS_INIT(soc_pm_lock_boot_states, PRE_KERNEL_2, 0);
+
+/*
+ * Release deeper power state locks after kernel initialization
+ *
+ * Once kernel initialization is complete (APPLICATION phase), release the
+ * boot-time locks to allow normal power management operation.
+ */
+static int soc_pm_unlock_boot_states(void)
+{
+	/* Unlock all deeper power states */
+	for (enum pm_state state = PM_STATE_SUSPEND_TO_IDLE; state < PM_STATE_COUNT; state++) {
+		pm_policy_state_lock_put(state, PM_ALL_SUBSTATES);
+	}
+
+	return 0;
+}
+SYS_INIT(soc_pm_unlock_boot_states, APPLICATION, 0);
 
 /**
  * @brief Perform common SoC initialization at boot
