@@ -1,15 +1,12 @@
-/* Copyright (c) 2025 Alif Semiconductor
+/* Copyright (c) 2026 Alif Semiconductor
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/dts-v1/;
-
-#include <alif/ensemble/e1c/ae1c1f4051920hh.dtsi>
 #include "../common/ensemble-e1c-pinctrl.dtsi"
 
 / {
-	compatible = "arm,alif-e1c-dk-ae1c1f4051920hh-rtss-he";
+	compatible = "arm,alif-e1c-dk-ae1c1f1040505xx0-rtss-he";
 	#address-cells = <1>;
 	#size-cells = <1>;
 
