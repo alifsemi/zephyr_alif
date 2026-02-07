@@ -58,7 +58,7 @@
 };
 
 &uart_hci {
-	clock-frequency = <160000000>;
+	clocks = <&clockctrl ALIF_HCI_CLK>;
 	dmas = <&dma2 HCI_UART_DMA_RX_CH HCI_UART_DMA_RX_REQ>,
 	       <&dma2 HCI_UART_DMA_TX_CH HCI_UART_DMA_TX_REQ>;
 	dma-names = "rx", "tx";

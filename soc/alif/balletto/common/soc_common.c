@@ -22,28 +22,6 @@ LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
  */
 static int soc_init(void)
 {
-	uint32_t uart_clk_mask = sys_read32(EXPSLV_UART_CTRL);
-
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart0), okay)
-	uart_clk_mask |= BIT(0) | BIT(8);
-#endif
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart1), okay)
-	uart_clk_mask |= BIT(1) | BIT(9);
-#endif
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart2), okay)
-	uart_clk_mask |= BIT(2) | BIT(10);
-#endif
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart3), okay)
-	uart_clk_mask |= BIT(3) | BIT(11);
-#endif
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart4), okay)
-	uart_clk_mask |= BIT(4) | BIT(12);
-#endif
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart5), okay)
-	uart_clk_mask |= BIT(5) | BIT(13);
-#endif
-	sys_write32(uart_clk_mask, EXPSLV_UART_CTRL);
-
 	/* LPUART settings */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart), okay)
 	if (IS_ENABLED(CONFIG_SERIAL)) {
