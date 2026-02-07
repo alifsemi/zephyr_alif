@@ -39,11 +39,15 @@
 #include <zephyr/drivers/interrupt_controller/ioapic.h>
 #endif
 
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
+
 #include "i2c_dw.h"
 #include "i2c_dw_registers.h"
 #define LOG_LEVEL CONFIG_I2C_LOG_LEVEL
 #include <zephyr/logging/log.h>
 #include <zephyr/irq.h>
+
 LOG_MODULE_REGISTER(i2c_dw);
 
 #include "i2c-priv.h"
@@ -1231,6 +1235,82 @@ static int i2c_dw_initialize(const struct device *dev)
 	return ret;
 }
 
+#if defined(CONFIG_PM_DEVICE)
+
+static int i2c_dw_suspend(const struct device *dev)
+{
+	return 0;
+}
+
+static int i2c_dw_resume(const struct device *dev)
+{
+#if defined(CONFIG_PINCTRL) || DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
+	const struct i2c_dw_rom_config *const rom = dev->config;
+	int ret;
+#endif
+
+#if defined(CONFIG_PINCTRL)
+	ret = pinctrl_apply_state(rom->pcfg, PINCTRL_STATE_DEFAULT);
+	if (ret) {
+		return ret;
+	}
+#endif
+
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
+	if (rom->clk_id) {
+		if (!device_is_ready(rom->clk_dev)) {
+			LOG_ERR("clock controller device not ready");
+			return -ENODEV;
+		}
+
+		ret = clock_control_on(rom->clk_dev, rom->clk_id);
+		if (ret != 0) {
+			LOG_ERR("Unable to turn on clock: err:%d", ret);
+			return ret;
+		}
+	}
+#endif
+
+	clear_bit_enable_en(get_regs(dev));
+
+	return 0;
+}
+
+/**
+ * @brief I2C PM device action handler
+ *
+ * Handles power management state transitions for the I2C device.
+ * Coordinates with power domain via PM framework.
+ *
+ * @param dev I2C device struct
+ * @param action PM device action
+ *
+ * @return 0 if successful, negative errno otherwise
+ */
+static int i2c_dw_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		/* Device is powered - restore I2C state */
+		return i2c_dw_resume(dev);
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		/* Save I2C state and prepare for power down */
+		return i2c_dw_suspend(dev);
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Power domain handling is automatic via PM framework */
+		return 0;
+
+	default:
+		break;
+	}
+
+	return -ENOTSUP;
+}
+#endif /* CONFIG_PM_DEVICE */
+
 #if defined(CONFIG_PINCTRL)
 #define PINCTRL_DW_DEFINE(n) PINCTRL_DT_INST_DEFINE(n)
 #define PINCTRL_DW_CONFIG(n) .pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),
@@ -1323,9 +1403,10 @@ static int i2c_dw_initialize(const struct device *dev)
 		RESET_DW_CONFIG(n) PINCTRL_DW_CONFIG(n) I2C_DW_INIT_PCIE(n)                        \
 			I2C_CONFIG_DMA_INIT(n)};                                                   \
 	static struct i2c_dw_dev_config i2c_##n##_runtime;                                         \
-	I2C_DEVICE_DT_INST_DEFINE(n, i2c_dw_initialize, NULL, &i2c_##n##_runtime,                  \
-				  &i2c_config_dw_##n, POST_KERNEL, CONFIG_I2C_INIT_PRIORITY,       \
-				  &funcs);                                                         \
+	PM_DEVICE_DT_INST_DEFINE(n, i2c_dw_pm_action);                                             \
+	I2C_DEVICE_DT_INST_DEFINE(n, i2c_dw_initialize, PM_DEVICE_DT_INST_GET(n),                  \
+				  &i2c_##n##_runtime, &i2c_config_dw_##n, POST_KERNEL,             \
+				  CONFIG_I2C_INIT_PRIORITY, &funcs);                               \
 	I2C_DW_IRQ_CONFIG(n)
 
 DT_INST_FOREACH_STATUS_OKAY(I2C_DEVICE_INIT_DW)
