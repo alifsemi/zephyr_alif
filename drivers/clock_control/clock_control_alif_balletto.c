@@ -58,6 +58,11 @@ struct clock_control_alif_config {
 #define ALIF_CLOCK_128K_CLK_FREQ      (OSC_CLOCK_SRC_FREQ(lfrc) * 4U)
 #define ALIF_CLOCK_S32K_CLK_FREQ      OSC_CLOCK_SRC_FREQ(lfxo)
 
+/* CLK_ENA register config */
+#define ALIF_CLK_ENA_CLK38P4M_BIT     23U
+#define ALIF_CLK_ENA_CLK20M_BIT       22U
+#define ALIF_CLK_ENA_CLK100M_BIT      21U
+#define ALIF_CLK_ENA_CLK160M_BIT      20U
 
 /** register offset (from clkid cell) */
 #define ALIF_CLOCK_CFG_REG(id) (((id) >> ALIF_CLOCK_REG_SHIFT) & ALIF_CLOCK_REG_MASK)
@@ -417,6 +422,42 @@ static inline int alif_clock_control_configure(const struct device *dev,
 	return 0;
 }
 
+static int clockctrl_init(const struct device *dev)
+{
+	uint32_t cgu_mask = 0;
+	uint32_t cgu_module_base;
+	int32_t ret;
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(clk_38p4m), okay)
+	cgu_mask |= BIT(ALIF_CLK_ENA_CLK38P4M_BIT);
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(clk_20m), okay)
+	cgu_mask |= BIT(ALIF_CLK_ENA_CLK20M_BIT);
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(clk_100m), okay)
+	cgu_mask |= BIT(ALIF_CLK_ENA_CLK100M_BIT);
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(clk_160m), okay)
+	cgu_mask |= BIT(ALIF_CLK_ENA_CLK160M_BIT);
+#endif
+
+	/* enable cgu clock */
+	if (cgu_mask) {
+		ret = alif_get_module_base(dev, ALIF_CGU_MODULE,
+					&cgu_module_base);
+		if (ret) {
+			return -ENODEV;
+		}
+
+		sys_set_bits(cgu_module_base + ALIF_CLK_ENA_REG, cgu_mask);
+	}
+
+	return 0;
+}
+
 static DEVICE_API(clock_control, alif_clock_control_driver_api) = {
 	.on = alif_clock_control_on,
 	.off = alif_clock_control_off,
@@ -435,6 +476,6 @@ static const struct clock_control_alif_config config = {
 	.m55he_cfg_base = DT_INST_REG_ADDR_BY_NAME(0, m55he_cfg),
 };
 
-DEVICE_DT_DEFINE(DT_NODELABEL(clockctrl), NULL, NULL, NULL, &config, PRE_KERNEL_1,
+DEVICE_DT_DEFINE(DT_NODELABEL(clockctrl), clockctrl_init, NULL, NULL, &config, PRE_KERNEL_1,
 				CONFIG_CLOCK_CONTROL_INIT_PRIORITY,
 				&alif_clock_control_driver_api);

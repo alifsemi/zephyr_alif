@@ -1847,6 +1847,34 @@
 			status = "okay";
 			#clock-cells = <0>;
 		};
+
+		clk_38p4m: clk_38p4m {
+			compatible = "fixed-clock";
+			clock-frequency = <38400000>;
+			status = "disabled";
+			#clock-cells = <0>;
+		};
+
+		clk_20m: clk_20m {
+			compatible = "fixed-clock";
+			clock-frequency = <20000000>;
+			status = "disabled";
+			#clock-cells = <0>;
+		};
+
+		clk_100m: clk_100m {
+			compatible = "fixed-clock";
+			clock-frequency = <100000000>;
+			status = "disabled";
+			#clock-cells = <0>;
+		};
+
+		clk_160m: clk_160m {
+			compatible = "fixed-clock";
+			clock-frequency = <160000000>;
+			status = "disabled";
+			#clock-cells = <0>;
+		};
 	};
 
 	aliases {
