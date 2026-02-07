@@ -7,7 +7,7 @@
 
 #include <alif/ensemble/common/e7_appkit.dtsi>
 #include <alif/ensemble/common/ensemble_rtss_hp.dtsi>
-#include "../common/ensemble-e7-appkit-pinctrl.dtsi"
+#include "../common/ensemble-pinctrl.dtsi"
 
 / {
 	compatible = "arm,alif-e7-ak-ae722f80f55d5xx-rtss-hp";
