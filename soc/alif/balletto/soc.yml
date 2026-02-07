@@ -15,3 +15,9 @@ family:
           - name: ab1c1f1m41820ph0
             cpuclusters:
               - name: rtss_he
+          - name: ab1c1f1m41010hh0
+            cpuclusters:
+              - name: rtss_he
+          - name: ab1c1f1m41010ph0
+            cpuclusters:
+              - name: rtss_he
