@@ -311,15 +311,14 @@ static int dmic_alif_pdm_read(const struct device *dev, uint8_t stream, void **b
 }
 
 /**
- * @fn		static void pdm_error_detect_irq_handler()
+ * @fn		static void pdm_error_detect_irq_handler(const struct device *dev)
  * @brief	ISR to handle the error interrupt
- * @param[in]	None
+ * @param[in]	dev	: pointer to Runtime device structure
  * @return	None.
  */
 static __maybe_unused void pdm_error_detect_irq_handler(const struct device *dev)
 {
 	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
-
 	sys_clear_bits(reg_base + PDM_INTERRUPT_REGISTER, PDM_FIFO_OVERFLOW_IRQ);
 	(void)sys_read32(reg_base + PDM_ERROR_IRQ);
 }
@@ -367,7 +366,7 @@ static void *get_slab(struct pdm_data *pdm_data)
 }
 
 /**
- * @fn		static void alif_pdm_warning_isr()
+ * @fn		static void alif_pdm_warning_isr(const struct device *dev)
  * @brief	ISR to handle PDM warning interrupts.
  *			Collects audio data from the PDM channels, stores it
  *			in the buffer, and handles memory allocation and queue
@@ -375,7 +374,7 @@ static void *get_slab(struct pdm_data *pdm_data)
  * @param[in]	dev	: pointer to Runtime device structure
  * @return	None.
  */
-static void alif_pdm_warning_isr(const struct device *dev)
+static __maybe_unused void alif_pdm_warning_isr(const struct device *dev)
 {
 	struct pdm_data *pdmdata = DEV_DATA(dev);
 	uint8_t k = 0;
@@ -446,7 +445,6 @@ static void alif_pdm_warning_isr(const struct device *dev)
 	pdmdata->bytes_got += data_bytes;
 
 	if (pdmdata->data_buffer == NULL) {
-
 		pdmdata->data_buffer = get_slab(pdmdata);
 		if (pdmdata->data_buffer == NULL) {
 			sys_write32(0, reg_base + PDM_INTERRUPT_REGISTER);
@@ -478,6 +476,37 @@ static void alif_pdm_warning_isr(const struct device *dev)
 			pdmdata->buf_index = 0;
 		}
 	}
+}
+
+/**
+ * @fn		static void alif_lppdm_combined_isr(const struct device *dev)
+ * @brief	LPPDM exposes a single NVIC interrupt line where
+ *		warning, audio-detect, and error interrupts are OR’ed
+ *		together in hardware. This ISR decodes the source(s)
+ *		by reading the individual interrupt status registers.
+ * @param[in]	dev	: pointer to Runtime device structure
+ * @return	None.
+ */
+static __maybe_unused void alif_lppdm_combined_isr(const struct device *dev)
+{
+	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
+
+	uint32_t error_irq_stat = sys_read32(reg_base + PDM_ERROR_IRQ);
+	uint32_t warn_irq_stat  = sys_read32(reg_base + PDM_WARN_IRQ);
+#if defined(CONFIG_ENSEMBLE_GEN2) || defined(CONFIG_SOC_SERIES_E1C)
+	uint32_t audio_irq_stat = sys_read32(reg_base + PDM_AUDIO_DETECT_IRQ);
+#endif
+	if (error_irq_stat) {
+		pdm_error_detect_irq_handler(dev);
+	}
+	if (warn_irq_stat) {
+		alif_pdm_warning_isr(dev);
+	}
+#if defined(CONFIG_ENSEMBLE_GEN2) || defined(CONFIG_SOC_SERIES_E1C)
+	if (audio_irq_stat) {
+		pdm_audio_detect_irq_handler(dev);
+	}
+#endif
 }
 
 /* Init function */
@@ -555,10 +584,18 @@ static const struct _dmic_ops dmic_alif_pdm_api = {
 	};                                                                                         \
 	static void pdm_irq_config_##n(void)                                                       \
 	{                                                                                          \
+		IF_ENABLED(DT_INST_IRQ_HAS_NAME(n, lppdm_combined_intr), (                         \
+		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, lppdm_combined_intr, irq),                      \
+				DT_INST_IRQ_BY_NAME(n, lppdm_combined_intr, priority),             \
+				alif_lppdm_combined_isr, DEVICE_DT_INST_GET(n), 0);                \
+		irq_enable(DT_INST_IRQ_BY_NAME(n, lppdm_combined_intr, irq));                      \
+		)) \
+		IF_ENABLED(DT_INST_IRQ_HAS_NAME(n, warning_intr), (                                \
 		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, warning_intr, irq),                             \
 				DT_INST_IRQ_BY_NAME(n, warning_intr, priority),                    \
 				alif_pdm_warning_isr, DEVICE_DT_INST_GET(n), 0);                   \
 		irq_enable(DT_INST_IRQ_BY_NAME(n, warning_intr, irq));                             \
+		)) \
 		IF_ENABLED(DT_INST_IRQ_HAS_NAME(n, error_intr), (                                  \
 		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, error_intr, irq),                               \
 				DT_INST_IRQ_BY_NAME(n, error_intr, priority),                      \
