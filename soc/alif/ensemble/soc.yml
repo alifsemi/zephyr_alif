@@ -35,6 +35,10 @@ family:
             cpuclusters:
               - name: rtss_he
               - name: rtss_hp
+          - name: ae302f80c1557xx
+            cpuclusters:
+              - name: rtss_he
+              - name: rtss_hp
       - name: e1c
         socs:
           - name: ae1c1f4051920hh
