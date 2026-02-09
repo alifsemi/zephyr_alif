@@ -5,3 +5,4 @@ board:
   socs:
   - name: 'ae512f80f55d5xx'
   - name: 'ae512f80f5582xx'
+  - name: 'ae512f80f5582xxx'
