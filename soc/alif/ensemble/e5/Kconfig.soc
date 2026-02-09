@@ -1,0 +1,27 @@
+# Copyright (c) 2026 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_SERIES_E5
+	bool
+	select SOC_FAMILY_ENSEMBLE
+
+config SOC_SERIES
+	default "e5" if SOC_SERIES_E5
+
+config SOC_AE512F80F55D5XX
+	bool
+	select SOC_SERIES_E5
+	help
+	  Alif Ensemble E5
+
+config SOC_AE512F80F55D5XX_RTSS_HE
+	bool
+	select SOC_AE512F80F55D5XX
+
+config SOC_AE512F80F55D5XX_RTSS_HP
+	bool
+	select SOC_AE512F80F55D5XX
+
+config SOC
+	default "ae512f80f55d5xx" if SOC_AE512F80F55D5XX

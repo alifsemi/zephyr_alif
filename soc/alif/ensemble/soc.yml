@@ -15,6 +15,12 @@ family:
               - name: rtss_he
               - name: rtss_hp
               - name: apss
+      - name: e5
+        socs:
+          - name: ae512f80f55d5xx
+            cpuclusters:
+              - name: rtss_he
+              - name: rtss_hp
       - name: e4
         socs:
           - name: ae402fa0e5597xx0
