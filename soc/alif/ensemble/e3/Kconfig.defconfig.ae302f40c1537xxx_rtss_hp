@@ -1,0 +1,13 @@
+# Copyright (c) 2026 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+if SOC_AE302F40C1537XXX_RTSS_HP
+
+config NUM_IRQS
+	default 480
+
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+	default 400000000
+
+endif #SOC_AE302F40C1537XXX_RTSS_HP
