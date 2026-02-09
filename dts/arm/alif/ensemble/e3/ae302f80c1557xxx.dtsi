@@ -1,0 +1,20 @@
+/* Copyright (c) 2026 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include "alif/ensemble/common/e3_e5_e7.dtsi"
+
+/delete-node/ &sram1;
+
+&sram0 {
+	reg = <0x02000000 DT_SIZE_K(4096)>;
+};
+
+&mram_flash {
+	reg = <0x80000000 DT_SIZE_K(1536)>;
+};
+
+&mram_storage {
+	reg = <0x80000000 DT_SIZE_K(1536)>;
+};
