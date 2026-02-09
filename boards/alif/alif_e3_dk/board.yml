@@ -4,3 +4,4 @@ board:
   vendor: alif
   socs:
   - name: 'ae302f80f55d5xx'
+  - name: 'ae302f80f5582xx'
