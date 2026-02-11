@@ -825,6 +825,8 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 	struct i2c_dw_dev_config *const dw = dev->data;
 	const struct i2c_dw_rom_config *const rom = dev->config;
 	uint32_t value = 0U;
+	uint32_t lcnt_val = 0U;
+	uint32_t hcnt_val = 0U;
 	uint32_t rc = 0U;
 	uint32_t reg_base = get_regs(dev);
 
@@ -834,71 +836,21 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 	/* and have setup the clock frequency and speed mode */
 	switch (I2C_SPEED_GET(dw->app_config)) {
 	case I2C_SPEED_STANDARD:
-		/* Following the directions on DW spec page 59, IC_SS_SCL_LCNT
-		 * must have register values larger than IC_FS_SPKLEN + 7
-		 */
-		value = I2C_STD_LCNT + rom->lcnt_offset;
-		value = I2C_ENSURE_MIN_SCL_LCNT(value, rom->fs_spk_len);
-		dw->lcnt = value;
-
-		/* Following the directions on DW spec page 59, IC_SS_SCL_HCNT
-		 * must have register values larger than IC_FS_SPKLEN + 5
-		 */
-		value = I2C_STD_HCNT + rom->hcnt_offset;
-		value = I2C_ENSURE_MIN_SCL_HCNT(value, rom->fs_spk_len);
-		dw->hcnt = value;
+		lcnt_val = I2C_STD_LCNT + rom->lcnt_offset;
+		hcnt_val = I2C_STD_HCNT + rom->hcnt_offset;
 		break;
 	case I2C_SPEED_FAST:
-		/*
-		 * Following the directions on DW spec page 59, IC_FS_SCL_LCNT
-		 * must have register values larger than IC_FS_SPKLEN + 7
-		 */
-		value = I2C_FS_LCNT + rom->lcnt_offset;
-		value = I2C_ENSURE_MIN_SCL_LCNT(value, rom->fs_spk_len);
-		dw->lcnt = value;
-
-		/*
-		 * Following the directions on DW spec page 59, IC_FS_SCL_HCNT
-		 * must have register values larger than IC_FS_SPKLEN + 5
-		 */
-		value = I2C_FS_HCNT + rom->hcnt_offset;
-		value = I2C_ENSURE_MIN_SCL_HCNT(value, rom->fs_spk_len);
-		dw->hcnt = value;
+		lcnt_val = I2C_FS_LCNT + rom->lcnt_offset;
+		hcnt_val = I2C_FS_HCNT + rom->hcnt_offset;
 		break;
 	case I2C_SPEED_FAST_PLUS:
-		/*
-		 * Following the directions on DW spec page 59, IC_FS_SCL_LCNT
-		 * must have register values larger than IC_FS_SPKLEN + 7
-		 */
-		value = I2C_FSP_LCNT + rom->lcnt_offset;
-		value = I2C_ENSURE_MIN_SCL_LCNT(value, rom->fs_spk_len);
-		dw->lcnt = value;
-
-		/*
-		 * Following the directions on DW spec page 59, IC_FS_SCL_HCNT
-		 * must have register values larger than IC_FS_SPKLEN + 5
-		 */
-		value = I2C_FSP_HCNT + rom->hcnt_offset;
-		value = I2C_ENSURE_MIN_SCL_HCNT(value, rom->fs_spk_len);
-		dw->hcnt = value;
+		lcnt_val = I2C_FSP_LCNT + rom->lcnt_offset;
+		hcnt_val = I2C_FSP_HCNT + rom->hcnt_offset;
 		break;
 	case I2C_SPEED_HIGH:
 		if (dw->support_hs_mode) {
-			/*
-			 * Following the directions on DW spec page 59, IC_FS_SCL_LCNT
-			 * must have register values larger than IC_FS_SPKLEN + 7
-			 */
-			value = I2C_HS_LCNT + rom->lcnt_offset;
-			value = I2C_ENSURE_MIN_SCL_LCNT(value, rom->hs_spk_len);
-			dw->lcnt = value;
-
-			/*
-			 * Following the directions on DW spec page 59, IC_FS_SCL_HCNT
-			 * must have register values larger than IC_FS_SPKLEN + 5
-			 */
-			value = I2C_HS_HCNT + rom->hcnt_offset;
-			value = I2C_ENSURE_MIN_SCL_HCNT(value, rom->hs_spk_len);
-			dw->hcnt = value;
+			lcnt_val = I2C_HS_LCNT + rom->lcnt_offset;
+			hcnt_val = I2C_HS_HCNT + rom->hcnt_offset;
 		} else {
 			rc = -EINVAL;
 		}
@@ -907,6 +859,30 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		/* TODO change */
 		rc = -EINVAL;
 	}
+
+	if (I2C_SPEED_GET(dw->app_config) == I2C_SPEED_HIGH) {
+		/* Ensure minimum HCNT and LCNT register values
+		 * for High Speed mode
+		 */
+#ifdef CONFIG_I2C_DW_IC_CLK_FREQ_OPTIMIZATION
+		lcnt_val = I2C_ENSURE_MIN_SCL_LCNT(lcnt_val);
+#else
+		lcnt_val = I2C_ENSURE_MIN_SCL_LCNT(lcnt_val, rom->hs_spk_len);
+#endif
+		hcnt_val = I2C_ENSURE_MIN_SCL_HCNT(hcnt_val, rom->hs_spk_len);
+	} else {
+		/* Ensure minimum HCNT and LCNT register values for:
+		 * Standard, Fast and Fast Plus Speed modes
+		 */
+#ifdef CONFIG_I2C_DW_IC_CLK_FREQ_OPTIMIZATION
+		lcnt_val = I2C_ENSURE_MIN_SCL_LCNT(lcnt_val);
+#else
+		lcnt_val = I2C_ENSURE_MIN_SCL_LCNT(lcnt_val, rom->fs_spk_len);
+#endif
+		hcnt_val = I2C_ENSURE_MIN_SCL_HCNT(hcnt_val, rom->fs_spk_len);
+	}
+	dw->lcnt = lcnt_val;
+	dw->hcnt = hcnt_val;
 
 	/*
 	 * Clear any interrupts currently waiting in the controller
