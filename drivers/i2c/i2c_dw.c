@@ -847,20 +847,14 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		 * must have register values larger than IC_FS_SPKLEN + 7
 		 */
 		value = I2C_STD_LCNT + rom->lcnt_offset;
-		if (value <= (rom->fs_spk_len + 7)) {
-			value = rom->fs_spk_len + 8;
-		}
-
+		value = I2C_ENSURE_MIN_SCL_LCNT(value, rom->fs_spk_len);
 		dw->lcnt = value;
 
 		/* Following the directions on DW spec page 59, IC_SS_SCL_HCNT
 		 * must have register values larger than IC_FS_SPKLEN + 5
 		 */
 		value = I2C_STD_HCNT + rom->hcnt_offset;
-		if (value <= (rom->fs_spk_len + 5)) {
-			value = rom->fs_spk_len + 6;
-		}
-
+		value = I2C_ENSURE_MIN_SCL_HCNT(value, rom->fs_spk_len);
 		dw->hcnt = value;
 		break;
 	case I2C_SPEED_FAST:
@@ -869,10 +863,7 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		 * must have register values larger than IC_FS_SPKLEN + 7
 		 */
 		value = I2C_FS_LCNT + rom->lcnt_offset;
-		if (value <= (rom->fs_spk_len + 7)) {
-			value = rom->fs_spk_len + 8;
-		}
-
+		value = I2C_ENSURE_MIN_SCL_LCNT(value, rom->fs_spk_len);
 		dw->lcnt = value;
 
 		/*
@@ -880,10 +871,7 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		 * must have register values larger than IC_FS_SPKLEN + 5
 		 */
 		value = I2C_FS_HCNT + rom->hcnt_offset;
-		if (value <= (rom->fs_spk_len + 5)) {
-			value = rom->fs_spk_len + 6;
-		}
-
+		value = I2C_ENSURE_MIN_SCL_HCNT(value, rom->fs_spk_len);
 		dw->hcnt = value;
 		break;
 	case I2C_SPEED_FAST_PLUS:
@@ -892,10 +880,7 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		 * must have register values larger than IC_FS_SPKLEN + 7
 		 */
 		value = I2C_FSP_LCNT + rom->lcnt_offset;
-		if (value <= (rom->fs_spk_len + 7)) {
-			value = rom->fs_spk_len + 8;
-		}
-
+		value = I2C_ENSURE_MIN_SCL_LCNT(value, rom->fs_spk_len);
 		dw->lcnt = value;
 
 		/*
@@ -903,26 +888,25 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 		 * must have register values larger than IC_FS_SPKLEN + 5
 		 */
 		value = I2C_FSP_HCNT + rom->hcnt_offset;
-		if (value <= (rom->fs_spk_len + 5)) {
-			value = rom->fs_spk_len + 6;
-		}
-
+		value = I2C_ENSURE_MIN_SCL_HCNT(value, rom->fs_spk_len);
 		dw->hcnt = value;
 		break;
 	case I2C_SPEED_HIGH:
 		if (dw->support_hs_mode) {
+			/*
+			 * Following the directions on DW spec page 59, IC_FS_SCL_LCNT
+			 * must have register values larger than IC_FS_SPKLEN + 7
+			 */
 			value = I2C_HS_LCNT + rom->lcnt_offset;
-			if (value <= (rom->hs_spk_len + 7)) {
-				value = rom->hs_spk_len + 8;
-			}
-
+			value = I2C_ENSURE_MIN_SCL_LCNT(value, rom->hs_spk_len);
 			dw->lcnt = value;
 
+			/*
+			 * Following the directions on DW spec page 59, IC_FS_SCL_HCNT
+			 * must have register values larger than IC_FS_SPKLEN + 5
+			 */
 			value = I2C_HS_HCNT + rom->hcnt_offset;
-			if (value <= (rom->hs_spk_len + 5)) {
-				value = rom->hs_spk_len + 6;
-			}
-
+			value = I2C_ENSURE_MIN_SCL_HCNT(value, rom->hs_spk_len);
 			dw->hcnt = value;
 		} else {
 			rc = -EINVAL;
