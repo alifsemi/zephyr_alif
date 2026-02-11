@@ -1,5 +1,6 @@
+def rebaseNeeded       = "-1"
 def allRecipientEmails = ""
-def rebaseNeeded = "-1"
+
 pipeline {
     agent any
 
@@ -7,7 +8,9 @@ pipeline {
         GITHUB_USER_OR_ORG_NAME = sh(script: 'echo ${CHANGE_URL:-alifsemi}    | sed -E "s#https://github.com/([^/]+)/([^/]+)/.*#\\1#"', returnStdout: true).trim()
         GITHUB_REPO_NAME        = sh(script: 'echo ${CHANGE_URL:-zephyr_alif} | sed -E "s#https://github.com/([^/]+)/([^/]+)/.*#\\2#"', returnStdout: true).trim()
         CHANGE_TARGET           = sh(script: 'echo ${CHANGE_TARGET:-main}', returnStdout: true).trim()
-        PATH="${env.WEST_BIN_PATH}:${env.PATH}"
+        GITHUB_TOKEN            = credentials('27c5d944-f190-4ab7-8c37-23cc43c7ce11')
+        PATH                    = "${env.PATH}:$HOME/.local/bin"
+        MANIFEST_REPO           = "sdk_alif"
     }
 
     options {
@@ -18,9 +21,23 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    sh """#!/bin/bash -xe
-                    echo -e "✔️ None."
-                    """
+                    sh '''#!/bin/bash -xe
+                    if ! command -v gitlint >/dev/null 2>&1; then
+                        echo "gitlint not found. Installing gitlint..."
+                        python3 -m pip install --user -q gitlint
+                    fi
+                    if ! command -v jq >/dev/null 2>&1; then
+                        echo "jq not found. Installing..."
+
+                        mkdir -p "$HOME/.local/bin" && wget --tries=5 --timeout=30 --waitretry=5 \
+                            --retry-connrefused --https-only -q -O "$HOME/.local/bin/jq" \
+                            "https://github.com/jqlang/jq/releases/latest/download/jq-linux-amd64" && \
+                        chmod 755 "$HOME/.local/bin/jq"
+                    fi
+                    git config --list
+                    [ -n "$(git config --global --get user.name)" ]  || git config --global user.name "Alif-CI"
+                    [ -n "$(git config --global --get user.email)" ] || git config --global user.email "alif-ci@alifsemi.com"
+                    '''
                 }
             }
         }
@@ -66,6 +83,12 @@ pipeline {
                             set -xe
                             cd ${GITHUB_REPO_NAME}
                             git fetch origin refs/heads/${CHANGE_TARGET}:refs/remotes/origin/${CHANGE_TARGET}
+
+                            if ! git rebase origin/${CHANGE_TARGET} ; then
+                                echo -e "Rebase could not happen successfully"
+                                exit 1
+                            fi
+
                             commitCnt=$(git rev-list --count origin/${CHANGE_TARGET}..HEAD)
                             commits=$(git log -n ${commitCnt} --pretty=format:"%H")
 
@@ -80,7 +103,9 @@ pipeline {
                             firstCommit_body=$(git show -s --format="%b" "$firstCommit" | tail -n +1 | awk '!/^[A-Za-z-]+:/ {print}' | sed '/^$/d')
                             parentCnt=$(git log -n 1 --pretty=format:"%p"  | wc -w)
 
-                            if [[ "$firstCommit_author_name" == "Jenkins" || "$firstCommit_author_email" == "nobody@nowhere" || "$firstCommit_body" == "*Merge commit \'$firstCommit\' into HEAD*" || "$parentCnt" -gt "1" ]] ; then
+                            if [[ "$firstCommit_author_name" == "Jenkins" || "$firstCommit_author_email" == "nobody@nowhere" || \
+                                  "$firstCommit_body" == "*Merge commit \'$firstCommit\' into HEAD*" || "$parentCnt" -gt "1" || \
+                                  "$firstCommit_author_name" == "Alif-CI" || "$firstCommit_author_email" == "alif-ci@alifsemi.com" ]] ; then
                                 git reset --soft HEAD~1
                                 echo 1
                             else
@@ -94,7 +119,7 @@ pipeline {
             }
         }
 
-        stage('Get PR Authors') {
+        stage('Get PR Message/Authors') {
             steps {
                 script {
                     allRecipientEmails = sh(
@@ -120,39 +145,53 @@ pipeline {
             }
         }
 
-        stage('west init-update and build') {
+        stage('CheckPatch and Commit Message Validation') {
             steps {
                 script {
-                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                        sh '''#!/bin/bash
+                    withCredentials([usernamePassword(credentialsId: '27c5d944-f190-4ab7-8c37-23cc43c7ce11',
+                        usernameVariable: 'GITHUB_TOKEN_USR', passwordVariable: 'GITHUB_TOKEN')]) {
+                        sh ''' #!/bin/bash
                         set -xe
-                        source "${ZEPHYR_3X_ENV}/environment-setup-x86_64-pokysdk-linux"
-                        cd "${GITHUB_REPO_NAME}"
+                        echo "remove existing build labels and comment"
+                        for label in BUILD_AWAITING BUILD_FAILED BUILD_PASSED CHECKPATCH_FAILED
+                        do
+                            curl -sS -X DELETE "https://api.github.com/repos/${GITHUB_USER_OR_ORG_NAME}/${GITHUB_REPO_NAME}/issues/${CHANGE_ID}/labels/$label" \
+                              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                              -H "Content-Type: text/plain"
+                        done
 
-                        echo -e "✅ west initialization started"
-                        west init -l .
-                        echo -e "☑️ west initialization is completed."
-                        west update
-                        echo -e "☑️ west update is completed."
-                        west zephyr-export
+                        for id in $(curl -sS -X GET -H "Authorization: Bearer $GITHUB_TOKEN" \
+                          https://api.github.com/repos/${GITHUB_USER_OR_ORG_NAME}/${GITHUB_REPO_NAME}/issues/${CHANGE_ID}/comments \
+                          | jq -r '.[] | select(.body | contains("✏️ PLEASE UPDATE MANIFEST FILE IN SDK-ALIF REPO WITH SHA/COMMIT-ID/PULL-NUMBER ✏️")) | .id')
+                        do
+                          curl -sS -X DELETE \
+                            -H "Authorization: Bearer $GITHUB_TOKEN" \
+                            https://api.github.com/repos/${GITHUB_USER_OR_ORG_NAME}/${GITHUB_REPO_NAME}/issues/comments/$id
+                        done
+                        '''
+                    }
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        sh """#!/bin/bash
+                        set -xe
+                        cd \${GITHUB_REPO_NAME}
 
-                        commitCnt=$(git rev-list --count origin/${CHANGE_TARGET}..HEAD)
-                        totalCommitCnt=$(git rev-list --count origin/${CHANGE_TARGET})
-                        if [[ "$totalCommitCnt" < "$commitCnt" ]] ; then
-                            checkGitLog=${commitCnt}
+                        commitCnt=\$(git rev-list --count origin/${CHANGE_TARGET}..HEAD)
+                        totalCommitCnt=\$(git rev-list --count origin/${CHANGE_TARGET})
+
+                        if [[ "\$totalCommitCnt" -lt "\$commitCnt" ]] ; then
+                            checkGitLog=\${commitCnt}
                         else
                             checkGitLog=6
                         fi
-                        git log -${checkGitLog}
+                        git log -\${checkGitLog}
 
-                        echo -e "🎯 we have $commitCnt commits in $CHANGE_TARGET review"
-
-                        if [[ "$commitCnt" =~ ^[0-9]+$ && "$commitCnt" -gt "0" ]] ; then
-                            git format-patch -${commitCnt}
-                            check_patch_output=$(./scripts/checkpatch.pl --patch *.patch)
-                            echo -e "$check_patch_output"
-                            check_patch_output_summary=$(echo "$check_patch_output" | grep ".patch total:")
-                            echo -e "$check_patch_output_summary"
+                        echo -e "🎯 we have \$commitCnt commits in \$CHANGE_TARGET review"
+                        if [[ "\${commitCnt}" =~ ^[0-9]+\$ && "\${commitCnt}" -gt "0" ]] ; then
+                            git format-patch -\${commitCnt}
+                            check_patch_output=\$(./scripts/checkpatch.pl --patch *.patch)
+                            echo -e "\$check_patch_output"
+                            check_patch_output_summary=\$(echo "\$check_patch_output" | grep ".patch total:")
+                            echo -e "\$check_patch_output_summary"
 
                             check_patch_errors=0
                             check_patch_warnings=0
@@ -160,103 +199,48 @@ pipeline {
 
                             while read -r line; do
                               # Extract numbers using regex or field parsing
-                              err=$(echo "$line"  | awk '{for(i=1;i<=NF;i++) if($i=="total:") print $(i+1)}')
-                              warn=$(echo "$line" | awk '{for(i=1;i<=NF;i++) if($i=="errors,") print $(i+1)}')
-                              ln=$(echo "$line"   | awk '{for(i=1;i<=NF;i++) if($i=="warnings,") print $(i+1)}')
+                              err=\$(echo "\$line"  | awk '{for(i=1;i<=NF;i++) if(\$i=="total:") print \$(i+1)}')
+                              warn=\$(echo "\$line" | awk '{for(i=1;i<=NF;i++) if(\$i=="errors,") print \$(i+1)}')
+                              ln=\$(echo "\$line"   | awk '{for(i=1;i<=NF;i++) if(\$i=="warnings,") print \$(i+1)}')
 
-                              if [[ "$err" =~ ^[0-9]+$ ]]; then
-                                check_patch_errors=$((check_patch_errors + err))
+                              if [[ "\$err" =~ ^[0-9]+\$ ]]; then
+                                check_patch_errors=\$((check_patch_errors + err))
                               else
-                                echo "Skipping non-numeric error: $err"
+                                echo "Skipping non-numeric error: \$err"
                               fi
 
-                              if [[ "$warn" =~ ^[0-9]+$ ]]; then
-                                check_patch_warnings=$((check_patch_warnings + warn))
+                              if [[ "\$warn" =~ ^[0-9]+\$ ]]; then
+                                check_patch_warnings=\$((check_patch_warnings + warn))
                               else
-                                echo "Skipping non-numeric warning: $warn"
+                                echo "Skipping non-numeric warning: \$warn"
                               fi
 
-                              if [[ "$ln" =~ ^[0-9]+$ ]]; then
-                                check_patch_lines=$((check_patch_lines + ln))
+                              if [[ "\$ln" =~ ^[0-9]+\$ ]]; then
+                                check_patch_lines=\$((check_patch_lines + ln))
                               else
-                                echo "Skipping non-numeric lines: $ln"
+                                echo "Skipping non-numeric lines: \$ln"
                               fi
 
-                            done <<< "$check_patch_output_summary"
+                            done <<< "\$check_patch_output_summary"
 
-                            echo -e "🎯Check-Patch has=> Errors: ${check_patch_errors} Warnings: ${check_patch_warnings}, Lines: ${check_patch_lines}\n\n"
+                            echo -e "🎯Check-Patch has=> Errors: \${check_patch_errors} Warnings: \${check_patch_warnings}, Lines: \${check_patch_lines}\n\n"
 
-                            pr_checker_log=$(${VALIDATION_SCRIPT_DIR}/pr_commit_checker.sh ${commitCnt} ${PWD} origin/${CHANGE_TARGET})
-                            pr_checker_err=$?
-                            echo -e "🎯PR Checker=>\n$pr_checker_log"
-
-                            gitlint_log=$(git log -${commitCnt} --pretty=%B | gitlint 2>&1)
-                            if [ -n "$gitlint_log" ] ; then
+                            gitlint_log=\$(git log -\${commitCnt} --pretty=%B | gitlint 2>&1)
+                            if [ -n "\$gitlint_log" ] ; then
                                 gitlint_err=1
-                                echo -e "🎯GITLINT log=>\n$gitlint_log"
+                                echo -e "🎯GITLINT log=>\n\$gitlint_log"
                             else
                                gitlint_err=0
                             fi
                         else
                             gitlint_err=0
-                            pr_checker_err=0
                             check_patch_errors=0
                         fi
-
-                        total_buildError=0
-                        total_cfg_run_cnt=0
-                        skipped_cfg_run_cnt=0
-                        actual_cfg_run_cnt=0
-                        fail_cfg_run_cnt=0
-                        success_cfg_run_cnt=0
-                        west build -p always -b native_sim  samples/basic/blinky
-                        total_jenkins_Error=$?
-                        #mapfile -t all_alif_boards_cfgs < <(west boards | grep "alif" | grep -v "fpga")
-                        #supported_compilers=("gcc")
-                        #test_apps=("samples/hello_world")
-                        #
-                        #for currCompiler in ${!supported_compilers[@]}
-                        #do
-                        #    for testApp in ${!test_apps[@]}
-                        #    do
-                        #        for boardName in ${!all_alif_boards_cfgs[@]}
-                        #        do
-                        #           total_cfg_run_cnt=$((total_cfg_run_cnt + 1))
-                        #           echo -e "🚩 Building for Board: ${all_alif_boards_cfgs[boardName]} AND test-app: ${test_apps[testApp]}"
-                        #           if [ -d build ] ; then
-                        #              rm -rf build
-                        #              echo -e "❌ Deleting Build folder..."
-                        #           fi
-                        #           actual_cfg_run_cnt=$((actual_cfg_run_cnt + 1))
-                        #           west build -b ${all_alif_boards_cfgs[boardName]} ${test_apps[testApp]}
-                        #           tmp=$?
-                                    echo -e "\n\n"
-                        #           total_buildError=$((total_buildError + tmp))
-                        #           echo -e "🚫 Error Status total_buildError: $total_buildError and tmp: $tmp"
-                        #           if [ "$tmp" -ne 0 ] ; then
-                        #               fail_cfg_run_cnt=$((fail_cfg_run_cnt + 1))
-                        #           fi
-                        #        done
-                        #    done
-                        #done
-                        #echo -e "✅ All Build is completed"
-
-                        #if [[ "$total_buildError" =~ ^[0-9]+$ && "$check_patch_errors" =~ ^[0-9]+$ && "$pr_checker_err" =~ ^[0-9]+$ && "$gitlint_err" =~ ^[0-9]+$ ]]; then
-                        #    total_jenkins_Error=$(total_buildError + check_patch_errors + pr_checker_err + gitlint_err)
-                        #else
-                        #    echo "Skipping non-numeric total_buildError: $total_buildError, check_patch_errors: $check_patch_errors, pr_checker_err: $pr_checker_err, gitlint_err: $gitlint_err"
-                        #fi
-
-                        echo -e " 🏆GitLint Result     =>  ${gitlint_err}"
-                        echo -e " 🏆PR Checker  Result =>  ${pr_checker_err}"
-                        echo -e " 🏆Check-Patch Result =>  Error: $check_patch_errors, Warnings: $check_patch_warnings"
-                        echo -e " 🏆Success: $((actual_cfg_run_cnt - fail_cfg_run_cnt)), Failed: $fail_cfg_run_cnt, Skipped: $skipped_cfg_run_cnt"
-                        echo -e " 🔥Total Run => ($actual_cfg_run_cnt/$total_cfg_run_cnt)"
-
-                        exit $total_jenkins_Error
-                        '''
+                        echo -e " 🏆Git Rebase Needed  =>  ${rebaseNeeded}"
+                        echo -e " 🏆GitLint Result     =>  \${gitlint_err}"
+                        echo -e " 🏆Check-Patch Result =>  Error: \$check_patch_errors, Warnings: \$check_patch_warnings"
+                        """
                     }
-                    echo  " 🏆Git Rebase Needed  =>  ${rebaseNeeded}"
                 }
             }
         }
@@ -273,14 +257,79 @@ pipeline {
                        <p>Build Number: <b>${env.BUILD_NUMBER}</b></p>
                        <p>View details: <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
                     """,
-                    to: "${allRecipientEmails}",
+                    to : "${allRecipientEmails}",
                     mimeType: 'text/html'
                 )
+                withCredentials([usernamePassword(credentialsId: '27c5d944-f190-4ab7-8c37-23cc43c7ce11',
+                    usernameVariable: 'GITHUB_TOKEN_USR', passwordVariable: 'GITHUB_TOKEN')]) {
+                    sh '''
+                    curl -sS -X POST "https://api.github.com/repos/${GITHUB_USER_OR_ORG_NAME}/${GITHUB_REPO_NAME}/issues/${CHANGE_ID}/labels" \
+                      -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                      -H "Content-Type: text/plain" \
+                      -d '["CHECKPATCH_FAILED"]'
+                    '''
+                }
             }
         }
 
         success {
-            echo 'Build succeeded.'
+            echo "🟢 UPDATING CORRESPONDING SHA/COMMIT-ID IN MANIFEST FILE OF ALIF_SDK 🟢"
+            script {
+                withCredentials([usernamePassword(credentialsId: '27c5d944-f190-4ab7-8c37-23cc43c7ce11',
+                    usernameVariable: 'GITHUB_TOKEN_USR', passwordVariable: 'GITHUB_TOKEN')]) {
+                    sh '''
+                    curl -sS -X POST "https://api.github.com/repos/${GITHUB_USER_OR_ORG_NAME}/${GITHUB_REPO_NAME}/issues/${CHANGE_ID}/labels" \
+                      -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                      -H "Content-Type: text/plain" \
+                      -d '["BUILD_AWAITING"]'
+
+                    updateManifestPRalreadyRaised=0
+                    SEARCH_TEXT="This PR depends on: https://github.com/${GITHUB_USER_OR_ORG_NAME}/${GITHUB_REPO_NAME}/pull/${CHANGE_ID}"
+                    updateManifestPRnumber=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
+                     "https://api.github.com/repos/${GITHUB_USER_OR_ORG_NAME}/${GITHUB_REPO_NAME}/pulls?state=open&per_page=100" \
+                     | jq -r --arg s "$SEARCH_TEXT" '
+                        .[]
+                        | select(.body != null and (.body | contains($s)))
+                        | .number
+                        ' | head -1)
+
+                    if [ -n "$updateManifestPRnumber" ]; then
+                        echo "Manifest update found in PR #$updateManifestPRnumber"
+                    else
+                        git clone https://github.com/${GITHUB_USER_OR_ORG_NAME}/${MANIFEST_REPO}.git
+                        cd ${MANIFEST_REPO}
+                        MANIFEST_UPDATED_BRANCH=${MANIFEST_REPO}_${CHANGE_ID}
+                        git checkout -b ${MANIFEST_UPDATED_BRANCH}
+                        updated_rev="pull/${CHANGE_ID}/head"
+                        sed -i "
+                        /^[[:space:]]*repo-path:[[:space:]]*${GITHUB_REPO_NAME}[[:space:]]*$/ {
+                            n
+                            s|^\\([[:space:]]*\\)revision:[[:space:]]*[[:xdigit:]]\\+[[:space:]]*$|\\1revision: ${updated_rev}|
+                        }
+                        " west.yml
+                        git add west.yml
+                        git diff --cached --quiet && exit 0
+                        commit_message=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
+                            "https://api.github.com/repos/${GITHUB_USER_OR_ORG_NAME}/${GITHUB_REPO_NAME}/pulls/${CHANGE_ID}" \
+                            | jq -r '.body')
+                        git commit -sm "manifest update $commit_message"
+                        git push origin ${MANIFEST_UPDATED_BRANCH}
+
+                        pr_title=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
+                            "https://api.github.com/repos/${GITHUB_USER_OR_ORG_NAME}/${GITHUB_REPO_NAME}/pulls/${CHANGE_ID}" \
+                            | jq -r '.body' | head -n 1)
+                        curl -sS -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                            https://api.github.com/repos/${GITHUB_USER_OR_ORG_NAME}/${GITHUB_REPO_NAME}/pulls \
+                            -d '{
+                                    "title":"manifest update for ${pr_title}",
+                                    "head":"'"${MANIFEST_UPDATED_BRANCH}"'",
+                                    "base":"'"main"'",
+                                    "body":" ${pr_title}\r\n\r\nThis PR depends on: https://github.com/${GITHUB_USER_OR_ORG_NAME}/${GITHUB_REPO_NAME}/pull/${CHANGE_ID}"
+                                }'
+                    fi
+                    '''
+                }
+            }
         }
 
         cleanup {
