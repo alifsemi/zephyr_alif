@@ -17,6 +17,25 @@ Ethos-U55 NPUs.
    The E7 supports both RTSS-HE (High-Efficiency) and RTSS-HP (High-Performance)
    Cortex-M55 core targets.
 
+Board Identifiers
+*****************
+
+The following board qualifiers are supported:
+
++----------------------------------------------+----------+------------------+
+| Board Identifier                             | SoC      | Core             |
++==============================================+==========+==================+
+| ``alif_e7_dk/ae722f80f55d5xx/rtss_he``       | E7       | RTSS-HE          |
++----------------------------------------------+----------+------------------+
+| ``alif_e7_dk/ae722f80f55d5xx/rtss_hp``       | E7       | RTSS-HP          |
++----------------------------------------------+----------+------------------+
+| ``alif_e7_dk/ae722f80f55d5xx/apss``          | E7       | APSS             |
++----------------------------------------------+----------+------------------+
+| ``alif_e7_dk/ae302f80f55d5xx/rtss_he``       | E3       | RTSS-HE          |
++----------------------------------------------+----------+------------------+
+| ``alif_e7_dk/ae302f80f55d5xx/rtss_hp``       | E3       | RTSS-HP          |
++----------------------------------------------+----------+------------------+
+
 Hardware
 ********
 
@@ -63,7 +82,8 @@ Flashing
 
 The Alif E7 DK supports flashing via JTAG/SWD using external debug probes.
 
-Build and flash applications as usual:
+Build and flash applications using any of the board identifiers listed above.
+For example:
 
 .. zephyr-app-commands::
    :zephyr-app: samples/hello_world
