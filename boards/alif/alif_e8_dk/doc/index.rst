@@ -17,6 +17,25 @@ for Generative AI, and dual Ethos-U55 NPUs.
    The E8 supports both RTSS-HE (High-Efficiency) and RTSS-HP (High-Performance)
    Cortex-M55 core targets.
 
+Board Identifiers
+*****************
+
+The following board qualifiers are supported:
+
++----------------------------------------------+----------+------------------+
+| Board Identifier                             | SoC      | Core             |
++==============================================+==========+==================+
+| ``alif_e8_dk/ae822fa0e5597xx0/rtss_he``      | E8       | RTSS-HE          |
++----------------------------------------------+----------+------------------+
+| ``alif_e8_dk/ae822fa0e5597xx0/rtss_hp``      | E8       | RTSS-HP          |
++----------------------------------------------+----------+------------------+
+| ``alif_e8_dk/ae822fa0e5597xx0/apss``         | E8       | APSS             |
++----------------------------------------------+----------+------------------+
+| ``alif_e8_dk/ae402fa0e5597xx0/rtss_he``      | E4       | RTSS-HE          |
++----------------------------------------------+----------+------------------+
+| ``alif_e8_dk/ae402fa0e5597xx0/rtss_hp``      | E4       | RTSS-HP          |
++----------------------------------------------+----------+------------------+
+
 Hardware
 ********
 
@@ -64,7 +83,8 @@ Flashing
 
 The Alif E8 DK supports flashing via JTAG/SWD using external debug probes.
 
-Build and flash applications as usual:
+Build and flash applications using any of the board identifiers listed above.
+For example:
 
 .. zephyr-app-commands::
    :zephyr-app: samples/hello_world
