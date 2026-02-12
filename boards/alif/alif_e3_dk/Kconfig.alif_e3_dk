@@ -3,5 +3,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config BOARD_ALIF_E3_DK
+	select DEPRECATED
 	select SOC_AE302F80F55D5XX_RTSS_HE if BOARD_ALIF_E3_DK_AE302F80F55D5XX_RTSS_HE
 	select SOC_AE302F80F55D5XX_RTSS_HP if BOARD_ALIF_E3_DK_AE302F80F55D5XX_RTSS_HP
+	help
+	  alif_e3_dk is deprecated and will be removed in a future release.
+	  E3 series SoCs are now supported on the alif_e7_dk board.
+	  Please update your build to use one of the following:
+	    west build -b alif_e7_dk/ae302f80f55d5xx/rtss_hp
+	    west build -b alif_e7_dk/ae302f80f55d5xx/rtss_he

@@ -3,6 +3,12 @@
 Alif E3 Development Kit
 #######################
 
+.. warning::
+   This board is deprecated and will be removed in a future release.
+   E3 series SoCs are now supported on the Alif E7 Development Kit (alif_e7_dk) board.
+   Refer to the E7 Development Kit documentation for board identifiers and
+   build instructions.
+
 Overview
 ********
 
