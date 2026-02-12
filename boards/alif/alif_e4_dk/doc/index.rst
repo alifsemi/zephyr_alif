@@ -3,6 +3,12 @@
 Alif E4 Development Kit
 #######################
 
+.. warning::
+   This board is deprecated and will be removed in a future release.
+   E4 series SoCs are now supported on the Alif E8 Development Kit (alif_e8_dk) board.
+   Refer to the E8 Development Kit documentation for board identifiers and
+   build instructions.
+
 Overview
 ********
 
