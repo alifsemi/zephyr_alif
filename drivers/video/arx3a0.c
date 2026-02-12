@@ -1142,7 +1142,39 @@ static int arx3a0_set_camera_gain(const struct device *dev, uint32_t gain)
 					    0.5f);
 	}
 
-	return resulting_gain;
+	ARG_UNUSED(resulting_gain);
+
+	return 0;
+}
+
+static int arx3a0_get_camera_gain(const struct device *dev, uint32_t *gain)
+{
+	uint32_t val;
+	uint32_t digital_gain;
+	uint32_t coarse_gain;
+	uint32_t fine_gain;
+	int ret;
+
+	ret = arx3a0_read_reg(dev, ARX3A0_GLOBAL_GAIN_REGISTER, 2, &val);
+	if (ret) {
+		return ret;
+	}
+
+	/* Register is 16-bit; keep only valid bits. */
+	val &= 0xFFFFU;
+
+	/* ARX3A0_GLOBAL_GAIN_REGISTER bitfields:
+	 * [15:7] digital gain (9 bits)
+	 * [6:4]  coarse analog gain (3 bits)
+	 * [3:0]  fine analog gain (4 bits)
+	 */
+	digital_gain = (val >> 7) & 0x1FFU;
+	coarse_gain = (val >> 4) & 0x07U;
+	fine_gain = val & 0x0FU;
+
+	*gain = ((fine_gain + 16U) << coarse_gain) * digital_gain * 64U;
+
+	return 0;
 }
 
 static int arx3a0_set_ctrl(const struct device *dev, unsigned int cid, void *value)
@@ -1155,12 +1187,23 @@ static int arx3a0_set_ctrl(const struct device *dev, unsigned int cid, void *val
 	}
 }
 
+static int arx3a0_get_ctrl(const struct device *dev, unsigned int cid, void *value)
+{
+	switch (cid) {
+	case VIDEO_CID_GAIN:
+		return arx3a0_get_camera_gain(dev, (uint32_t *)value);
+	default:
+		return -ENOTSUP;
+	}
+}
+
 static DEVICE_API(video, arx3a0_driver_api) = {
 	.set_format = arx3a0_set_fmt,
 	.get_format = arx3a0_get_fmt,
 	.get_caps = arx3a0_get_caps,
 	.set_stream = arx3a0_set_stream,
 	.set_ctrl = arx3a0_set_ctrl,
+	.get_ctrl = arx3a0_get_ctrl,
 };
 
 static int arx3a0_hard_reseten(const struct device *dev)
