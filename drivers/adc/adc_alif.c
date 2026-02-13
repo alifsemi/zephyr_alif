@@ -296,14 +296,14 @@ static inline void adc_clk_config(void)
 	enable_analog_peripherals(vbat_reg_base);
 
 	/* Enable ADC Clock Control */
-	data = sys_read32(EXPSLV_ADC_CTRL);
+	data = sys_read32(CLKCTRL_PER_SLV_ADC_CTRL);
 	data |= (BIT(0) | BIT(4) | BIT(8) | BIT(12));
-	sys_write32(data, EXPSLV_ADC_CTRL);
+	sys_write32(data, CLKCTRL_PER_SLV_ADC_CTRL);
 
 	/* Enable COMP Clock Control */
-	data = sys_read32(EXPSLV_CMP_CTRL);
+	data = sys_read32(CLKCTRL_PER_SLV_CMP_CTRL);
 	data |= (BIT(0) | BIT(4));
-	sys_write32(data, EXPSLV_CMP_CTRL);
+	sys_write32(data, CLKCTRL_PER_SLV_CMP_CTRL);
 }
 
 static inline void adc_enable_single_shot_conv(uintptr_t adc)
