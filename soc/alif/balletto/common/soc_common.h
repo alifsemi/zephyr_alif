@@ -7,91 +7,78 @@
 #define _SOC_COMMON_H_
 
 /* Host Base System Control Registers */
-#define HOST_BASE_SYS_CTRL		0x1A010000
-#define HOST_BSYS_PWR_REQ		(HOST_BASE_SYS_CTRL + 0x400)
-#define HOST_BSYS_PWR_ST		(HOST_BASE_SYS_CTRL + 0x404)
+#define HOST_BASE_SYS_CTRL                      0x1A010000
+#define HOST_BSYS_PWR_REQ                       (HOST_BASE_SYS_CTRL + 0x400)
+#define HOST_BSYS_PWR_ST                        (HOST_BASE_SYS_CTRL + 0x404)
 
 
 /* AON registers. */
-#define AON_BASE                        0x1A604000UL
-#define AON_RTSS_HE_CTRL                (AON_BASE + 0x10)
-#define AON_RTSS_HE_RESET               (AON_BASE + 0x14)
-#define AON_RTSS_HE_LPUART_CKEN         (AON_BASE + 0x1C)
-#define AON_BUS_CLK_DIV                 (AON_BASE + 0x20)
-#define AON_MISC_REG1                   (AON_BASE + 0x30)
+#define AON_BASE                               0x1A604000UL
+#define AON_RTSS_HE_CTRL                       (AON_BASE + 0x10)
+#define AON_RTSS_HE_RESET                      (AON_BASE + 0x14)
+#define AON_RTSS_HE_LPUART_CKEN                (AON_BASE + 0x1C)
+#define AON_BUS_CLK_DIV                        (AON_BASE + 0x20)
+#define AON_MISC_REG1                          (AON_BASE + 0x30)
 
 /* VBAT Modules */
-#define VBAT_BASE                       0x1A609000UL
-#define VBAT_GPIO_CTRL_EN               (VBAT_BASE + 0x0)
-#define VBAT_PWR_CTRL                   (VBAT_BASE + 0x8)
-#define LPRTC0_CLK_EN                   (VBAT_BASE + 0x10)
-#define LPRTC1_CLK_EN                   (VBAT_BASE + 0x14)
-
-/* Peripheral CLKCTRL */
-#define CLKCTRL_PER_SLV                 0X4902F000UL
-#define UART_CLK_EN                     (CLKCTRL_PER_SLV + 0x8)
+#define VBAT_BASE                              0x1A609000UL
+#define VBAT_GPIO_CTRL_EN                      (VBAT_BASE + 0x0)
+#define VBAT_PWR_CTRL                          (VBAT_BASE + 0x8)
+#define LPRTC0_CLK_EN                          (VBAT_BASE + 0x10)
+#define LPRTC1_CLK_EN                          (VBAT_BASE + 0x14)
 
 /* CGU Module */
-#define CGU_BASE                        0x1A602000
-#define CGU_OSC_CTRL                    (CGU_BASE + 0x0)
-#define CGU_PLL_CLK_SEL                 (CGU_BASE + 0x8)
-#define CGU_ESCLK_SEL                   (CGU_BASE + 0x10)
-#define CGU_CLK_ENA                     (CGU_BASE + 0x14)
+#define CGU_BASE                               0x1A602000
+#define CGU_OSC_CTRL                           (CGU_BASE + 0x0)
+#define CGU_PLL_CLK_SEL                        (CGU_BASE + 0x8)
+#define CGU_ESCLK_SEL                          (CGU_BASE + 0x10)
+#define CGU_CLK_ENA                            (CGU_BASE + 0x14)
 
-#define CGU_PLL_CLK_SEL_SYSREF          BIT(0)
-#define CGU_PLL_CLK_SEL_SYS             BIT(4)
-#define CGU_PLL_CLK_SEL_ES1             BIT(20)
-#define HE_PLL_DIV_POS                  4
-#define HE_PLL_DIV_MASK                 0x3
-#define HE_OSC_DIV_POS                  4
-#define HE_OSC_DIV_MASK                 0x3
+#define CGU_PLL_CLK_SEL_SYSREF                  BIT(0)
+#define CGU_PLL_CLK_SEL_SYS                     BIT(4)
+#define CGU_PLL_CLK_SEL_ES1                     BIT(20)
+#define HE_PLL_DIV_POS                          4
+#define HE_PLL_DIV_MASK                         0x3
+#define HE_OSC_DIV_POS                          4
+#define HE_OSC_DIV_MASK                         0x3
 
 /* ANA Register */
-#define ANA_BASE                        0x1A60A000
-#define ANA_VBAT_REG1                   (ANA_BASE + 0x38)
-#define ANA_VBAT_REG2                   (ANA_BASE + 0x3C)
+#define ANA_BASE                                0x1A60A000
+#define ANA_VBAT_REG1                           (ANA_BASE + 0x38)
+#define ANA_VBAT_REG2                           (ANA_BASE + 0x3C)
 
-/* Expansion Slave registers. */
-#define EXPSLV_BASE			0x4902F000
-#define EXPSLV_UART_CTRL		(EXPSLV_BASE + 0x8)
-#define EXPSLV_SSI_CTRL			(EXPSLV_BASE + 0x28)
-#define EXPSLV_ADC_CTRL			(EXPSLV_BASE + 0x30)
-#define EXPSLV_DAC_CTRL			(EXPSLV_BASE + 0x34)
-#define EXPSLV_CMP_CTRL			(EXPSLV_BASE + 0x38)
-#define EXPSLV_OSPI_CTRL		(EXPSLV_BASE + 0x3C)
-
-/* Peripheral CLKCTRL */
-#define CLKCTRL_PER_SLV			0X4902F000UL
-#define SSI_CTRL_EN			(CLKCTRL_PER_SLV + 0x28)
+/* CLKCTRL_PER_SLV registers. */
+#define CLKCTRL_PER_SLV_BASE                    0x4902F000
+#define CLKCTRL_PER_SLV_UART_CTRL               (CLKCTRL_PER_SLV_BASE + 0x8)
+#define CLKCTRL_PER_SLV_SSI_CTRL                (CLKCTRL_PER_SLV_BASE + 0x28)
+#define CLKCTRL_PER_SLV_ADC_CTRL                (CLKCTRL_PER_SLV_BASE + 0x30)
+#define CLKCTRL_PER_SLV_DAC_CTRL                (CLKCTRL_PER_SLV_BASE + 0x34)
+#define CLKCTRL_PER_SLV_CMP_CTRL                (CLKCTRL_PER_SLV_BASE + 0x38)
+#define CLKCTRL_PER_SLV_OSPI_CTRL               (CLKCTRL_PER_SLV_BASE + 0x3C)
 
 /* Expansion Master-0 registers. */
-#define EXPMST_BASE			0x4903F000
-#define EXPMST_CDC200_PIXCLK_CTRL	(EXPMST_BASE + 0x4)
-#define EXPMST_PERIPH_CLK_EN		(EXPMST_BASE + 0xC)
-#define EXPMST_USB_CTRL2			(EXPMST_BASE + 0xAC)
-
-/* M55-HE Config Registers */
-#define M55HE_CFG_BASE			0x43007000UL
-#define HE_PER_CLK_EN			(M55HE_CFG_BASE + 0x10)
-#define HE_CAMERA_PIXCLK		(M55HE_CFG_BASE + 0x20)
+#define CLKCTRL_PER_MST_BASE                    0x4903F000
+#define CLKCTRL_PER_MST_CDC200_PIXCLK_CTRL      (CLKCTRL_PER_MST_BASE + 0x4)
+#define CLKCTRL_PER_MST_PERIPH_CLK_EN           (CLKCTRL_PER_MST_BASE + 0xC)
+#define CLKCTRL_PER_MST_USB_CTRL2               (CLKCTRL_PER_MST_BASE + 0xAC)
 
 /* LPGPIO Base address for LPTIMER pin config */
-#define LPGPIO_BASE			0x42002008UL
+#define LPGPIO_BASE                             0x42002008UL
 
 /* Event Router registers. */
-#define EVTRTRLOCAL_BASE		0x400E2000
-#define EVTRTRLOCAL_DMA_CTRL0		(EVTRTRLOCAL_BASE)
-#define EVTRTRLOCAL_DMA_REQ_CTRL	(EVTRTRLOCAL_BASE + 0x80)
-#define EVTRTRLOCAL_DMA_ACK_TYPE0	(EVTRTRLOCAL_BASE + 0x90)
+#define EVTRTRLOCAL_BASE                        0x400E2000
+#define EVTRTRLOCAL_DMA_CTRL0                   (EVTRTRLOCAL_BASE)
+#define EVTRTRLOCAL_DMA_REQ_CTRL                (EVTRTRLOCAL_BASE + 0x80)
+#define EVTRTRLOCAL_DMA_ACK_TYPE0               (EVTRTRLOCAL_BASE + 0x90)
 
 /* M55-HE Config registers. */
-#define M55HE_CFG_HE_CFG_BASE		0x43007000
-#define M55HE_CFG_HE_DMA_CTRL		(M55HE_CFG_HE_CFG_BASE)
-#define M55HE_CFG_HE_DMA_IRQ		(M55HE_CFG_HE_CFG_BASE + 0x4)
-#define M55HE_CFG_HE_DMA_PERIPH		(M55HE_CFG_HE_CFG_BASE + 0x8)
-#define M55HE_CFG_HE_DMA_SEL		(M55HE_CFG_HE_CFG_BASE + 0xC)
-#define M55HE_CFG_HE_CLK_ENA		(M55HE_CFG_HE_CFG_BASE + 0x10)
-#define M55HE_CFG_HE_CAMERA_PIXCLK	(M55HE_CFG_HE_CFG_BASE + 0x20)
+#define M55HE_CFG_HE_CFG_BASE                   0x43007000
+#define M55HE_CFG_HE_DMA_CTRL                   (M55HE_CFG_HE_CFG_BASE)
+#define M55HE_CFG_HE_DMA_IRQ                    (M55HE_CFG_HE_CFG_BASE + 0x4)
+#define M55HE_CFG_HE_DMA_PERIPH                 (M55HE_CFG_HE_CFG_BASE + 0x8)
+#define M55HE_CFG_HE_DMA_SEL                    (M55HE_CFG_HE_CFG_BASE + 0xC)
+#define M55HE_CFG_HE_CLK_ENA                    (M55HE_CFG_HE_CFG_BASE + 0x10)
+#define M55HE_CFG_HE_CAMERA_PIXCLK              (M55HE_CFG_HE_CFG_BASE + 0x20)
 
 /* lptimer helper macro */
 #define LPTIMER_CONFIG(idx)						\
