@@ -2,7 +2,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#include <dt-bindings/pinctrl/ensemble-e7-appkit-pinctrl.h>
+#include <dt-bindings/pinctrl/ensemble-pinctrl.h>
 
 &pinctrl {
 	pinctrl_uart4: pinctrl_uart4 {

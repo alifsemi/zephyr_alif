@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <dt-bindings/pinctrl/ensemble-e4-e6-e8-pinctrl.h>
+#include <dt-bindings/pinctrl/ensemble-pinctrl.h>
 
 &{/soc} {
 	pinctrl: pin-controller@1a603000 {
