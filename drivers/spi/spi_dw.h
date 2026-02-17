@@ -14,6 +14,7 @@
 #include <string.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/spi.h>
+#include <zephyr/drivers/clock_control.h>
 
 #include "spi_context.h"
 
@@ -70,6 +71,8 @@ struct spi_dw_config {
 	const struct spi_dw_dma_ch dma_tx;
 	const struct spi_dw_dma_ch dma_rx;
 #endif /* CONFIG_SPI_DW_USE_DMA */
+	const struct device *clock_dev;
+	clock_control_subsys_t clock_subsys;
 };
 
 struct spi_dw_data {
