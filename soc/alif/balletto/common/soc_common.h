@@ -11,11 +11,14 @@
 #define HOST_BSYS_PWR_REQ		(HOST_BASE_SYS_CTRL + 0x400)
 #define HOST_BSYS_PWR_ST		(HOST_BASE_SYS_CTRL + 0x404)
 
+
 /* AON registers. */
 #define AON_BASE                        0x1A604000UL
 #define AON_RTSS_HE_CTRL                (AON_BASE + 0x10)
 #define AON_RTSS_HE_RESET               (AON_BASE + 0x14)
 #define AON_RTSS_HE_LPUART_CKEN         (AON_BASE + 0x1C)
+#define AON_BUS_CLK_DIV                 (AON_BASE + 0x20)
+#define AON_MISC_REG1                   (AON_BASE + 0x30)
 
 /* VBAT Modules */
 #define VBAT_BASE                       0x1A609000UL
@@ -29,13 +32,24 @@
 #define UART_CLK_EN                     (CLKCTRL_PER_SLV + 0x8)
 
 /* CGU Module */
-#define CGU_BASE			0x1A602000
-#define CGU_CLK_ENA			(CGU_BASE + 0x14)
+#define CGU_BASE                        0x1A602000
+#define CGU_OSC_CTRL                    (CGU_BASE + 0x0)
+#define CGU_PLL_CLK_SEL                 (CGU_BASE + 0x8)
+#define CGU_ESCLK_SEL                   (CGU_BASE + 0x10)
+#define CGU_CLK_ENA                     (CGU_BASE + 0x14)
+
+#define CGU_PLL_CLK_SEL_SYSREF          BIT(0)
+#define CGU_PLL_CLK_SEL_SYS             BIT(4)
+#define CGU_PLL_CLK_SEL_ES1             BIT(20)
+#define HE_PLL_DIV_POS                  4
+#define HE_PLL_DIV_MASK                 0x3
+#define HE_OSC_DIV_POS                  4
+#define HE_OSC_DIV_MASK                 0x3
 
 /* ANA Register */
-#define ANA_BASE			0x1A60A000
+#define ANA_BASE                        0x1A60A000
 #define ANA_VBAT_REG1                   (ANA_BASE + 0x38)
-#define ANA_VBAT_REG2			(ANA_BASE + 0x3C)
+#define ANA_VBAT_REG2                   (ANA_BASE + 0x3C)
 
 /* Expansion Slave registers. */
 #define EXPSLV_BASE			0x4902F000
