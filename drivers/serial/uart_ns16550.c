@@ -514,6 +514,24 @@ static inline uintptr_t get_port(const struct device *dev)
 	return port;
 }
 
+static uint32_t get_uart_baudrate_frac_divisor(const struct device *dev,
+					  uint32_t baud_rate,
+					  uint32_t pclk)
+{
+	ARG_UNUSED(dev);
+
+#if UART_NS16550_DLF_ENABLED
+	/* DLF is in use.
+	 * calculate baud rate fractional divisor. a variant of
+	 * (uint32_t)((pclk + 0.5 * baud_rate)/ (baud_rate))
+	 * use 4 LSB of the calculation
+	 */
+	return ((pclk + (baud_rate >> 1)) / baud_rate) & 0xF;
+#else
+	return 0;
+#endif
+}
+
 static uint32_t get_uart_baudrate_divisor(const struct device *dev,
 					  uint32_t baud_rate,
 					  uint32_t pclk)
@@ -628,10 +646,6 @@ static int uart_ns16550_configure(const struct device *dev,
 		ns16550_outbyte(dev_cfg, SRR(dev), SRR_UR);
 	}
 
-#if UART_NS16550_DLF_ENABLED
-	ns16550_outbyte(dev_cfg, DLF(dev), dev_data->dlf);
-#endif
-
 #if UART_NS16550_PCP_ENABLED
 	uint32_t pcp = dev_cfg->pcp;
 
@@ -678,6 +692,14 @@ static int uart_ns16550_configure(const struct device *dev,
 			goto out;
 		}
 	}
+#if UART_NS16550_DLF_ENABLED
+	if (dev_cfg->sys_clk_freq != 0U) {
+		ns16550_outbyte(dev_cfg, DLF(dev), dev_data->dlf);
+	} else {
+		ns16550_outbyte(dev_cfg, DLF(dev),
+					get_uart_baudrate_frac_divisor(dev, cfg->baudrate, pclk));
+	}
+#endif
 
 	set_baud_rate(dev, cfg->baudrate, pclk);
 
