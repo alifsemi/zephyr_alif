@@ -1,0 +1,18 @@
+# ExecuTorch module manifest for Zephyr RTOS
+# This file enables fetching the ExecuTorch module using west
+# Usage:
+#   west config manifest.project-filter -- +executorch
+#   west update
+
+manifest:
+  remotes:
+    - name: pytorch
+      url-base: https://github.com/pytorch
+
+  projects:
+    - name: executorch
+      remote: pytorch
+      revision: main
+      path: modules/lib/executorch
+      groups:
+        - executorch
