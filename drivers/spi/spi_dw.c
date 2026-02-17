@@ -27,6 +27,10 @@ LOG_MODULE_REGISTER(spi_dw);
 #include <zephyr/sys/sys_io.h>
 #include <zephyr/sys/util.h>
 
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
+
+
 #ifdef CONFIG_IOAPIC
 #include <zephyr/drivers/interrupt_controller/ioapic.h>
 #endif
@@ -1030,6 +1034,116 @@ int spi_dw_init(const struct device *dev)
 	return 0;
 }
 
+#if defined CONFIG_PM_DEVICE
+
+/** SPI DW: Suspend */
+static int spi_dw_suspend(const struct device *dev)
+{
+	int ret;
+	const struct spi_dw_config *info = dev->config;
+
+	LOG_DBG("PM: Suspend Req..");
+	if (pm_device_is_busy(dev)) {
+		LOG_DBG("Currently on Transferring ...");
+		return -EBUSY;
+	}
+
+	LOG_DBG("No Transactions !!!");
+#if defined(CONFIG_PINCTRL)
+	/* Apply sleep pin configuration if available */
+	if (info->pcfg != NULL) {
+		ret = pinctrl_apply_state(info->pcfg, PINCTRL_STATE_SLEEP);
+		if (ret < 0 && ret != -ENOENT) {
+			/* Ignore -ENOENT (sleep state not defined) */
+			return ret;
+		}
+	}
+#endif
+	if (!info->clock_dev) {
+		if (!device_is_ready(info->clock_dev)) {
+			return 0;
+		}
+		ret = clock_control_off(info->clock_dev, info->clock_subsys);
+		if (ret != 0 && ret != -EALREADY) {
+			LOG_ERR("Error %d !", ret);
+			return -EINVAL;
+		}
+	}
+	LOG_DBG("PM: Suspended Successfully.");
+	return 0;
+}
+
+/** SPI DW: Resume */
+static int spi_dw_resume(const struct device *dev)
+{
+	int ret;
+	const struct spi_dw_config *info = dev->config;
+
+	LOG_DBG("PM:Resuming");
+#if defined(CONFIG_PINCTRL)
+	/* Apply sleep pin configuration if available */
+	if (info->pcfg != NULL) {
+		ret = pinctrl_apply_state(info->pcfg, PINCTRL_STATE_DEFAULT);
+		if (ret < 0 && ret != -ENOENT) {
+			/* Ignore -ENOENT (sleep state not defined) */
+			return ret;
+		}
+	}
+#endif
+	if (!info->clock_dev) {
+		if (!device_is_ready(info->clock_dev)) {
+			return 0;
+		}
+		ret = clock_control_on(info->clock_dev, info->clock_subsys);
+		if (ret != 0 && ret != -EALREADY) {
+			return -EINVAL;
+		}
+	}
+	LOG_DBG("PM:Resumed");
+	return 0;
+}
+
+/**
+ * @brief SPI DW PM device action handler
+ *
+ * Handles power management state transitions for the SPI device.
+ * Coordinates with power domain via PM framework.
+ *
+ * @param dev SPI device struct
+ * @param action PM device action
+ *
+ * @return 0 if successful, negative errno otherwise
+ */
+static int spi_dw_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	int ret = 0;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		/* Device is powered - restore SPI state */
+		ret = spi_dw_resume(dev);
+		break;
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		/* Save SPI state and prepare for power down */
+		ret = spi_dw_suspend(dev);
+		break;
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Power domain handling is automatic via PM framework */
+		break;
+
+	default:
+		ret = -ENOTSUP;
+		break;
+	}
+
+	return ret;
+}
+#endif /* CONFIG_PM_DEVICE */
+
+
 #define SPI_DW_INST_DMA_IS_ENABLED(inst)                                       \
 			UTIL_OR(DT_INST_DMAS_HAS_NAME(inst, txdma),            \
 				DT_INST_DMAS_HAS_NAME(inst, rxdma))
@@ -1159,9 +1273,10 @@ COND_CODE_1(IS_EQ(DT_NUM_IRQS(DT_DRV_INST(inst)), 1),              \
 		    (COND_CODE_1(SPI_DW_INST_DMA_IS_ENABLED(inst),			    \
 		    (SPI_DW_DMA_INIT(inst)), ())))					    \
 	};                                                                                  \
+	PM_DEVICE_DT_INST_DEFINE(inst, spi_dw_pm_action);				    \
 	SPI_DEVICE_DT_INST_DEFINE(inst,                                                     \
 		spi_dw_init,                                                                \
-		NULL,                                                                       \
+		PM_DEVICE_DT_INST_GET(inst),                                                \
 		&spi_dw_data_##inst,                                                        \
 		&spi_dw_config_##inst,                                                      \
 		POST_KERNEL,                                                                \
