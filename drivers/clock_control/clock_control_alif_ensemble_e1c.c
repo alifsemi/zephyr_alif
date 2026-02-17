@@ -134,6 +134,8 @@ static uint32_t alif_get_input_clock(uint32_t clock_name)
 		return ALIF_CLOCK_SYST_CORE_FREQ;
 	case ALIF_I3C_CLK:
 		return ALIF_CLOCK_SYST_ACLK_FREQ;
+	case ALIF_LPSPI_CLK:
+		return ALIF_CLOCK_SYST_CORE_FREQ;
 	default:
 		return 0;
 	}
@@ -268,7 +270,7 @@ static int alif_clock_control_on(const struct device *dev,
 static int alif_clock_control_off(const struct device *dev,
 			clock_control_subsys_t sub_system)
 {
-	uint32_t clk_id = *(uint32_t *) sub_system;
+	uint32_t clk_id = (uint32_t) sub_system;
 	uint32_t module_base, reg_addr;
 	int32_t ret;
 

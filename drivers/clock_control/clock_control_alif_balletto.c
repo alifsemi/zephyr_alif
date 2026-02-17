@@ -265,6 +265,7 @@ static uint32_t alif_get_input_clock(uint32_t const clock_name)
 		return get_hfosc_clk_freq();
 	case ALIF_LPUART_CLK:
 	case ALIF_HCI_AHI_CLK:
+	case ALIF_LPSPI_CLK:
 		return get_he_clock_freq();
 	default:
 		break;
@@ -417,7 +418,7 @@ static int alif_clock_control_on(const struct device *dev, clock_control_subsys_
 
 static int alif_clock_control_off(const struct device *dev, clock_control_subsys_t sub_system)
 {
-	uint32_t clk_id = *(uint32_t *)sub_system;
+	uint32_t clk_id = (uint32_t) sub_system;
 	uint32_t module_base, reg_addr;
 	int32_t ret;
 
