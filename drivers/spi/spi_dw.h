@@ -81,7 +81,7 @@ struct spi_dw_data {
 	uint8_t dfs;	/* dfs in bytes: 1,2 or 4 */
 	uint8_t fifo_diff;	/* cannot be bigger than FIFO depth */
 	uint8_t dwc_ssi;	/* enable it for dwc ssi operation on AHB*/
-	uint8_t _unused;
+	uint8_t force_config;   /* reconfigure on resume power state */
 #ifdef CONFIG_SPI_DW_USE_DMA
 	struct k_sem dma_sem;
 	int dma_cb_status;

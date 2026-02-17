@@ -27,6 +27,10 @@ LOG_MODULE_REGISTER(spi_dw);
 #include <zephyr/sys/sys_io.h>
 #include <zephyr/sys/util.h>
 
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
+
+
 #ifdef CONFIG_IOAPIC
 #include <zephyr/drivers/interrupt_controller/ioapic.h>
 #endif
@@ -544,6 +548,11 @@ static int spi_dw_configure(const struct device *dev,
 
 	LOG_DBG("%p (prev %p)", config, spi->ctx.config);
 
+	if (spi_context_configured(&spi->ctx, config) && !(spi->force_config)) {
+		/* Nothing to do */
+		return 0;
+	}
+
 	/*
 	 * set clock frequency from clock_frequency property if valid,
 	 * otherwise, get clock frequency from clock manager
@@ -563,17 +572,14 @@ static int spi_dw_configure(const struct device *dev,
 		if (ret != 0 && ret != -EALREADY) {
 			return -EINVAL;
 		}
-		if (clock_control_get_rate(info->clock_dev,
+		ret = clock_control_get_rate(info->clock_dev,
 					   info->clock_subsys,
-					   &clk_freq) != 0) {
-			LOG_DBG("clk cntrl config clk freq :%u)", clk_freq);
+					   &clk_freq);
+		if (ret != 0) {
+			LOG_ERR("Failed to get clock rate (err %d)", ret);
 			return -EINVAL;
 		}
-	}
-
-	if (spi_context_configured(&spi->ctx, config)) {
-		/* Nothing to do */
-		return 0;
+		LOG_INF("clk control config clk freq :%u", clk_freq);
 	}
 
 	if (config->operation & SPI_HALF_DUPLEX) {
@@ -646,7 +652,7 @@ static int spi_dw_configure(const struct device *dev,
 	/* At this point, it's mandatory to set this on the context! */
 	spi->ctx.config = config;
 
-	LOG_DBG("clk freq :%u)", clk_freq);
+	LOG_DBG("clk freq :%u", clk_freq);
 
 	if (!spi_dw_is_slave(spi)) {
 		/* Baud rate and Slave select, for master only */
@@ -654,6 +660,9 @@ static int spi_dw_configure(const struct device *dev,
 						    config->frequency));
 		write_ser(dev, 1 << config->slave);
 	}
+
+	/* reset force-config */
+	spi->force_config = 0;
 
 	if (spi_dw_is_slave(spi)) {
 		LOG_DBG("Installed slave config %p:"
@@ -1030,6 +1039,110 @@ int spi_dw_init(const struct device *dev)
 	return 0;
 }
 
+#if defined CONFIG_PM_DEVICE
+
+/** SPI DW: Suspend */
+static int spi_dw_suspend(const struct device *dev)
+{
+	int ret;
+	const struct spi_dw_config *info = dev->config;
+
+#if defined(CONFIG_PINCTRL)
+	/* Apply sleep pin configuration if available */
+	if (info->pcfg != NULL) {
+		ret = pinctrl_apply_state(info->pcfg, PINCTRL_STATE_SLEEP);
+		if (ret < 0 && ret != -ENOENT) {
+			/* Ignore -ENOENT (sleep state not defined) */
+			LOG_ERR("pin apply pin for: %s ", dev->name);
+			return ret;
+		}
+	}
+#endif
+	if (info->clock_dev != NULL) {
+		ret = clock_control_off(info->clock_dev, info->clock_subsys);
+		if (ret != 0 && ret != -EALREADY) {
+			LOG_ERR("Error %d !", ret);
+			return -EINVAL;
+		}
+	}
+	LOG_DBG("%s : suspended", dev->name);
+	return 0;
+}
+
+/** SPI DW: Resume */
+static int spi_dw_resume(const struct device *dev)
+{
+	int ret;
+	const struct spi_dw_config *info = dev->config;
+	struct spi_dw_data *spi = dev->data;
+
+#if defined(CONFIG_PINCTRL)
+	/* Apply sleep pin configuration if available */
+	if (info->pcfg != NULL) {
+		ret = pinctrl_apply_state(info->pcfg, PINCTRL_STATE_DEFAULT);
+		if (ret < 0 && ret != -ENOENT) {
+			/* Ignore -ENOENT (sleep state not defined) */
+			LOG_ERR("pin apply failed [%d]", ret);
+			return ret;
+		}
+	}
+#endif
+	if (info->clock_dev) {
+		ret = clock_control_on(info->clock_dev, info->clock_subsys);
+		if (ret != 0 && ret != -EALREADY) {
+			LOG_ERR("clk enable failed [%d]", ret);
+			return -EINVAL;
+		}
+	}
+
+	/* reconfigure the controller */
+	spi->force_config = 1;
+
+	LOG_DBG("%s : resumed", dev->name);
+	return 0;
+}
+
+/**
+ * @brief SPI DW PM device action handler
+ *
+ * Handles power management state transitions for the SPI device.
+ * Coordinates with power domain via PM framework.
+ *
+ * @param dev SPI device struct
+ * @param action PM device action
+ *
+ * @return 0 if successful, negative errno otherwise
+ */
+static int spi_dw_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	int ret = 0;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		/* Device is powered - restore SPI state */
+		ret = spi_dw_resume(dev);
+		break;
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		/* Save SPI state and prepare for power down */
+		ret = spi_dw_suspend(dev);
+		break;
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Power domain handling is automatic via PM framework */
+		break;
+
+	default:
+		ret = -ENOTSUP;
+		break;
+	}
+
+	return ret;
+}
+#endif /* CONFIG_PM_DEVICE */
+
+
 #define SPI_DW_INST_DMA_IS_ENABLED(inst)                                       \
 			UTIL_OR(DT_INST_DMAS_HAS_NAME(inst, txdma),            \
 				DT_INST_DMAS_HAS_NAME(inst, rxdma))
@@ -1118,7 +1231,8 @@ COND_CODE_1(IS_EQ(DT_NUM_IRQS(DT_DRV_INST(inst)), 1),              \
 		SPI_CONTEXT_INIT_LOCK(spi_dw_data_##inst, ctx),                             \
 		SPI_CONTEXT_INIT_SYNC(spi_dw_data_##inst, ctx),                             \
 		SPI_CONTEXT_CS_GPIOS_INITIALIZE(DT_DRV_INST(inst), ctx)                     \
-		SPI_UPDATE_DWC_SSI_FLAG(DT_DRV_INST(inst), dwc_ssi)			    \
+		SPI_UPDATE_DWC_SSI_FLAG(DT_DRV_INST(inst), dwc_ssi),			    \
+		.force_config = 0 \
 	};                                                                                  \
 	static const struct spi_dw_config spi_dw_config_##inst = {                             \
 		DEVICE_MMIO_ROM_INIT(DT_DRV_INST(inst)),                                       \
@@ -1159,9 +1273,10 @@ COND_CODE_1(IS_EQ(DT_NUM_IRQS(DT_DRV_INST(inst)), 1),              \
 		    (COND_CODE_1(SPI_DW_INST_DMA_IS_ENABLED(inst),			    \
 		    (SPI_DW_DMA_INIT(inst)), ())))					    \
 	};                                                                                  \
+	PM_DEVICE_DT_INST_DEFINE(inst, spi_dw_pm_action);				    \
 	SPI_DEVICE_DT_INST_DEFINE(inst,                                                     \
 		spi_dw_init,                                                                \
-		NULL,                                                                       \
+		PM_DEVICE_DT_INST_GET(inst),                                                \
 		&spi_dw_data_##inst,                                                        \
 		&spi_dw_config_##inst,                                                      \
 		POST_KERNEL,                                                                \
