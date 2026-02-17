@@ -793,7 +793,8 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		pinctrl-0 = < &pinctrl_spi0 >;
-		pinctrl-names = "default";
+		pinctrl-1 = < &pinctrl_spi0_sleep >;
+		pinctrl-names = "default", "sleep";
 		reg = <0x48103000 0x1000>;
 		interrupt-parent = <&nvic>;
 		interrupts = <137 ALIF_DEFAULT_IRQ_PRIORITY>;
@@ -810,7 +811,8 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		pinctrl-0 = < &pinctrl_spi1 >;
-		pinctrl-names = "default";
+		pinctrl-1 = < &pinctrl_spi1_sleep >;
+		pinctrl-names = "default", "sleep";
 		reg = <0x48104000 0x1000>;
 		interrupt-parent = <&nvic>;
 		interrupts = <138 ALIF_DEFAULT_IRQ_PRIORITY>;
@@ -827,7 +829,8 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		pinctrl-0 = < &pinctrl_spi2 >;
-		pinctrl-names = "default";
+		pinctrl-1 = < &pinctrl_spi2_sleep >;
+		pinctrl-names = "default", "sleep";
 		reg = <0x48105000 0x1000>;
 		interrupt-parent = <&nvic>;
 		interrupts = <139 ALIF_DEFAULT_IRQ_PRIORITY>;
@@ -843,7 +846,8 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		pinctrl-0 = < &pinctrl_lpspi0 >;
-		pinctrl-names = "default";
+		pinctrl-1 = < &pinctrl_lpspi0_sleep >;
+		pinctrl-names = "default", "sleep";
 		reg = <0x43000000 0x1000>;
 		interrupt-parent = <&nvic>;
 		interrupts = <46 ALIF_DEFAULT_IRQ_PRIORITY>;
