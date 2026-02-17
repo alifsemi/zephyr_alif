@@ -120,6 +120,7 @@
 		power-delay-ms = <500>;
 		pinctrl-0 = <&pinctrl_sdmmc>;
 		pinctrl-names = "default";
+		cd-gpios = <&gpio3 3 GPIO_ACTIVE_LOW>;
 		mmc {
 			compatible = "zephyr,sdmmc-disk";
 			bus-width = <4>;

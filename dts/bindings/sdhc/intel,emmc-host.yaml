@@ -6,3 +6,13 @@ description: eMMC host controller
 compatible: "intel,emmc-host"
 
 include: [sdhc.yaml, pcie-device.yaml, pinctrl-device.yaml]
+
+properties:
+  cd-gpios:
+    type: phandle-array
+    description: |
+      Card detect pin.
+      This pin is active-low when a card is inserted,
+      high when a card is absent. The property value should ensure
+      the flags properly describe the signal that is presented
+      to the driver.

@@ -597,7 +597,8 @@
 						<PINMUX_PIN(PIN_P6_0, 5)>,
 						<PINMUX_PIN(PIN_P6_1, 5)>,
 						<PINMUX_PIN(PIN_P6_2, 5)>,
-						<PINMUX_PIN(PIN_P6_3, 5)>;
+						<PINMUX_PIN(PIN_P6_3, 5)>,
+						<PINMUX_PIN(PIN_P6_5, 0)>;
 			read-enable = <0x1>;
 			drive-strength = <8>;
 		};
