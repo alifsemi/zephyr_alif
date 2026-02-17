@@ -540,8 +540,36 @@ static int spi_dw_configure(const struct device *dev,
 {
 	const struct spi_dw_config *info = dev->config;
 	uint32_t ctrlr0 = 0U;
+	int32_t ret, clk_freq;
 
 	LOG_DBG("%p (prev %p)", config, spi->ctx.config);
+
+	/*
+	 * set clock frequency from clock_frequency property if valid,
+	 * otherwise, get clock frequency from clock manager
+	 */
+	clk_freq = info->clock_frequency;
+
+	if (!clk_freq) {
+		if (!device_is_ready(info->clock_dev)) {
+			LOG_ERR("Clock dev not ready");
+			return -EINVAL;
+		}
+		ret = clock_control_configure(info->clock_dev, info->clock_subsys, NULL);
+		if (ret != 0) {
+			return -EINVAL;
+		}
+		ret = clock_control_on(info->clock_dev, info->clock_subsys);
+		if (ret != 0 && ret != -EALREADY) {
+			return -EINVAL;
+		}
+		if (clock_control_get_rate(info->clock_dev,
+					   info->clock_subsys,
+					   &clk_freq) != 0) {
+			LOG_DBG("clk cntrl config clk freq :%u)", clk_freq);
+			return -EINVAL;
+		}
+	}
 
 	if (spi_context_configured(&spi->ctx, config)) {
 		/* Nothing to do */
@@ -618,9 +646,11 @@ static int spi_dw_configure(const struct device *dev,
 	/* At this point, it's mandatory to set this on the context! */
 	spi->ctx.config = config;
 
+	LOG_DBG("clk freq :%u)", clk_freq);
+
 	if (!spi_dw_is_slave(spi)) {
 		/* Baud rate and Slave select, for master only */
-		write_baudr(dev, SPI_DW_CLK_DIVIDER(info->clock_frequency,
+		write_baudr(dev, SPI_DW_CLK_DIVIDER(clk_freq,
 						    config->frequency));
 		write_ser(dev, 1 << config->slave);
 	}
@@ -1001,19 +1031,19 @@ int spi_dw_init(const struct device *dev)
 }
 
 #define SPI_DW_INST_DMA_IS_ENABLED(inst)                                       \
-			UTIL_OR(DT_INST_DMAS_HAS_NAME(inst, txdma),                        \
+			UTIL_OR(DT_INST_DMAS_HAS_NAME(inst, txdma),            \
 				DT_INST_DMAS_HAS_NAME(inst, rxdma))
 
-#define SPI_DW_DMA_INIT(inst)                                                  \
-	IF_ENABLED(DT_INST_DMAS_HAS_NAME(inst, txdma),                             \
+#define SPI_DW_DMA_INIT(inst)                                                          \
+	IF_ENABLED(DT_INST_DMAS_HAS_NAME(inst, txdma),                                 \
 		(.dma_tx.enabled = 1,                                                  \
 		 .dma_tx.ch = DT_INST_DMAS_CELL_BY_NAME(inst, txdma, channel),         \
 		 .dma_tx.periph = DT_INST_DMAS_CELL_BY_NAME(inst, txdma, periph),))    \
-	IF_ENABLED(DT_INST_DMAS_HAS_NAME(inst, rxdma),                             \
+	IF_ENABLED(DT_INST_DMAS_HAS_NAME(inst, rxdma),                                 \
 		(.dma_rx.enabled = 1,                                                  \
 		 .dma_rx.ch = DT_INST_DMAS_CELL_BY_NAME(inst, rxdma, channel),         \
 		 .dma_rx.periph = DT_INST_DMAS_CELL_BY_NAME(inst, rxdma, periph),))    \
-	COND_CODE_1(DT_INST_DMAS_HAS_NAME(inst, txdma),                            \
+	COND_CODE_1(DT_INST_DMAS_HAS_NAME(inst, txdma),                                \
 		(.dma_dev = DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_NAME(inst, txdma)),),   \
 		(.dma_dev = DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_NAME(inst, rxdma)),))
 
@@ -1090,12 +1120,23 @@ COND_CODE_1(IS_EQ(DT_NUM_IRQS(DT_DRV_INST(inst)), 1),              \
 		SPI_CONTEXT_CS_GPIOS_INITIALIZE(DT_DRV_INST(inst), ctx)                     \
 		SPI_UPDATE_DWC_SSI_FLAG(DT_DRV_INST(inst), dwc_ssi)			    \
 	};                                                                                  \
-	static const struct spi_dw_config spi_dw_config_##inst = {                          \
-		DEVICE_MMIO_ROM_INIT(DT_DRV_INST(inst)),                                    \
-		.clock_frequency = COND_CODE_1(                                             \
-			DT_NODE_HAS_PROP(DT_INST_PHANDLE(inst, clocks), clock_frequency),   \
-			(DT_INST_PROP_BY_PHANDLE(inst, clocks, clock_frequency)),           \
-			(DT_INST_PROP(inst, clock_frequency))),                             \
+	static const struct spi_dw_config spi_dw_config_##inst = {                             \
+		DEVICE_MMIO_ROM_INIT(DT_DRV_INST(inst)),                                       \
+		COND_CODE_1(                                                                   \
+			DT_NODE_HAS_PROP(DT_INST_PHANDLE(inst, clocks), clock_frequency),      \
+			(                                                                      \
+				.clock_frequency =                                             \
+					DT_INST_PROP_BY_PHANDLE(inst, clocks, clock_frequency),\
+				.clock_dev = NULL,                                             \
+				.clock_subsys = NULL,                                          \
+			),                                                                     \
+			(                                                                      \
+				.clock_frequency = 0,                                          \
+				.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(inst)),         \
+				.clock_subsys =                                                \
+					(clock_control_subsys_t)DT_INST_PHA(inst, clocks, clkid),\
+			)                                                                        \
+		)                                                                                \
 		.config_func = spi_dw_irq_config_##inst,                                    \
 		.serial_target = DT_INST_PROP(inst, serial_target),                         \
 		.fifo_depth = DT_INST_PROP(inst, fifo_depth),                               \
@@ -1114,9 +1155,9 @@ COND_CODE_1(IS_EQ(DT_NUM_IRQS(DT_DRV_INST(inst)), 1),              \
 			.set_bit_func = reg_set_bit,                                        \
 			.clear_bit_func = reg_clear_bit,                                    \
 			.test_bit_func = reg_test_bit,))                                    \
-		IF_ENABLED(CONFIG_SPI_DW_USE_DMA,					\
-		    (COND_CODE_1(SPI_DW_INST_DMA_IS_ENABLED(inst),			\
-		    (SPI_DW_DMA_INIT(inst)), ())))					\
+		IF_ENABLED(CONFIG_SPI_DW_USE_DMA,					    \
+		    (COND_CODE_1(SPI_DW_INST_DMA_IS_ENABLED(inst),			    \
+		    (SPI_DW_DMA_INIT(inst)), ())))					    \
 	};                                                                                  \
 	SPI_DEVICE_DT_INST_DEFINE(inst,                                                     \
 		spi_dw_init,                                                                \
