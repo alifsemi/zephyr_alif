@@ -202,6 +202,10 @@
 #define ALIF_DMA2_CLK               \
 	ALIF_CLK_CFG(M55HE_CFG, HE_CLK_ENA, 4U, 1U, 0U, 0U, 0U)
 
+/* AHI & HCI clock */
+#define ALIF_HCI_AHI_CLK            \
+	ALIF_CLK_CFG(M55HE_CFG, HE_CLK_ENA, 4U, 1U, 0U, 0U, 0U)
+
 /* UTIMER clocks */
 #define ALIF_UTIMER_CLK             ALIF_CLK(1U)
 
