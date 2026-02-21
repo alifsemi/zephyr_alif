@@ -65,6 +65,47 @@ typedef void (*i2c_isr_cb_t)(const struct device *port);
 #define I2C_HS_HCNT  ((CONFIG_I2C_DW_CLOCK_SPEED * 6) / 8)
 #define I2C_HS_LCNT  ((CONFIG_I2C_DW_CLOCK_SPEED * 7) / 8)
 
+#ifdef CONFIG_I2C_DW_IC_CLK_FREQ_OPTIMIZATION
+
+/* Refer section 2.14.2 of DW spec on page 59
+ * for SCL High and Low Count register
+ * requirement when optimization is on
+ */
+
+#define I2C_MIN_SCL_LCNT         6
+#define I2C_MIN_SCL_HCNT         5
+#define I2C_SCL_HCNT_OFFSET      3
+
+/* Min SCL High Time is 5 cycles. High Time = HCNT + spike_len + 3 */
+#define I2C_ENSURE_MIN_SCL_HCNT(x, spk_len)    \
+	((((x) + (spk_len) + I2C_SCL_HCNT_OFFSET) < I2C_MIN_SCL_HCNT) ? \
+	(I2C_MIN_SCL_HCNT - ((spk_len) + I2C_SCL_HCNT_OFFSET)) : (x))
+
+/* Min SCL Low Time is 6 cycles */
+#define I2C_ENSURE_MIN_SCL_LCNT(x) (((x) < I2C_MIN_SCL_LCNT) ? I2C_MIN_SCL_LCNT : (x))
+
+#else
+
+/* Refer section 2.14.1 of DW spec on page 58
+ * for SCL High and Low Count register
+ * requirement when optimization is off
+ */
+
+#define I2C_MIN_SCL_LCNT(spk)	((spk) + 8)
+#define I2C_MIN_SCL_HCNT(spk)	((spk) + 6)
+
+/* Min SCL High Time is spike_len + 6 cycles */
+#define I2C_ENSURE_MIN_SCL_HCNT(x, spk_len)	\
+	(((x) < I2C_MIN_SCL_HCNT(spk_len)) ?    \
+	I2C_MIN_SCL_HCNT(spk_len) : (x))
+
+/* Min SCL Low Time is spike_len + 8 cycles */
+#define I2C_ENSURE_MIN_SCL_LCNT(x, spk_len)	\
+	(((x) < I2C_MIN_SCL_LCNT(spk_len)) ?    \
+	I2C_MIN_SCL_LCNT(spk_len) : (x))
+
+#endif
+
 /*
  * DesignWare speed values don't directly translate from the Zephyr speed
  * selections in include/i2c.h so here we do a little translation
@@ -93,6 +134,8 @@ struct i2c_dw_rom_config {
 #endif
 	int16_t lcnt_offset;
 	int16_t hcnt_offset;
+	uint8_t fs_spk_len;
+	uint8_t hs_spk_len;
 
 	uint8_t	tx_tl;
 	uint8_t	rx_tl;
