@@ -7,6 +7,7 @@
 
 #include <alif/balletto/b1/ab1c1f1m41820ph0.dtsi>
 #include "../common/balletto-pinctrl.dtsi"
+#include "alif_b1_dk_ab1c1f1m41820xx0_rtss_he.dtsi"
 
 / {
 	compatible = "arm,alif-b1-dk-ab1c1f1m41820ph0-rtss-he";
@@ -48,5 +49,9 @@
 };
 
 &gpio4 {
+	status = "okay";
+};
+
+&gpio5 {
 	status = "okay";
 };
