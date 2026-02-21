@@ -284,6 +284,16 @@ static int soc_init(void)
 	enable_gpio_debounce_clock();
 #endif /* CONFIG_ENSEMBLE_GEN2 */
 
+	/* CAN settings */
+#if (DT_NODE_HAS_STATUS(DT_NODELABEL(can0), okay) || \
+	DT_NODE_HAS_STATUS(DT_NODELABEL(can1), okay))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(can1), okay)
+	/* Flex GPIO */
+	sys_write32(0x1, VBAT_GPIO_CTRL_EN);
+#endif
+	/* Enable HFOSC and 160MHz clock */
+	sys_set_bits(CGU_CLK_ENA, BIT(20) | BIT(23));
+#endif
 	return 0;
 }
 
