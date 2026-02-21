@@ -130,6 +130,7 @@
 		pinctrl-0 = <&pinctrl_sdmmc>;
 		pinctrl-names = "default";
 		reset-gpios = <&gpio7 0 GPIO_ACTIVE_HIGH>;
+		cd-gpios = <&gpio6 5 GPIO_ACTIVE_LOW>;
 		mmc {
 			compatible = "zephyr,sdmmc-disk";
 			bus-width = <4>;
