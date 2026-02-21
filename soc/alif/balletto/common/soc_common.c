@@ -59,7 +59,7 @@ SYS_INIT(soc_pm_unlock_boot_states, APPLICATION, 0);
  */
 static int soc_init(void)
 {
-	uint32_t uart_clk_mask = sys_read32(EXPSLV_UART_CTRL);
+	uint32_t uart_clk_mask = sys_read32(CLKCTRL_PER_SLV_UART_CTRL);
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(uart0), okay)
 	uart_clk_mask |= BIT(0) | BIT(8);
@@ -79,7 +79,7 @@ static int soc_init(void)
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(uart5), okay)
 	uart_clk_mask |= BIT(5) | BIT(13);
 #endif
-	sys_write32(uart_clk_mask, EXPSLV_UART_CTRL);
+	sys_write32(uart_clk_mask, CLKCTRL_PER_SLV_UART_CTRL);
 
 	/* LPUART settings */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart), okay)
@@ -92,26 +92,26 @@ static int soc_init(void)
 #if IS_ENABLED(CONFIG_SPI_DW) /* SPI */
 	/* SPI: Enable Master Mode and SS Value */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(spi0), okay) && !DT_PROP(DT_NODELABEL(spi0), serial_target)
-	sys_set_bits(EXPSLV_SSI_CTRL, BIT(0) | BIT(8));
+	sys_set_bits(CLKCTRL_PER_SLV_SSI_CTRL, BIT(0) | BIT(8));
 #endif /* spi0 */
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(spi1), okay) && !DT_PROP(DT_NODELABEL(spi1), serial_target)
-	sys_set_bits(EXPSLV_SSI_CTRL, BIT(1) | BIT(9));
+	sys_set_bits(CLKCTRL_PER_SLV_SSI_CTRL, BIT(1) | BIT(9));
 #endif /* spi1 */
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(spi2), okay) && !DT_PROP(DT_NODELABEL(spi2), serial_target)
-	sys_set_bits(EXPSLV_SSI_CTRL, BIT(2) | BIT(10));
+	sys_set_bits(CLKCTRL_PER_SLV_SSI_CTRL, BIT(2) | BIT(10));
 #endif /* spi2 */
 
 	/* LP-SPI */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay)
 		/*Clock : LP-SPI*/
-		sys_set_bits(HE_PER_CLK_EN, BIT(16));
+		sys_set_bits(M55HE_CFG_HE_CLK_ENA, BIT(16));
 
 		/* LP-SPI0 Mode Selection */
 		/* To Slave Set Bit : 15  */
 		/* To Master Clear Bit : 15 */
-		sys_clear_bits(HE_PER_CLK_EN, BIT(15));
+		sys_clear_bits(M55HE_CFG_HE_CLK_ENA, BIT(15));
 
 		/*LP-SPI0 Flex GPIO*/
 		sys_write32(0x1, VBAT_GPIO_CTRL_EN);
@@ -146,7 +146,7 @@ static int soc_init(void)
 	/*Clock : OSPI */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi0), okay)
 	if (IS_ENABLED(CONFIG_SOC_SERIES_B1)) {
-		sys_write32(0x1, EXPSLV_OSPI_CTRL);
+		sys_write32(0x1, CLKCTRL_PER_SLV_OSPI_CTRL);
 	}
 #endif
 
@@ -155,7 +155,7 @@ static int soc_init(void)
 	sys_set_bits(CGU_CLK_ENA, BIT(21) | BIT(22));
 
 	/* Peripheral clock enable */
-	sys_set_bits(EXPMST_PERIPH_CLK_EN, BIT(16));
+	sys_set_bits(CLKCTRL_PER_MST_PERIPH_CLK_EN, BIT(16));
 #endif
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(usb), okay)
@@ -163,7 +163,7 @@ static int soc_init(void)
 	sys_clear_bits(VBAT_PWR_CTRL, BIT(16) | BIT(17));
 
 	/* USB power on reset clear */
-	sys_clear_bits(EXPMST_USB_CTRL2, BIT(8));
+	sys_clear_bits(CLKCTRL_PER_MST_USB_CTRL2, BIT(8));
 #endif
 
 	return 0;

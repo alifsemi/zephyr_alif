@@ -87,9 +87,9 @@ static inline void enable_dac_periph_clk(void)
 	uint32_t data;
 
 	/* Enable DAC Clock Control */
-	data = sys_read32(EXPSLV_DAC_CTRL);
+	data = sys_read32(CLKCTRL_PER_SLV_DAC_CTRL);
 	data |= (DAC_CTRL_DAC0_CKEN | DAC_CTRL_DAC1_CKEN);
-	sys_write32(data, EXPSLV_DAC_CTRL);
+	sys_write32(data, CLKCTRL_PER_SLV_DAC_CTRL);
 }
 
 static void analog_config(const struct device *dev)
@@ -274,7 +274,7 @@ static int dac_init(const struct device *dev)
 
 	unsigned int key = irq_lock();
 
-	enable_analog_periph_clk(EXPSLV_CMP_CTRL);
+	enable_analog_periph_clk(CLKCTRL_PER_SLV_CMP_CTRL);
 
 	irq_unlock(key);
 

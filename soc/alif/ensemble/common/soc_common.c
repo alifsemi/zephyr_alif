@@ -17,8 +17,8 @@
 /* GPIO: enable debounce clock / divisor for gpio0..gpio14 */
 #define EXPSLV_GPIO_DEBOUNCE_CK_EN(n) \
 	IF_ENABLED(DT_NODE_HAS_STATUS(DT_NODELABEL(gpio##n), okay), ( \
-		sys_clear_bits(EXPSLV_GPIO_CTRLn + (0x4 * n), GPIO_DEBOUNCE_CK_DIV_MASK); \
-		sys_set_bits(EXPSLV_GPIO_CTRLn + (0x4 * n), \
+		sys_clear_bits(CLKCTRL_PER_SLV_GPIO_CTRLn + (0x4 * n), GPIO_DEBOUNCE_CK_DIV_MASK); \
+		sys_set_bits(CLKCTRL_PER_SLV_GPIO_CTRLn + (0x4 * n), \
 				GPIO_DEBOUNCE_CK_ENABLE | GPIO_DEBOUNCE_CK_DIV2); \
 	))
 
@@ -107,7 +107,7 @@ SYS_INIT(soc_pm_unlock_boot_states, APPLICATION, 0);
  */
 static int soc_init(void)
 {
-	uint32_t uart_clk_mask = sys_read32(EXPSLV_UART_CTRL);
+	uint32_t uart_clk_mask = sys_read32(CLKCTRL_PER_SLV_UART_CTRL);
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(uart0), okay)
 	uart_clk_mask |= BIT(0) | BIT(8);
@@ -134,7 +134,7 @@ static int soc_init(void)
 	uart_clk_mask |= BIT(7) | BIT(15);
 #endif
 
-	sys_write32(uart_clk_mask, EXPSLV_UART_CTRL);
+	sys_write32(uart_clk_mask, CLKCTRL_PER_SLV_UART_CTRL);
 
 	/* LPUART settings */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart), okay)
@@ -147,19 +147,19 @@ static int soc_init(void)
 #if IS_ENABLED(CONFIG_SPI_DW) /* SPI */
 	/* SPI: Enable Master Mode and SS Value */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(spi0), okay) && !DT_PROP(DT_NODELABEL(spi0), serial_target)
-	sys_set_bits(EXPSLV_SSI_CTRL, BIT(0) | BIT(8));
+	sys_set_bits(CLKCTRL_PER_SLV_SSI_CTRL, BIT(0) | BIT(8));
 #endif /* spi0 */
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(spi1), okay) && !DT_PROP(DT_NODELABEL(spi1), serial_target)
-	sys_set_bits(EXPSLV_SSI_CTRL, BIT(1) | BIT(9));
+	sys_set_bits(CLKCTRL_PER_SLV_SSI_CTRL, BIT(1) | BIT(9));
 #endif /* spi1 */
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(spi2), okay) && !DT_PROP(DT_NODELABEL(spi2), serial_target)
-	sys_set_bits(EXPSLV_SSI_CTRL, BIT(2) | BIT(10));
+	sys_set_bits(CLKCTRL_PER_SLV_SSI_CTRL, BIT(2) | BIT(10));
 #endif /* spi2 */
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(spi3), okay) && !DT_PROP(DT_NODELABEL(spi3), serial_target)
-	sys_set_bits(EXPSLV_SSI_CTRL, BIT(3) | BIT(11));
+	sys_set_bits(CLKCTRL_PER_SLV_SSI_CTRL, BIT(3) | BIT(11));
 #endif /* spi3 */
 
 	/* LP-SPI */
@@ -182,12 +182,12 @@ static int soc_init(void)
 
 	/* Enable DMA */
 #if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma0), arm_dma_pl330, okay) /* dma0 */
-	sys_set_bits(EXPMST_PERIPH_CLK_EN, BIT(4));
+	sys_set_bits(CLKCTRL_PER_MST_PERIPH_CLK_EN, BIT(4));
 	sys_write32(0x1111, EVTRTR0_DMA_REQ_CTRL);
-	sys_clear_bits(EXPMST_DMA_CTRL, BIT(0));
-	sys_write32(0U, EXPMST_DMA_IRQ);
-	sys_write32(0U, EXPMST_DMA_PERIPH);
-	sys_set_bits(EXPMST_DMA_CTRL, BIT(16));
+	sys_clear_bits(CLKCTRL_PER_MST_DMA_CTRL, BIT(0));
+	sys_write32(0U, CLKCTRL_PER_MST_DMA_IRQ);
+	sys_write32(0U, CLKCTRL_PER_MST_DMA_PERIPH);
+	sys_set_bits(CLKCTRL_PER_MST_DMA_CTRL, BIT(16));
 #endif
 
 #if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma1), arm_dma_pl330, okay) /* dma1 */
@@ -237,13 +237,13 @@ static int soc_init(void)
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi0), okay)
 	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2) ||
 		IS_ENABLED(CONFIG_SOC_SERIES_E1C)) {
-		sys_write32(0x1, EXPSLV_OSPI_CTRL);
+		sys_write32(0x1, CLKCTRL_PER_SLV_OSPI_CTRL);
 	}
 #endif
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi1), okay)
 	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2)) {
-		sys_write32(0x2, EXPSLV_OSPI_CTRL);
+		sys_write32(0x2, CLKCTRL_PER_SLV_OSPI_CTRL);
 	}
 #endif
 
@@ -256,7 +256,7 @@ static int soc_init(void)
 #endif
 
 	/* Peripheral clock enable */
-	sys_set_bits(EXPMST_PERIPH_CLK_EN, BIT(16));
+	sys_set_bits(CLKCTRL_PER_MST_PERIPH_CLK_EN, BIT(16));
 #endif
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(usb), okay)
@@ -264,7 +264,7 @@ static int soc_init(void)
 	sys_clear_bits(VBAT_PWR_CTRL, BIT(16) | BIT(17));
 
 	/* USB power on reset clear */
-	sys_clear_bits(EXPMST_USB_CTRL2, BIT(8));
+	sys_clear_bits(CLKCTRL_PER_MST_USB_CTRL2, BIT(8));
 #endif
 
 #if (DT_NODE_HAS_STATUS(DT_NODELABEL(pdm), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(lppdm), okay))
