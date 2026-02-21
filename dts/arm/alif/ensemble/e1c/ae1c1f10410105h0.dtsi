@@ -1,4 +1,4 @@
-/* Copyright (c) 2025 Alif Semiconductor
+/* Copyright (c) 2026 Alif Semiconductor
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -10,7 +10,7 @@
 };
 
 &sram1 {
-	reg = <0x08000000 DT_SIZE_K(1536)>;
+	reg = <0x08000000 DT_SIZE_K(512)>;
 };
 
 &itcm {
@@ -18,16 +18,16 @@
 };
 
 &dtcm {
-	reg = <0x20000000 DT_SIZE_K(1536)>;
+	reg = <0x20000000 DT_SIZE_K(512)>;
 };
 
 &mram_flash {
 	/* Usable MRAM size for applications is 1945 KB */
-	reg = <0x80000000 DT_SIZE_K(1945)>;
+	reg = <0x80000000 DT_SIZE_K(1024)>;
 };
 
 &mram_storage {
-	reg = <0x80000000 DT_SIZE_K(1945)>;
+	reg = <0x80000000 DT_SIZE_K(1024)>;
 	partitions {
 		compatible = "fixed-partitions";
 		#address-cells = <1>;
@@ -41,12 +41,12 @@
 
 		slot0_partition: partition@10000 {
 			label = "image-0";
-			reg = <0x00010000 DT_SIZE_K(843)>;
+			reg = <0x00010000 DT_SIZE_K(443)>;
 		};
 
 		slot1_partition: partition@E2C00 {
 			label = "image-1";
-			reg = <0x000E2C00 DT_SIZE_K(843)>;
+			reg = <0x000E2C00 DT_SIZE_K(443)>;
 		};
 
 		scratch_partition: partition@1B5800 {
