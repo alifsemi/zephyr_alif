@@ -813,9 +813,10 @@ int sdmmc_read_blocks(struct sd_card *card, uint8_t *rbuf, uint32_t start_block,
 {
 	int ret;
 
-	if (num_blocks > 1) {
+	if (card->flags & SD_CMD23_FLAG) {
 		ret = sdmmc_set_blockcnt(card, num_blocks);
-		if (!ret) {
+
+		if (ret) {
 			return ret;
 		}
 	}
@@ -828,10 +829,10 @@ int sdmmc_write_blocks(struct sd_card *card, const uint8_t *wbuf, uint32_t start
 {
 	int ret;
 
-	if (num_blocks > 1) {
+	if (card->flags & SD_CMD23_FLAG) {
 		ret = sdmmc_set_blockcnt(card, num_blocks);
 
-		if (!ret) {
+		if (ret) {
 			return ret;
 		}
 	}
