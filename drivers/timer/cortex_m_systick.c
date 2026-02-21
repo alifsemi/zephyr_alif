@@ -520,6 +520,13 @@ void sys_clock_idle_exit(void)
 void sys_clock_disable(void)
 {
 	SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+
+	/* Clear any pending SysTick interrupt that may have been set
+	 * before or during the disable operation.
+	 * This prevents WFI from immediately waking up due to a stale
+	 * pending interrupt from the now-disabled timer.
+	 */
+	SCB->ICSR = SCB_ICSR_PENDSTCLR_Msk;
 }
 
 static int sys_clock_driver_init(void)
