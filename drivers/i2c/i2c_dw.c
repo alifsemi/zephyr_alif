@@ -992,7 +992,7 @@ static int i2c_dw_set_master_mode(const struct device *dev)
 	return 0;
 }
 
-static int i2c_dw_set_slave_mode(const struct device *dev, uint8_t addr, uint8_t flags)
+static int i2c_dw_set_slave_mode(const struct device *dev, uint16_t addr, uint8_t flags)
 {
 	const struct i2c_dw_rom_config * const rom = dev->config;
 	uint32_t reg_base = get_regs(dev);
