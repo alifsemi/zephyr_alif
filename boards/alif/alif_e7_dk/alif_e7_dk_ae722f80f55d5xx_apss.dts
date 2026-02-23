@@ -73,13 +73,15 @@
 				0x1A604000 0x44
 				0x1A609000 0x14
 				0x43007000 0x2C
-				0x400F0000 0x14>;
+				0x400F0000 0x14
+				0x1A602000 0x2C>;
 			reg-names = "clkctl_per_mst",
 				    "clkctl_per_slv",
 				    "aon",
 				    "vbat",
 				    "m55he_cfg",
-				    "m55hp_cfg";
+				    "m55hp_cfg",
+				    "cgu";
 			#clock-cells = <1>;
 			status = "okay";
 		};
