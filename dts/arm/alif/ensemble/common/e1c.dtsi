@@ -636,6 +636,8 @@
 		 */
 		hcnt-offset = <0>;
 		lcnt-offset = <0>;
+		fs-spike-len = <5>;
+		hs-spike-len = <1>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg = <0x49010000 0x1000>;
@@ -658,6 +660,8 @@
 		 */
 		hcnt-offset = <0>;
 		lcnt-offset = <0>;
+		fs-spike-len = <5>;
+		hs-spike-len = <1>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg = <0x49011000 0x1000>;
