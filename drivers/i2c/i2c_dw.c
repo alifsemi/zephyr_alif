@@ -820,6 +820,15 @@ error:
 	return ret;
 }
 
+static int i2c_dw_get_configuration(const struct device *dev, uint32_t *config)
+{
+	struct i2c_dw_dev_config *const dw = dev->data;
+
+	*config = dw->app_config;
+
+	return 0;
+}
+
 static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 {
 	struct i2c_dw_dev_config *const dw = dev->data;
@@ -1107,6 +1116,7 @@ static void i2c_dw_slave_read_clear_intr_bits(const struct device *dev)
 
 static DEVICE_API(i2c, funcs) = {
 	.configure = i2c_dw_runtime_configure,
+	.get_config = i2c_dw_get_configuration,
 	.transfer = i2c_dw_transfer,
 #ifdef CONFIG_I2C_TARGET
 	.target_register = i2c_dw_slave_register,
