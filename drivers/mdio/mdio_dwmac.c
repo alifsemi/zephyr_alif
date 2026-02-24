@@ -147,6 +147,6 @@ static const struct mdio_driver_api mdio_dwmac_api  = {
 										  \
 	DEVICE_DT_INST_DEFINE(inst, &mdio_dwmac_init, NULL,			  \
 			      &mdio_dwmac_data_##inst, &mdio_dwmac_config_##inst, \
-			      POST_KERNEL, CONFIG_ETH_INIT_PRIORITY,		  \
+			      POST_KERNEL, CONFIG_MDIO_INIT_PRIORITY,		  \
 			      &mdio_dwmac_api);
 DT_INST_FOREACH_STATUS_OKAY(MDIO_DWMAC_INIT)

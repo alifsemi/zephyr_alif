@@ -290,6 +290,6 @@ static const struct ethphy_driver_api rtl8201fr_phy_api = {
 										\
 	DEVICE_DT_INST_DEFINE(n, &phy_rtl8201fr_init, NULL,			\
 			&mc_rtl8201fr_##n##_data, &mc_rtl8201fr_##n##_config,	\
-			POST_KERNEL, CONFIG_ETH_INIT_PRIORITY,			\
+			POST_KERNEL, CONFIG_PHY_INIT_PRIORITY,			\
 			&rtl8201fr_phy_api);
 DT_INST_FOREACH_STATUS_OKAY(REALTEK_INIT)
