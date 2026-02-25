@@ -55,6 +55,9 @@ struct clock_control_alif_config {
 #define ALIF_CLOCK_USB_CLK_FREQ      (PLL_CLOCK1_SRC_FREQ / 40U)
 #define ALIF_CLOCK_160M_CLK_FREQ     (PLL_CLOCK1_SRC_FREQ / 5U)
 #define ALIF_CLOCK_10M_CLK_FREQ      (PLL_CLOCK1_SRC_FREQ / 80U)
+#if defined(CONFIG_ENSEMBLE_GEN2)
+#define ALIF_CLOCK_266M_CLK_FREQ     (PLL_CLOCK1_SRC_FREQ / 3U)
+#endif
 
 #define ALIF_CLOCK_HFOSC_CLK_FREQ    OSC_CLOCK_SRC_FREQ(hfxo)
 #define ALIF_CLOCK_76M8_CLK_FREQ     (OSC_CLOCK_SRC_FREQ(hfxo) * 2U)
@@ -75,7 +78,8 @@ struct clock_control_alif_config {
 #define ALIF_CLK_ENA_CLK38P4M_BIT   23U
 #define ALIF_CLK_ENA_CLK20M_BIT     22U
 #if defined(CONFIG_ENSEMBLE_GEN2)
-#define ALIF_CLK_ENA_CLK100M_BIT     7U
+#define ALIF_CLK_ENA_CLK100M_BIT    7U
+#define ALIF_CLK_ENA_CLK266M_BIT    21U
 #else
 #define ALIF_CLK_ENA_CLK100M_BIT    21U
 #endif
@@ -110,6 +114,8 @@ static uint32_t alif_get_input_clock(uint32_t clock_name)
 	case ALIF_CDC200_PIX_SYST_ACLK:
 	case ALIF_CSI_PIX_SYST_ACLK:
 	case ALIF_UTIMER_CLK:
+	case ALIF_OSPI0_ACLK_CLK:
+	case ALIF_OSPI1_ACLK_CLK:
 		return ALIF_CLOCK_SYST_ACLK_FREQ;
 	case ALIF_CANFD0_HFOSC_CLK:
 		return ALIF_CLOCK_HFOSC_CLK_FREQ;
@@ -172,6 +178,11 @@ static uint32_t alif_get_input_clock(uint32_t clock_name)
 		return CONFIG_LPTIMER2_EXT_CLK_FREQ;
 	case ALIF_LPTIMER3_LPTMR3_IO_PIN:
 		return CONFIG_LPTIMER3_EXT_CLK_FREQ;
+#endif
+#if defined(CONFIG_ENSEMBLE_GEN2)
+	case ALIF_OSPI0_266M_CLK:
+	case ALIF_OSPI1_266M_CLK:
+		return ALIF_CLOCK_266M_CLK_FREQ;
 #endif
 	default:
 		return 0;
@@ -503,6 +514,29 @@ static inline int alif_clock_control_configure(const struct device *dev,
 		return 0;
 	}
 
+	switch (clk_id) {
+#if defined(CONFIG_ENSEMBLE_GEN2)
+	/* configure OSPI clock sources in CGU module */
+	case ALIF_OSPI0_266M_CLK:
+	case ALIF_OSPI1_266M_CLK:
+	case ALIF_OSPI0_ACLK_CLK:
+	case ALIF_OSPI1_ACLK_CLK:
+		ret = alif_get_module_base(dev, ALIF_CGU_MODULE, &module_base);
+		if (ret) {
+			return ret;
+		}
+		reg_addr = module_base + ALIF_MISC_CLK_CTRL_REG;
+
+		reg_value = sys_read32(reg_addr);
+		reg_value &= ~(ALIF_CLOCK_CFG_CLK_SRC_MASK(clk_id) <<
+				ALIF_CLOCK_CFG_CLK_BIT_POS(clk_id));
+		reg_value |= (ALIF_CLOCK_CFG_CLK_SRC(clk_id) <<
+				ALIF_CLOCK_CFG_CLK_BIT_POS(clk_id));
+		sys_write32(reg_value, reg_addr);
+		return 0;
+#endif
+	}
+
 	ret = alif_get_module_base(dev, ALIF_CLOCK_CFG_MODULE(clk_id),
 					&module_base);
 	if (ret) {
@@ -546,6 +580,10 @@ static int clockctrl_init(const struct device *dev)
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(clk_160m), okay)
 	cgu_mask |= BIT(ALIF_CLK_ENA_CLK160M_BIT);
+#endif
+
+#if defined(CONFIG_ENSEMBLE_GEN2) && DT_NODE_HAS_STATUS(DT_NODELABEL(clk_266m), okay)
+	cgu_mask |= BIT(ALIF_CLK_ENA_CLK266M_BIT);
 #endif
 
 	/* enable cgu clock */
