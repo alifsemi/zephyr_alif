@@ -67,6 +67,12 @@ void dwmac_platform_init(struct dwmac_priv *p)
 			DMA_SYSBUS_MODE_AAL |
 			DMA_SYSBUS_MODE_FB);
 
+#ifdef CONFIG_ETH_DWMAC_PASS_ALL_MULTICAST
+	sys_set_bits(p->base_addr + MAC_PKT_FILTER, MAC_PKT_FILTER_PM);
+#else
+	sys_clear_bits(p->base_addr + MAC_PKT_FILTER, MAC_PKT_FILTER_PM);
+#endif
+
 	/* set up IRQs */
 	IRQ_CONNECT(DT_INST_IRQN(0), DT_INST_IRQ(0, priority), dwmac_isr,
 			DEVICE_DT_INST_GET(0), 0);
