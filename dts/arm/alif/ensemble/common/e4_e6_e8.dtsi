@@ -235,5 +235,12 @@
 			status = "disabled";
 			#clock-cells = <0>;
 		};
+
+		clk_266m: clk_266m {
+			compatible = "fixed-clock";
+			clock-frequency = <266000000>;
+			status = "disabled";
+			#clock-cells = <0>;
+		};
 	};
 };
