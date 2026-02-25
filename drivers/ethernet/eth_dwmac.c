@@ -570,6 +570,11 @@ static void dwmac_iface_init(struct net_if *iface)
 	reg_val |= MAC_CONF_CST | MAC_CONF_TE | MAC_CONF_RE;
 	REG_WRITE(MAC_CONF, reg_val);
 
+	if (IS_ENABLED(CONFIG_ETH_DWMAC_PASS_ALL_MULTICAST)) {
+		reg_val = REG_READ(MAC_PKT_FILTER);
+		REG_WRITE(MAC_PKT_FILTER, reg_val | MAC_PKT_FILTER_PM);
+	}
+
 	/* unmask IRQs */
 	REG_WRITE(DMA_CHn_IRQ_ENABLE(0),
 		  DMA_CHn_IRQ_ENABLE_TIE |
