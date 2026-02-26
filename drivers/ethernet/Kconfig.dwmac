@@ -41,6 +41,14 @@ config ETH_DWMAC_ALIF
 	help
 	  Enable support for the Synopsys DesignWare MAC on Alif platforms.
 
+config ETH_DWMAC_PASS_ALL_MULTICAST
+	bool "Pass all multicast packets"
+	help
+	  Enable reception of all multicast Ethernet frames.
+	  The MAC passes all received packets with a multicast
+	  destination address (the least significant bit of the
+	  first destination address byte is set).
+
 config ETH_DWMAC_MMU
 	bool
 	depends on MMU
