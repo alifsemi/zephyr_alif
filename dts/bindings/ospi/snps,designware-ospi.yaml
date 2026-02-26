@@ -27,12 +27,11 @@ properties:
 
   bus-speed:
     type: int
+    required: true
     description: speed
-    default: 1000000
 
   clock-frequency:
     type: int
-    required: true
     description: |
       Input clock frequency
 

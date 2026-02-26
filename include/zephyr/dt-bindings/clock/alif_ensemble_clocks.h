@@ -9,6 +9,8 @@
 #include "alif_clocks_common.h"
 
 /* soc specific registers */
+/* register offset for CLKCTL_PER_SLV_CLKCTL module */
+#define ALIF_OSPI_CTRL_REG            0x3CU
 /* register offset for VBAT_CLKCTL module */
 #define ALIF_RTC_CLK_EN_REG           0x10U
 /* end of soc specific registers */
@@ -283,5 +285,15 @@
 #define ALIF_UTIMER_CLK     ALIF_CLK(1U)
 #define ALIF_LPUTIMER_CLK           \
 	ALIF_CLK_CFG(M55HE_CFG, HE_CLK_ENA, 17U, 1U, 0U, 0U, 0U)
+
+/* OSPI clocks */
+#define ALIF_OSPI0_ACLK_CLK              \
+	ALIF_CLK_CFG(CLKCTL_PER_SLV, OSPI_CTRL, 0U, 1U, 0U, 1U, 0U)
+#define ALIF_OSPI0_266M_CLK              \
+	ALIF_CLK_CFG(CLKCTL_PER_SLV, OSPI_CTRL, 0U, 1U, 1U, 1U, 0U)
+#define ALIF_OSPI1_ACLK_CLK              \
+	ALIF_CLK_CFG(CLKCTL_PER_SLV, OSPI_CTRL, 1U, 1U, 0U, 1U, 0U)
+#define ALIF_OSPI1_266M_CLK              \
+	ALIF_CLK_CFG(CLKCTL_PER_SLV, OSPI_CTRL, 1U, 1U, 1U, 1U, 0U)
 
 #endif /* ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_ALIF_CLOCK_CONTROL_H_ */

@@ -11,6 +11,7 @@
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/irq.h>
+#include <zephyr/drivers/clock_control.h>
 
 #include "ospi_hal.h"
 #include "ospi.h"
@@ -33,11 +34,9 @@ LOG_MODULE_REGISTER(memc_alif_aps512xxn, CONFIG_MEMC_LOG_LEVEL);
 #define APS256XXN_CMD_GLOBAL_RESET             0xFFFF
 
 /* APS256XXN macros */
-#define APS256XXN_INIT_REG_READ_WAIT_CYCLES    4
-#define APS256XXN_REG_READ_WAIT_CYCLES         3
+#define APS256XXN_INIT_REG_READ_WAIT_CYCLES    5
 #define APS256XXN_REG_WRITE_WAIT_CYCLES        0
 #define APS256XXN_RESET_WAIT_CYCLES            3
-#define APS256XXN_FAST_READ_WRITE_WAIT_CYCLES  3
 
 /* APS256XXN Register address */
 #define APS256XXN_MODE_REG0_ADDR               0x0
@@ -48,8 +47,19 @@ LOG_MODULE_REGISTER(memc_alif_aps512xxn, CONFIG_MEMC_LOG_LEVEL);
 #define APS256XXN_MODE_REG6_ADDR               0x6
 #define APS256XXN_MODE_REG8_ADDR               0x8
 
+/* APS512XXN Register bits */
+#define APS512XXN_MODE_REG0_DRIVE_STR          0
+#define APS512XXN_MODE_REG0_READ_LATENCY_CODE  2
+#define APS512XXN_MODE_REG0_LATENCY_TYPE       5
+#define APS512XXN_MODE_REG4_WRITE_LATENCY_CODE 5
+#define APS512XXN_MODE_REG4_READ_RF_RATE       3
+#define APS512XXN_MODE_REG4_PASR               0
+#define APS512XXN_MODE_REG8_TRANSFER_MODE      6
+#define APS512XXN_MODE_REG8_RBX_READ_EN        3
+#define APS512XXN_MODE_REG8_BURST_TYPE         2
+#define APS512XXN_MODE_REG8_BURST_LEN          0
+
 /* APS256XXN OSPI macros */
-#define APS256XXN_OSPI_DDR_DRIVE_EDGE          1
 #define APS256XXN_OSPI_RX_SAMPLE_DELAY         0
 #define APS256XXN_OSPI_RX_FIFO_THRESHOLD       0
 #define APS256XXN_OSPI_DFS                     16
@@ -61,7 +71,8 @@ typedef void (*irq_config_func_t)(const struct device *dev);
 struct alif_ospi_aps512xxn_config {
 	struct ospi_regs *regs;
 	struct ospi_aes_regs *aes_regs;
-	uint32_t input_clk;
+	const struct device *clk_dev;
+	clock_control_subsys_t clkid;
 	uint32_t bus_speed;
 	uint32_t cs_pin;
 	const struct pinctrl_dev_config *pcfg;
@@ -69,14 +80,17 @@ struct alif_ospi_aps512xxn_config {
 	uint8_t  signal_delay;
 	uint8_t  rxds_delay;
 	uint8_t  xip_wait_cycles;
+	uint8_t  latency_code;
 	bool dual_octal;
 };
 
 /* APS256XXN Device Data */
 struct alif_ospi_aps512xxn_data {
+	uint32_t freq;
 	HAL_OSPI_Handle_T ospi_handle;
 	struct ospi_trans_config trans_conf;
 	struct k_event event;
+	uint8_t write_latency;
 };
 
 static int32_t err_map_alif_hal_to_zephyr(int32_t err)
@@ -203,7 +217,7 @@ static int aps512xxn_read_reg(const struct device *dev, uint8_t reg_addr, uint8_
 	uint16_t data_buff;
 
 	data->trans_conf.addr_len = OSPI_ADDR_LENGTH_32_BITS;
-	data->trans_conf.wait_cycles = wait_cycles;
+	data->trans_conf.wait_cycles = wait_cycles - 1;
 
 	ret = alif_hal_ospi_prepare_transfer(data->ospi_handle, &data->trans_conf);
 	if (ret != 0) {
@@ -244,9 +258,14 @@ static int memc_alif_ospi_aps512xxn_init(const struct device *dev)
 	const struct alif_ospi_aps512xxn_config *config = dev->config;
 	struct alif_ospi_aps512xxn_data *data = dev->data;
 	struct ospi_xip_config aps512xxn_xip_cfg;
-	uint8_t id_reg = 0;
+	uint8_t id_reg = 0, reg_value;
 	int32_t ret;
 	struct ospi_init init_config;
+
+	if (config->bus_speed == 0) {
+		LOG_ERR("OSPI Bus Speed can't be zero");
+		return -EINVAL;
+	}
 
 	k_event_init(&(data->event));
 
@@ -258,8 +277,34 @@ static int memc_alif_ospi_aps512xxn_init(const struct device *dev)
 	memset(&init_config, 0, sizeof(struct ospi_init));
 	memset(&data->trans_conf, 0, sizeof(struct ospi_trans_config));
 
+	/* Check for device ready */
+	if (!device_is_ready(config->clk_dev)) {
+		LOG_ERR("clock controller device not ready");
+		return -ENODEV;
+	}
+#if defined(CONFIG_ENSEMBLE_GEN2)
+	/* configure OSPI clock from clock manager */
+	ret = clock_control_configure(config->clk_dev, config->clkid, NULL);
+	if (ret != 0) {
+		LOG_ERR("Unable to configure clock: err:%d", ret);
+		return ret;
+	}
+	/* Enable OSPI clock from clock manager */
+	ret = clock_control_on(config->clk_dev, config->clkid);
+	if (ret != 0) {
+		LOG_ERR("Unable to turn on clock: err:%d", ret);
+		return ret;
+	}
+#endif
+	/* Get OSPI clock frequency from clock manager */
+	ret = clock_control_get_rate(config->clk_dev, config->clkid, &data->freq);
+	if (ret != 0) {
+		LOG_ERR("Unable to get clock rate: err:%d", ret);
+		return ret;
+	}
+
 	/* OSPI Initialize Configuration */
-	init_config.core_clk = config->input_clk;
+	init_config.core_clk = data->freq;
 	init_config.bus_speed = config->bus_speed;
 	init_config.tx_fifo_threshold = DT_PROP(CONTROLLER_NODE, tx_fifo_threshold);
 	init_config.rx_fifo_threshold = APS256XXN_OSPI_RX_FIFO_THRESHOLD;
@@ -293,9 +338,25 @@ static int memc_alif_ospi_aps512xxn_init(const struct device *dev)
 		return ret;
 	}
 
-	if (config->bus_speed == 0) {
-		LOG_ERR("OSPI Bus Speed can't be zero");
-		return -EINVAL;
+	/* configuring write latency code value wrt user input */
+	switch (config->latency_code) {
+	case 3:
+		data->write_latency = 0x0;
+		break;
+	case 4:
+		data->write_latency = 0x4;
+		break;
+	case 5:
+		data->write_latency = 0x2;
+		break;
+	case 6:
+		data->write_latency = 0x6;
+		break;
+	case 7:
+		data->write_latency = 0x1;
+		break;
+	default:
+		return -EINVAL; /* Invalid WLC */
 	}
 
 	/* APS256XXN global reset */
@@ -313,22 +374,32 @@ static int memc_alif_ospi_aps512xxn_init(const struct device *dev)
 		return ret;
 	}
 
-	/* Set minimum read latency (4 cycles), variable latency */
-	ret = aps512xxn_write_reg(dev, APS256XXN_MODE_REG0_ADDR, 0x04);
+	/* config read wait cycles, variable latency */
+	reg_value = (0x0 << APS512XXN_MODE_REG0_LATENCY_TYPE |
+			(config->latency_code - 3) << APS512XXN_MODE_REG0_READ_LATENCY_CODE |
+			 0x0 << APS512XXN_MODE_REG0_DRIVE_STR);
+	ret = aps512xxn_write_reg(dev, APS256XXN_MODE_REG0_ADDR, reg_value);
 	if (ret != 0) {
 		LOG_ERR("APS512XXN Mode Reg 0 Config Failed");
 		return ret;
 	}
 
-	/* Set minimum write latency (4 cycles), auto slow refresh rate */
-	ret = aps512xxn_write_reg(dev, APS256XXN_MODE_REG4_ADDR, 0x98);
+	/* config write latency, auto slow refresh rate */
+	reg_value = (0x0 << APS512XXN_MODE_REG4_READ_RF_RATE |
+			data->write_latency << APS512XXN_MODE_REG4_WRITE_LATENCY_CODE |
+			0x0 << APS512XXN_MODE_REG4_PASR);
+	ret = aps512xxn_write_reg(dev, APS256XXN_MODE_REG4_ADDR, reg_value);
 	if (ret != 0) {
 		LOG_ERR("APS512XXN Mode Reg 4 Config Failed");
 		return ret;
 	}
 
-	/* Set transmission mode (x8/x16), 32-byte wrap, no row cross */
-	ret = aps512xxn_write_reg(dev, APS256XXN_MODE_REG8_ADDR, config->dual_octal ? 0x41 : 0x01);
+	/* config device mode, burst len & disable hybrid burst */
+	reg_value = ((config->dual_octal ? 0 : 1) << APS512XXN_MODE_REG8_BURST_LEN |
+			 0x0 << APS512XXN_MODE_REG8_BURST_TYPE |
+			 0x0 << APS512XXN_MODE_REG8_RBX_READ_EN |
+			 config->dual_octal << APS512XXN_MODE_REG8_TRANSFER_MODE);
+	ret = aps512xxn_write_reg(dev, APS256XXN_MODE_REG8_ADDR, reg_value);
 	if (ret != 0) {
 		LOG_ERR("APS512XXN Mode Reg 8 Config Failed");
 		return ret;
@@ -340,10 +411,55 @@ static int memc_alif_ospi_aps512xxn_init(const struct device *dev)
 	aps512xxn_xip_cfg.write_incr_cmd = APS256XXN_CMD_LINEAR_BURST_WRITE;
 	aps512xxn_xip_cfg.write_wrap_cmd = APS256XXN_CMD_SYNC_WRITE;
 	aps512xxn_xip_cfg.xip_cnt_time_out = config->xip_wait_cycles;
-	aps512xxn_xip_cfg.xip_wait_cycles = APS256XXN_FAST_READ_WRITE_WAIT_CYCLES;
+	aps512xxn_xip_cfg.xip_wait_cycles = config->latency_code - 1;
 
 	/* OSPI xip configuration */
 	ospi_psram_xip_init(config->regs, &aps512xxn_xip_cfg, config->dual_octal);
+
+	/* config address control shim for dual octal mode */
+	if (config->dual_octal) {
+		struct aes_addr_ctrl ram_addr_ctrl;
+		/**
+		 *  SPI address signalling              Corresponding HADDR/AxADDR bits in
+		 *
+		 *   --  RA12 RA4  CA7                        --  23 15  8
+		 *   --  RA11 RA3  CA6                        --  22 14  7
+		 *   --  RA10 RA2  CA5                        --  21 13  6
+		 *   --  RA9  RA1  CA4                        --  20 12  5
+		 *   --  RA8  RA0  CA3                        --  19 11  4
+		 *   --  RA7  --   CA2                        --  18 --  3
+		 *  RA14 RA6  CA9  CA1                        25  17 10  2
+		 *  RA13 RA5  CA8  CA0 (=0)                   24  16 9   1 (=0)
+		 *
+		 *  We massage HADDR using the shim in front of the controller to insert the gap
+		 *  between CA9 and RA0 - between HADDR[10] and HADDR[11].
+		 *  SPI controller shifts HADDR down 1 when in dual octal mode to form a 16-bit word
+		 *  address.
+		 *
+		 *  | Logical Byte Address | After Shift (Word Address) | Meaning            |
+		 *  | -------------------- | -------------------------- | ------------------ |
+		 *  | 0x000000             | 0x000000                   | First 16-bit word  |
+		 *  | 0x000002             | 0x000001                   | Second 16-bit word |
+		 *  | 0x000004             | 0x000002                   | Third 16-bit word  |
+		 *  So, instead of each address pointing to a single byte, now each address points
+		 *  to a 16-bit (2-byte) word.
+		 */
+
+		ram_addr_ctrl.addr_lower_bits   = 11;
+		ram_addr_ctrl.addr_upper_shift  = 12;
+		ram_addr_ctrl.addr_mask         = 0x7FF;
+		if (config->cs_pin) {
+			ram_addr_ctrl.ss0_array_mode_en = 0;
+			ram_addr_ctrl.ss1_array_mode_en = 1;
+		} else {
+			ram_addr_ctrl.ss0_array_mode_en = 1;
+			ram_addr_ctrl.ss1_array_mode_en = 0;
+		}
+
+		aes_ctrl_xip_addr(config->aes_regs, &ram_addr_ctrl);
+	}
+
+	aes_set_rxds_delay(config->aes_regs, config->rxds_delay);
 
 	aes_enable_xip(config->aes_regs);
 
@@ -364,7 +480,7 @@ PINCTRL_DT_DEFINE(CONTROLLER_NODE);
 static void ospi_irq_config_func(const struct device *dev)
 {
 	IRQ_CONNECT(DT_IRQN(CONTROLLER_NODE), DT_IRQ(CONTROLLER_NODE, priority), OSPI_IRQHandler,
-	    DEVICE_DT_GET(DEVICE_NODE), 0);
+		DEVICE_DT_GET(DEVICE_NODE), 0);
 	irq_enable(DT_IRQN(CONTROLLER_NODE));
 }
 
@@ -372,13 +488,15 @@ static const struct alif_ospi_aps512xxn_config aps512xxn_config = {
 	.pcfg = PINCTRL_DT_DEV_CONFIG_GET(CONTROLLER_NODE),
 	.regs = (struct ospi_regs *) DT_REG_ADDR(CONTROLLER_NODE),
 	.aes_regs = (struct ospi_aes_regs *) DT_PROP_BY_IDX(CONTROLLER_NODE, aes_reg, 0),
-	.input_clk = DT_PROP(CONTROLLER_NODE, clock_frequency),
 	.bus_speed = DT_PROP(CONTROLLER_NODE, bus_speed),
 	.signal_delay = DT_PROP(CONTROLLER_NODE, baud2_delay),
 	.rxds_delay = DT_PROP(CONTROLLER_NODE, rx_ds_delay),
 	.xip_wait_cycles = DT_PROP(CONTROLLER_NODE, xip_wait_cycles),
 	.dual_octal = DT_PROP(DEVICE_NODE, x16_data_transfer_mode),
-	.irq_config = ospi_irq_config_func
+	.latency_code = DT_PROP(DEVICE_NODE, latency_code),
+	.irq_config = ospi_irq_config_func,
+	.clk_dev = DEVICE_DT_GET(DT_CLOCKS_CTLR(CONTROLLER_NODE)),
+	.clkid = (clock_control_subsys_t) DT_CLOCKS_CELL(CONTROLLER_NODE, clkid)
 };
 
 static struct alif_ospi_aps512xxn_data aps512xxn_data;
