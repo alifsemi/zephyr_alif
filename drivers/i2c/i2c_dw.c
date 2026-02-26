@@ -1213,31 +1213,62 @@ static int i2c_dw_initialize(const struct device *dev)
 
 static int i2c_dw_suspend(const struct device *dev)
 {
+
+	const struct i2c_dw_rom_config *const dev_cfg = dev->config;
+	struct i2c_dw_dev_config *const dw = dev->data;
+	uint32_t reg_base = get_regs(dev);
+	int ret = 0;
+
+	/* First step, check if there is current activity */
+	if (test_bit_status_activity(reg_base) || (dw->state & I2C_DW_BUSY)) {
+		return -EBUSY;
+	}
+
+	/* disable the controller */
+	clear_bit_enable_en(reg_base);
+
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
+	if (dev_cfg->clk_id) {
+		ret = clock_control_off(dev_cfg->clk_dev, dev_cfg->clk_id);
+		if (ret != 0) {
+			LOG_ERR("Unable to turn off clock: err:%d", ret);
+			return ret;
+		}
+	}
+#endif
+
+#if defined(CONFIG_PINCTRL)
+	ret = pinctrl_apply_state(dev_cfg->pcfg, PINCTRL_STATE_SLEEP);
+	if (ret < 0 && ret != -ENOENT) {
+		/* Ignore -ENOENT (sleep state not defined) */
+		return ret;
+	}
+#endif
+
 	return 0;
 }
 
 static int i2c_dw_resume(const struct device *dev)
 {
-#if defined(CONFIG_PINCTRL) || DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
-	const struct i2c_dw_rom_config *const rom = dev->config;
+	const struct i2c_dw_rom_config *const dev_cfg = dev->config;
+	uint32_t reg_base = get_regs(dev);
 	int ret;
-#endif
 
 #if defined(CONFIG_PINCTRL)
-	ret = pinctrl_apply_state(rom->pcfg, PINCTRL_STATE_DEFAULT);
+	ret = pinctrl_apply_state(dev_cfg->pcfg, PINCTRL_STATE_DEFAULT);
 	if (ret) {
 		return ret;
 	}
 #endif
 
 #if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
-	if (rom->clk_id) {
-		if (!device_is_ready(rom->clk_dev)) {
+	if (dev_cfg->clk_id) {
+		if (!device_is_ready(dev_cfg->clk_dev)) {
 			LOG_ERR("clock controller device not ready");
 			return -ENODEV;
 		}
 
-		ret = clock_control_on(rom->clk_dev, rom->clk_id);
+		ret = clock_control_on(dev_cfg->clk_dev, dev_cfg->clk_id);
 		if (ret != 0) {
 			LOG_ERR("Unable to turn on clock: err:%d", ret);
 			return ret;
@@ -1245,7 +1276,12 @@ static int i2c_dw_resume(const struct device *dev)
 	}
 #endif
 
-	clear_bit_enable_en(get_regs(dev));
+	/* Set spike length */
+	write_fs_spklen(dev_cfg->fs_spk_len, reg_base);
+	write_hs_spklen(dev_cfg->hs_spk_len, reg_base);
+
+	/* Enable the controller */
+	set_bit_enable_en(reg_base);
 
 	return 0;
 }
