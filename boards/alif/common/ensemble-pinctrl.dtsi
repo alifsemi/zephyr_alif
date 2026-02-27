@@ -270,6 +270,15 @@
 		};
 	};
 
+	pinctrl_can0:pinctrl_can0 {
+		group0 {
+			pinmux = < PIN_P7_0__CAN_RXD_A >,
+				< PIN_P7_1__CAN_TXD_A >,
+				< PIN_P7_3__CAN_STBY_A >;
+			read-enable = < 0x1 >;
+		};
+	};
+
 	pinctrl_spi0: pinctrl_spi0 {
 		group0 {
 			pinmux = < PIN_P5_0__SPI0_MISO_B >,

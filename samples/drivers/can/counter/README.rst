@@ -25,6 +25,9 @@ The sample can be built and executed for boards with a SoC that have an
 integrated CAN controller or for boards with a SoC that has been augmented
 with a stand alone CAN controller.
 
+Use the snippet "alif-dk" to build this app on all alif boards.
+The overlay used in the snippet configures can instance.
+
 Integrated CAN controller
 =========================
 
@@ -34,6 +37,14 @@ For the NXP TWR-KE18F board:
    :zephyr-app: samples/drivers/can/counter
    :board: twr_ke18f
    :goals: build flash
+
+For Alif board:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/drivers/can/counter
+   :board: alif_e7_dk/ae722f80f55d5xx/rtss_hp
+   :goals: build
+   :gen-args: -S alif-dk
 
 Stand alone CAN controller
 ==========================
