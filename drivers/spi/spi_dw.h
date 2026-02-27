@@ -14,6 +14,7 @@
 #include <string.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/spi.h>
+#include <zephyr/drivers/clock_control.h>
 
 #include "spi_context.h"
 
@@ -70,6 +71,8 @@ struct spi_dw_config {
 	const struct spi_dw_dma_ch dma_tx;
 	const struct spi_dw_dma_ch dma_rx;
 #endif /* CONFIG_SPI_DW_USE_DMA */
+	const struct device *clock_dev;
+	clock_control_subsys_t clock_subsys;
 };
 
 struct spi_dw_data {
@@ -78,7 +81,7 @@ struct spi_dw_data {
 	uint8_t dfs;	/* dfs in bytes: 1,2 or 4 */
 	uint8_t fifo_diff;	/* cannot be bigger than FIFO depth */
 	uint8_t dwc_ssi;	/* enable it for dwc ssi operation on AHB*/
-	uint8_t _unused;
+	uint8_t force_config;   /* reconfigure on resume power state */
 #ifdef CONFIG_SPI_DW_USE_DMA
 	struct k_sem dma_sem;
 	int dma_cb_status;
