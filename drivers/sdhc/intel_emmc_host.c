@@ -43,6 +43,7 @@ struct emmc_config {
 	const struct pinctrl_dev_config *pincfg;
 #endif
 	emmc_isr_cb_t config_func;
+	struct gpio_dt_spec cd_gpio;
 	uint32_t max_bus_freq;
 	uint32_t min_bus_freq;
 	uint32_t power_delay_ms;
@@ -794,14 +795,13 @@ static int emmc_stop_transfer(const struct device *dev)
 	return emmc_host_send_cmd(dev, &cmd);
 }
 
+static int emmc_get_card_present(const struct device *dev);
 static int emmc_reset(const struct device *dev)
 {
-	volatile struct emmc_reg *regs = (struct emmc_reg *)DEVICE_MMIO_GET(dev);
 
 	LOG_DBG("");
 
-	if (!(regs->present_state & EMMC_HOST_PSTATE_CARD_INSERTED)) {
-		LOG_ERR("No EMMC card found");
+	if (!emmc_get_card_present(dev)) {
 		return -ENODEV;
 	}
 
@@ -1157,11 +1157,25 @@ static int emmc_set_io(const struct device *dev, struct sdhc_io *ios)
 static int emmc_get_card_present(const struct device *dev)
 {
 	struct emmc_data *emmc = dev->data;
+	const struct emmc_config *config = dev->config;
 	volatile struct emmc_reg *regs = (struct emmc_reg *)DEVICE_MMIO_GET(dev);
+	int ret;
 
 	LOG_DBG("");
 
-	emmc->card_present = (bool)((regs->present_state >> 16u) & 1u);
+	/* Use cd-gpios for card detect if available, else fall back to register */
+	if (config->cd_gpio.port) {
+		ret = gpio_pin_get_dt(&config->cd_gpio);
+
+		if (ret < 0) {
+			LOG_ERR("Failed to read CD GPIO");
+			return ret;
+		}
+		emmc->card_present = (ret == 1);
+	} else {
+		emmc->card_present = ((regs->present_state & EMMC_HOST_PSTATE_CARD_INSERTED)
+								? 1 : 0);
+	}
 
 	if (!emmc->card_present) {
 		LOG_ERR("No MMC device detected");
@@ -1363,6 +1377,20 @@ static int emmc_init(const struct device *dev)
 	}
 
 	LOG_DBG("MMC Device MMIO: %p", (void *)(struct emmc_reg *)DEVICE_MMIO_GET(dev));
+
+	/* Initialize card detect GPIO if configured */
+	if (config->cd_gpio.port) {
+		if (!gpio_is_ready_dt(&config->cd_gpio)) {
+			LOG_ERR("Card detect GPIO device not ready");
+			return -ENODEV;
+		}
+
+		ret = gpio_pin_configure_dt(&config->cd_gpio, GPIO_INPUT);
+		if (ret < 0) {
+			LOG_ERR("Failed to configure card detect GPIO: %d", ret);
+			return ret;
+		}
+	}
 
 	if (IS_ENABLED(CONFIG_INTEL_EMMC_HOST_INTR)) {
 		config->config_func(dev);
