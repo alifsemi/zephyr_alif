@@ -3,4 +3,12 @@ board:
   full_name: alif e1c DevKit
   vendor: alif
   socs:
-  - name: 'ae1c1f4051920hh'
+  - name: 'ae1c1f4051920hh0'
+  - name: 'ae1c1f4051920ph0'
+  - name: 'ae1c1f40519205h0'
+  - name: 'ae1c1f1041010hh0'
+  - name: 'ae1c1f1041010ph0'
+  - name: 'ae1c1f10410105h0'
+  - name: 'ae1c1f1040505hh0'
+  - name: 'ae1c1f1040505ph0'
+  - name: 'ae1c1f10405055h0'
