@@ -13,7 +13,6 @@
 #include <string.h>
 #include <cmsis_core.h>
 #include <errno.h>
-#include <zephyr/cache.h>
 #define LOG_LEVEL CONFIG_FLASH_LOG_LEVEL
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(flash_mram_alif);
@@ -30,7 +29,7 @@ LOG_MODULE_REGISTER(flash_mram_alif);
 #error "Erase unit must be a multiple of program unit"
 #endif
 
-#define MRAM_FLASH(offset) ((uint8_t *)FLASH_MRAM_BASE_OFFSET + (offset))
+#define MRAM_FLASH(offset) ((volatile uint8_t *)FLASH_MRAM_BASE_OFFSET + (offset))
 
 /* MRAM(On-Chip NVM) Sector Size: 16-Byte(128-bit) */
 #define MRAM_UNIT_SECTOR_SIZE    (FLASH_MRAM_PROG_UNIT)
@@ -55,29 +54,26 @@ static const struct flash_parameters flash_mram_parameters = {
  * @return 0 if successful.
  * @return -EINVAL if dst is not 16 bytes aligned address.
  */
-static int mram_write_16bytes(uint8_t *dst, uint8_t *src)
+static int mram_write_16bytes(volatile void *dst, const void *src)
 {
-	if ((uint32_t)dst & 0x0000000F) {
-		LOG_ERR("Address %p must be %d bytes aligned for MRAM write\n", dst,
+	if ((uintptr_t)dst & 0xF) {
+		LOG_ERR("Address %p must be %d bytes aligned for MRAM write\n", (void *)dst,
 			MRAM_UNIT_SECTOR_SIZE);
 		return -EINVAL;
 	}
-	uint32_t tmp_buf[4] = {0};
+
+	const uint32_t *src32 = src;
+	volatile uint32_t *dst32 = dst;
 
 	__disable_irq();
-	if ((uint32_t)src & 0x0000000F) {
-		memcpy(tmp_buf, src, MRAM_UNIT_SECTOR_SIZE);
-		((volatile uint64_t *)dst)[0] = ((volatile uint64_t *)tmp_buf)[0];
-		((volatile uint64_t *)dst)[1] = ((volatile uint64_t *)tmp_buf)[1];
-	} else {
-		((volatile uint64_t *)dst)[0] = ((volatile uint64_t *)src)[0];
-		((volatile uint64_t *)dst)[1] = ((volatile uint64_t *)src)[1];
-	}
-	__asm__ volatile("dmb 0xF" ::: "memory");
-#if defined(CONFIG_CACHE_MANAGEMENT)
-	sys_cache_data_flush_range(dst, MRAM_UNIT_SECTOR_SIZE);
-#endif
+
+	dst32[0] = UNALIGNED_GET(&src32[0]);
+	dst32[1] = UNALIGNED_GET(&src32[1]);
+	dst32[2] = UNALIGNED_GET(&src32[2]);
+	dst32[3] = UNALIGNED_GET(&src32[3]);
+
 	__enable_irq();
+
 	return 0;
 }
 
@@ -89,21 +85,25 @@ static int mram_write_16bytes(uint8_t *dst, uint8_t *src)
  * @return 0 if successful.
  * @return -EINVAL if dst is not 16 bytes aligned address.
  */
-static int mram_erase_16bytes(uint8_t *dst)
+static int mram_erase_16bytes(volatile void *dst)
 {
-	if ((uint32_t)dst & 0x0000000F) {
-		LOG_ERR("Address %p must be %d bytes aligned for MRAM write\n", dst,
+	if ((uintptr_t)dst & 0xF) {
+		LOG_ERR("Address %p must be %d bytes aligned for MRAM write\n", (void *)dst,
 			MRAM_UNIT_SECTOR_SIZE);
 		return -EINVAL;
 	}
+
+	volatile uint32_t *dst32 = dst;
+
 	__disable_irq();
-	((volatile uint64_t *)dst)[0] = 0x0;
-	((volatile uint64_t *)dst)[1] = 0x0;
-	__asm__ volatile("dmb 0xF" ::: "memory");
-#if defined(CONFIG_CACHE_MANAGEMENT)
-	sys_cache_data_flush_range(dst, MRAM_UNIT_SECTOR_SIZE);
-#endif
+
+	dst32[0] = 0;
+	dst32[1] = 0;
+	dst32[2] = 0;
+	dst32[3] = 0;
+
 	__enable_irq();
+
 	return 0;
 }
 
@@ -124,6 +124,47 @@ static int flash_range_is_valid(const struct device *dev, off_t offset,
 		return 0;
 	}
 	return 1;
+}
+
+/**
+ * @brief read aligned data from the MRAM from the given address.
+ *
+ * @param dst Pointer to the void buffer to store read data.
+ * @param src Pointer to volatile containing MRAM address at which read starts.
+ * @param len Number of bytes to read from MRAM address.
+ */
+static void memcpy_with_aligned_reads(void *dst, const volatile void *src, size_t len)
+{
+	const volatile uint8_t *src8 = src;
+	uint8_t *dst8 = dst;
+	size_t remaining = len;
+
+	/* align MRAM source to 32-bit */
+	while (remaining && ((uintptr_t)src8 & 0x3)) {
+		*dst8++ = *src8++;
+		remaining--;
+	}
+
+	/* copy 32-bit data */
+	const volatile uint32_t *src32 = (const volatile uint32_t *)src8;
+	uint32_t *dst32 = (uint32_t *)dst8;
+
+	while (remaining >= 4) {
+		uint32_t mram_word = *src32++;
+
+		UNALIGNED_PUT(mram_word, dst32);
+
+		dst32++;
+		remaining -= 4;
+	}
+
+	/* copy remaining bytes. */
+	src8 = (const volatile uint8_t *)src32;
+	dst8 = (uint8_t *)dst32;
+
+	while (remaining--) {
+		*dst8++ = *src8++;
+	}
 }
 
 /**
@@ -152,9 +193,14 @@ static int flash_mram_read(const struct device *dev, const off_t offset,
 		LOG_ERR("mram_read: unable to take semaphore\n");
 		return -EACCES;
 	}
+
 	/* Reading from MRAM does not have 16 bytes alignment or */
 	/* the multiple of 16 read size constraints */
-	memcpy(data, MRAM_FLASH(offset), len);
+
+	const volatile void *src = MRAM_FLASH(offset);
+	/* read aligned data from the MRAM */
+	memcpy_with_aligned_reads(data, src, len);
+
 	k_sem_give(&dev_data->lock);
 
 	return 0;
@@ -193,12 +239,12 @@ static int flash_mram_write(const struct device *dev, const off_t offset,
 
 	/* check address with aligned to 16-Bytes.*/
 	uint32_t aligned_addr   = addr & MRAM_ADDR_ALIGN_MASK;
-	uint8_t *p_aligned_addr = (uint8_t *) aligned_addr;
-	uint8_t *p_data         = (uint8_t *) data;
+	volatile uint8_t *p_aligned_addr = (volatile uint8_t *) aligned_addr;
+	const uint8_t *p_data   = data;
 	uint32_t count          = len;
 
 	/* use temporary buffer to store data in case of unaligned memory.*/
-	uint8_t temp_buff[MRAM_UNIT_SECTOR_SIZE] = {0}; /* 128-Bit */
+	uint8_t temp_buff[MRAM_UNIT_SECTOR_SIZE] = {0}; /* 16 bytes */
 
 	/* is MRAM address aligned to 16-Byte? */
 	if (addr != aligned_addr) {
@@ -217,7 +263,7 @@ static int flash_mram_write(const struct device *dev, const off_t offset,
 		}
 
 		/* copy original one sector data from MRAM address to buffer. */
-		memcpy(temp_buff, p_aligned_addr, MRAM_UNIT_SECTOR_SIZE);
+		memcpy_with_aligned_reads(temp_buff, p_aligned_addr, MRAM_UNIT_SECTOR_SIZE);
 
 		/* overwrite buffer with new data as per offset and unaligned bytes. */
 		memcpy(temp_buff + unaligned_offset, p_data, unaligned_bytes);
@@ -247,7 +293,7 @@ static int flash_mram_write(const struct device *dev, const off_t offset,
 	/* program remaining unaligned data. */
 	if (unaligned_cnt) {
 		/* copy original one sector data from MRAM address to buffer.*/
-		memcpy(temp_buff, p_aligned_addr, MRAM_UNIT_SECTOR_SIZE);
+		memcpy_with_aligned_reads(temp_buff, p_aligned_addr, MRAM_UNIT_SECTOR_SIZE);
 
 		/* overwrite buffer with new data as per remaining unaligned count.*/
 		memcpy(temp_buff, p_data, unaligned_cnt);

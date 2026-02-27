@@ -642,6 +642,8 @@
 		 */
 		hcnt-offset = <0>;
 		lcnt-offset = <0>;
+		fs-spike-len = <5>;
+		hs-spike-len = <1>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg = <0x49010000 0x1000>;
@@ -664,6 +666,8 @@
 		 */
 		hcnt-offset = <0>;
 		lcnt-offset = <0>;
+		fs-spike-len = <5>;
+		hs-spike-len = <1>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg = <0x49011000 0x1000>;
@@ -734,7 +738,7 @@
 	uart_hci: uart@4300a000 {
 		compatible = "ns16550";
 		reg = <0x4300a000 0x100>;
-		clock-frequency = <160000000>;
+		clocks = <&clockctrl ALIF_HCI_AHI_CLK>;
 		interrupts = <50 0>;
 		reg-shift = <2>;
 		current-speed = <3000000>;
@@ -752,7 +756,7 @@
 	uart_ahi: uart@4300b000 {
 		compatible = "ns16550";
 		reg = <0x4300b000 0x100>;
-		clock-frequency = <160000000>;
+		clocks = <&clockctrl ALIF_HCI_AHI_CLK>;
 		interrupts = <51 0>;
 		reg-shift = <2>;
 		current-speed = <3000000>;
