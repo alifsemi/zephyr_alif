@@ -449,14 +449,23 @@ static int cdc200_set_contrast(const struct device *dev, const uint8_t contrast)
 
 void cdc200_generic_get_caps(const struct device *dev, struct display_capabilities *capabilities)
 {
-	const struct cdc200_config *config = dev->config;
+	struct cdc200_display_caps cdc_caps;
+
+	cdc200_get_capabilities(dev, &cdc_caps);
 
 	memset(capabilities, 0, sizeof(*capabilities));
-	capabilities->x_resolution = config->panel_cfg.active_width;
-	capabilities->y_resolution = config->panel_cfg.active_height;
-	capabilities->supported_pixel_formats =
-		PIXEL_FORMAT_ARGB_8888 | PIXEL_FORMAT_RGB_888 | PIXEL_FORMAT_RGB_565;
-	capabilities->current_orientation = DISPLAY_ORIENTATION_NORMAL;
+	capabilities->x_resolution = cdc_caps.x_panel_resolution;
+	capabilities->y_resolution = cdc_caps.y_panel_resolution;
+	capabilities->supported_pixel_formats = cdc_caps.supported_pixel_formats;
+	capabilities->current_orientation = cdc_caps.current_orientation;
+
+	for (int i = CDC_LAYER_1; i <= CDC_LAYER_2; i++) {
+		if (!cdc_caps.layer[i].layer_en) {
+			continue;
+		}
+		capabilities->current_pixel_format = cdc_caps.layer[i].current_pixel_format;
+		break; /* use first enabled layer */
+	}
 }
 
 static int cdc200_set_pixel_format(const struct device *dev, const enum display_pixel_format format)
