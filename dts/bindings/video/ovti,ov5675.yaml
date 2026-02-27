@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: Copyright Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: OmniVision OV5675 MIPI video sensor
+
+compatible: "ovti,ov5675"
+
+include: [base.yaml, pinctrl-device.yaml, i2c-device.yaml]
+
+properties:
+  reset-gpios:
+    type: phandle-array
+    description: |
+      The RESETn pin is asserted to cause a hard reset of the sensor.
+      The sensor receives this as an active-low signal.
+
+  power-gpios:
+    type: phandle-array
+    description: |
+      The Power pin is asserted to enable the supply voltages needed by
+      the sensor. The sensor receives this as an active-high signal.
+
+child-binding:
+  child-binding:
+    include: video-interfaces.yaml

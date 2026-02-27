@@ -9,6 +9,7 @@
 #include <zephyr/device.h>
 #include <stddef.h>
 #include <zephyr/types.h>
+#include <zephyr/drivers/display.h>
 
 #ifdef __cplusplus
 extern "C" {
