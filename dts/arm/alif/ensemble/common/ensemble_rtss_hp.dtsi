@@ -37,6 +37,16 @@
 		status = "disabled";
 	};
 
+	evtrtr1: event-router@400e2000 {
+		compatible = "alif,event-router";
+		reg = <0x400e2000 0x100>;
+		dma-controller = <&dma1>;
+		channels = <32>;
+		dma-groups = <1>;
+		#dma-cells = <2>;
+		status = "disabled";
+	};
+
 	wdog0: wdog0@40100000{
 		compatible = "arm,cmsdk-watchdog";
 		reg = <0x40100000 0x1000>;

@@ -784,6 +784,16 @@
 		status = "disabled";
 	};
 
+	evtrtr2: event-router@400e2000 {
+		compatible = "alif,event-router";
+		reg = <0x400e2000 0x100>;
+		dma-controller = <&dma2>;
+		channels = <32>;
+		dma-groups = <4>;
+		#dma-cells = <2>;
+		status = "disabled";
+	};
+
 	crc0: crc0@48107000 {
 		compatible = "alif,alif-crc";
 		reg = <0x48107000 0x1000>;
