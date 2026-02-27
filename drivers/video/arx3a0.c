@@ -1004,12 +1004,15 @@ static int arx3a0_set_camera_gain(const struct device *dev, uint32_t gain)
 	static uint32_t current_integration_time;
 	static uint32_t max_integration_time;
 
-	uint32_t resulting_gain;
 	uint32_t digital_gain;
 	uint32_t fine_gain = gain;
 	uint32_t coarse_gain;
 	uint32_t val;
 	int ret;
+
+	if (gain == 0) {
+		return -ENOTSUP;
+	}
 
 	if (max_integration_time == 0) {
 		uint32_t reset;
@@ -1048,108 +1051,130 @@ static int arx3a0_set_camera_gain(const struct device *dev, uint32_t gain)
 		}
 	}
 
-	if (gain != 0) {
-		/* Request to set gain */
-		/*
-		 * From the Design Guide:
-		 * Total Gain = (R0x305E[0:3]/16 + 1) * 2^R0x0305E[4:6] *
-		 *	(R0x305E[7:15)/64
-		 *
-		 * First clamp analogue gain, using digital gain to get more if
-		 * necessary. Otherwise digital gain is used to fine adjust.
-		 */
-		uint32_t new_integration_time = max_integration_time;
+	/* Request to set gain */
+	/*
+	 * From the Design Guide:
+	 * Total Gain = (R0x305E[0:3]/16 + 1) * 2^R0x0305E[4:6] *
+	 *	(R0x305E[7:15)/64
+	 *
+	 * First clamp analogue gain, using digital gain to get more if
+	 * necessary. Otherwise digital gain is used to fine adjust.
+	 */
+	uint32_t new_integration_time = max_integration_time;
 
-		if (gain < 0x10000) {
-			/* Minimum gain is 1.0 */
-			fine_gain = 0x10000;
+	if (gain < 0x10000) {
+		/* Minimum gain is 1.0 */
+		fine_gain = 0x10000;
 
-			new_integration_time =
-				(uint32_t)(((float)max_integration_time * gain) * 0x1p-16f + 0.5f);
-		} else if (gain > 0x80000) {
-			/* Maximum gain is 8.0 */
-			fine_gain = 0x80000;
-		}
+		new_integration_time =
+			(uint32_t)(((float)max_integration_time * gain) * 0x1p-16f + 0.5f);
+	} else if (gain > 0x80000) {
+		/* Maximum gain is 8.0 */
+		fine_gain = 0x80000;
+	}
 
-		/* Set integration time */
-		if (new_integration_time != current_integration_time) {
-			ret = arx3a0_write_reg(dev, ARX3A0_COARSE_INTEGRATION_TIME_REGISTER, 2,
-					       &new_integration_time);
-			if (ret) {
-				return ret;
-			}
-			current_integration_time = new_integration_time;
-		}
-
-		/*
-		 * Get coarse analogue power of two, leaving fine gain in
-		 * [0x10000, 0x1FFFF].
-		 */
-		coarse_gain = 0;
-		while (fine_gain >= 0x20000) {
-			coarse_gain++;
-			fine_gain /= 2;
-		}
-
-		/* Round down to 16 steps of fine gain. */
-		fine_gain = (fine_gain - 0x10000) / 0x1000;
-
-		/*
-		 * Use digital gain to extend gain beyond the analogue limits of
-		 * x1 to x8, or to fine-tune within that range.
-		 *
-		 * We don't let digital gain go below 1.0 - it just loses
-		 * information, and clamping it lets an auto-gain controller see
-		 * that we are unable to improve exposure by such lowering.
-		 * Another camera might be able to usefully set gain to <1.0, so
-		 * a controller could try it.
-		 *
-		 * (When we're fine tuning, digital gain is always >= 1.0,
-		 * because we round down analogue gain, so it can only go below
-		 * 1.0 by the user requesting total gain < 1.0).
-		 */
-		val = ((fine_gain + 16) << coarse_gain) * 0x1000;
-		digital_gain = (64 * gain + (val / 2)) / val;
-
-		if (digital_gain > 0x1FF) {
-			/* Maximum digital gain is just under 8.0*/
-			digital_gain = 0x1FF;
-		} else if (digital_gain < 64) {
-			/* Digital gain >= 1.0, as per discussion above. */
-			digital_gain = 64;
-		}
-
-		val = (digital_gain << 7) | (coarse_gain << 4) | fine_gain;
-		ret = arx3a0_write_reg(dev, ARX3A0_GLOBAL_GAIN_REGISTER, 2, &val);
+	/* Set integration time */
+	if (new_integration_time != current_integration_time) {
+		ret = arx3a0_write_reg(dev, ARX3A0_COARSE_INTEGRATION_TIME_REGISTER, 2,
+						&new_integration_time);
 		if (ret) {
 			return ret;
 		}
-	} else {
-		ret = arx3a0_read_reg(dev, ARX3A0_GLOBAL_GAIN_REGISTER, 2, &val);
-		if (ret) {
-			return ret;
-		}
-
-		digital_gain = val >> 7;
-		coarse_gain = (val >> 4) & 7;
-		fine_gain = val & 0xf;
+		current_integration_time = new_integration_time;
 	}
 
-	resulting_gain = ((fine_gain + 16) << coarse_gain) * digital_gain * 64;
-	if (current_integration_time != max_integration_time) {
-		resulting_gain = (uint32_t)(((float)resulting_gain * current_integration_time) /
-						    max_integration_time +
-					    0.5f);
+	/*
+	 * Get coarse analogue power of two, leaving fine gain in
+	 * [0x10000, 0x1FFFF].
+	 */
+	coarse_gain = 0;
+	while (fine_gain >= 0x20000) {
+		coarse_gain++;
+		fine_gain /= 2;
 	}
 
-	return resulting_gain;
+	/* Round down to 16 steps of fine gain. */
+	fine_gain = (fine_gain - 0x10000) / 0x1000;
+
+	/*
+	 * Use digital gain to extend gain beyond the analogue limits of
+	 * x1 to x8, or to fine-tune within that range.
+	 *
+	 * We don't let digital gain go below 1.0 - it just loses
+	 * information, and clamping it lets an auto-gain controller see
+	 * that we are unable to improve exposure by such lowering.
+	 * Another camera might be able to usefully set gain to <1.0, so
+	 * a controller could try it.
+	 *
+	 * (When we're fine tuning, digital gain is always >= 1.0,
+	 * because we round down analogue gain, so it can only go below
+	 * 1.0 by the user requesting total gain < 1.0).
+	 */
+	val = ((fine_gain + 16) << coarse_gain) * 0x1000;
+	digital_gain = (64 * gain + (val / 2)) / val;
+
+	if (digital_gain > 0x1FF) {
+		/* Maximum digital gain is just under 8.0*/
+		digital_gain = 0x1FF;
+	} else if (digital_gain < 64) {
+		/* Digital gain >= 1.0, as per discussion above. */
+		digital_gain = 64;
+	}
+
+	val = (digital_gain << 7) | (coarse_gain << 4) | fine_gain;
+	ret = arx3a0_write_reg(dev, ARX3A0_GLOBAL_GAIN_REGISTER, 2, &val);
+	if (ret) {
+		return ret;
+	}
+
+	return 0;
+}
+
+static int arx3a0_get_camera_gain(const struct device *dev, uint32_t *gain)
+{
+	uint32_t val;
+	uint32_t digital_gain;
+	uint32_t coarse_gain;
+	uint32_t fine_gain;
+	int ret;
+
+	ret = arx3a0_read_reg(dev, ARX3A0_GLOBAL_GAIN_REGISTER, 2, &val);
+	if (ret) {
+		return ret;
+	}
+
+	/* Register is 16-bit; keep only valid bits. */
+	val &= 0xFFFFU;
+
+	/* ARX3A0_GLOBAL_GAIN_REGISTER bitfields:
+	 * [15:7] digital gain (9 bits)
+	 * [6:4]  coarse analog gain (3 bits)
+	 * [3:0]  fine analog gain (4 bits)
+	 */
+	digital_gain = (val >> 7) & 0x1FFU;
+	coarse_gain = (val >> 4) & 0x07U;
+	fine_gain = val & 0x0FU;
+
+	*gain = ((fine_gain + 16U) << coarse_gain) * digital_gain * 64U;
+
+	return 0;
 }
 
 static int arx3a0_set_ctrl(const struct device *dev, unsigned int cid, void *value)
 {
 	switch (cid) {
 	case VIDEO_CID_GAIN:
-		return arx3a0_set_camera_gain(dev, (uint32_t)value);
+		return arx3a0_set_camera_gain(dev, *(uint32_t *)value);
+	default:
+		return -ENOTSUP;
+	}
+}
+
+static int arx3a0_get_ctrl(const struct device *dev, unsigned int cid, void *value)
+{
+	switch (cid) {
+	case VIDEO_CID_GAIN:
+		return arx3a0_get_camera_gain(dev, (uint32_t *)value);
 	default:
 		return -ENOTSUP;
 	}
@@ -1161,6 +1186,7 @@ static DEVICE_API(video, arx3a0_driver_api) = {
 	.get_caps = arx3a0_get_caps,
 	.set_stream = arx3a0_set_stream,
 	.set_ctrl = arx3a0_set_ctrl,
+	.get_ctrl = arx3a0_get_ctrl,
 };
 
 static int arx3a0_hard_reseten(const struct device *dev)
