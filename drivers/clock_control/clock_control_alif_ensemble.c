@@ -157,6 +157,15 @@ static uint32_t alif_get_input_clock(uint32_t clock_name)
 	case ALIF_UART6_SYST_PCLK:
 	case ALIF_UART7_SYST_PCLK:
 		return ALIF_CLOCK_SYST_PCLK_FREQ;
+	case ALIF_UART0_38M4_CLK:
+	case ALIF_UART1_38M4_CLK:
+	case ALIF_UART2_38M4_CLK:
+	case ALIF_UART3_38M4_CLK:
+	case ALIF_UART4_38M4_CLK:
+	case ALIF_UART5_38M4_CLK:
+	case ALIF_UART6_38M4_CLK:
+	case ALIF_UART7_38M4_CLK:
+		return ALIF_CLOCK_HFOSC_CLK_FREQ;
 	case ALIF_LPUART_CLK:
 		return ALIF_CLOCK_SYST_CORE_FREQ;
 	case ALIF_I3C_CLK:
@@ -344,11 +353,19 @@ static int alif_clock_control_on(const struct device *dev,
 	case ALIF_UART5_SYST_PCLK:
 	case ALIF_UART6_SYST_PCLK:
 	case ALIF_UART7_SYST_PCLK:
+	case ALIF_UART0_38M4_CLK:
+	case ALIF_UART1_38M4_CLK:
+	case ALIF_UART2_38M4_CLK:
+	case ALIF_UART3_38M4_CLK:
+	case ALIF_UART4_38M4_CLK:
+	case ALIF_UART5_38M4_CLK:
+	case ALIF_UART6_38M4_CLK:
+	case ALIF_UART7_38M4_CLK:
 		reg_addr = module_base + ALIF_EXPMST0_CTRL_REG;
 
-		sys_write32((ALIF_EXPMST0_CTRL_IPCLK_FORCE_BIT |
-			    ALIF_EXPMST0_CTRL_PCLK_FORCE_BIT),
-			    reg_addr);
+		sys_set_bits(reg_addr, (ALIF_EXPMST0_CTRL_IPCLK_FORCE_BIT |
+				ALIF_EXPMST0_CTRL_PCLK_FORCE_BIT));
+
 		break;
 #endif
 	default:
