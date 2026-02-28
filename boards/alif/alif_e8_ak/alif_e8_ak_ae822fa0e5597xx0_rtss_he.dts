@@ -52,3 +52,31 @@
 &uart2 {
 	status = "okay";
 };
+
+&ospi1 {
+	/* External Flash on OSPI */
+	ospi_flash: ospi_flash@0 {
+		compatible = "mxicy,mx66uw-flash";
+		reg = <0x0>;
+		erase-value = <0xff>;
+		num-of-sector = <32768>;
+		page-size = <4096>;
+		sector-size = <4096>;
+		write-block-size = <2>;
+
+		/* Flash Size 128MB */
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		/* wait cycles based on bus speed*/
+		def-wait-cycle = <5>;
+		read-wait-cycle = <10>;
+
+		flash_storage: flash_storage@0 {
+			compatible = "soc-nv-flash";
+			reg = <0x0 DT_SIZE_M(128)>;
+			erase-block-size = <DT_SIZE_K(4)>;
+			write-block-size = <2>;
+		};
+	};
+};

@@ -11,49 +11,59 @@ config MRAM_FLASH_ALIF
 	help
 	 Enables MRAM flash driver on Alif SoCs.
 
-menuconfig OSPI_FLASH_IS25WX
-	bool "OSPI Flash IS25WX 128/256/512 driver for Alif DevKit"
-	depends on DT_HAS_ISSI_XSPI_FLASH_CONTROLLER_ENABLED
+menuconfig OSPI_FLASH
+	bool "OSPI Flash support for Alif SoCs"
+	depends on (DT_HAS_MXICY_MX66UW_FLASH_ENABLED || DT_HAS_ISSI_XSPI_FLASH_CONTROLLER_ENABLED)
+	default y
 	select FLASH_HAS_DRIVER_ENABLED
 	select FLASH_HAS_PAGE_LAYOUT
 	select EVENTS
 	select FLASH_HAS_EXPLICIT_ERASE
+	select USE_ALIF_HAL_OSPI
 	help
-	 Enables IS25WX256/512 flash driver on Alif DevKit.
-	 Update num-of-sector@ospi_flash property value in devicetree.
-	 - 8K for 256Mb and 16K for 512Mb size support.
+	  Enable OSPI flash support on Alif SoCs.
+	  Select the flash vendor below.
 
-if OSPI_FLASH_IS25WX
-	config OSPI
+config OSPI_FLASH_MX66UW
+	bool "Macronix MX66UW (1G/2G)"
+	depends on DT_HAS_MXICY_MX66UW_FLASH_ENABLED
+	default y
+	help
+	  Enables Macronix MX66UW flash driver.
+
+config OSPI_FLASH_IS25WX
+	bool "ISSI IS25WX (128/256/512)"
+	depends on DT_HAS_ISSI_XSPI_FLASH_CONTROLLER_ENABLED
+	default y
+	help
+	  Enables ISSI IS25WX flash driver.
+
+if OSPI_FLASH
+
+config OSPI
 	bool "OSPI Controller Enabled"
 	default y
 	help
-	 Indicate OSPI Controller Enabled.
+	  Indicate OSPI Controller Enabled.
 
-	config USE_ALIF_HAL_OSPI
-	bool "OSPI driver located in HAL Module"
-	default y
+config FLASH_ADDRESS_IN_SINGLE_FIFO_LOCATION
+	bool "Flash Setup with Single Address mode"
+	default y if SOC_SERIES_E8 || SOC_SERIES_E4 || \
+		     SOC_SERIES_E1C || SOC_SERIES_B1
 	help
-	 Enables OSPI driver on Alif SoCs.
+	  Enables Single Address mode while setting up OSPI flash.
+	  Required only for specific Alif SoC families.
 
-	config FLASH_ADDRESS_IN_SINGLE_FIFO_LOCATION
-	bool "IS25WX Flash Setup with Single Address mode"
-	default y if SOC_SERIES_E8 || SOC_SERIES_E4 \
-		     || SOC_SERIES_E1C || SOC_SERIES_B1
-	help
-	 Enables Single Address mode while setting up IS25Wx Flash.
-	 It required only in specific Alif SoC family.
-
-	config FLASH_PREPARE_CMD_LEN
-	int "Number of 32 bit buffer provided for prepare command"
+config FLASH_PREPARE_CMD_LEN
+	int "Number of 32-bit buffers for prepare command"
 	default 3 if FLASH_ADDRESS_IN_SINGLE_FIFO_LOCATION
 	default 5
 	help
-	  Configure prepare command length
+	  Configure prepare command length.
 
-	config ALIF_OSPI_FLASH_XIP
+config ALIF_OSPI_FLASH_XIP
 	bool "Enable XiP mode"
 	help
 	  Enable XiP mode of Flash at initialization.
 
-endif # OSPI_FLASH_IS25WX
+endif # OSPI_FLASH
