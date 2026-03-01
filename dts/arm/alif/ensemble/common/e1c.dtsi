@@ -747,6 +747,16 @@
 		status = "disabled";
 	};
 
+	evtrtr2: event-router@400e2000 {
+		compatible = "alif,event-router";
+		reg = <0x400e2000 0x100>;
+		dma-controller = <&dma2>;
+		channels = <32>;
+		dma-groups = <4>;
+		#dma-cells = <2>;
+		status = "disabled";
+	};
+
 	dac0: dac0@49028000 {
 		compatible = "alif,dac";
 		reg = <0x49028000 0x1000>,

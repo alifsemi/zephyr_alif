@@ -1,0 +1,43 @@
+# Alif Event Router configuration options
+
+# SPDX-FileCopyrightText: Copyright Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config EVENT_ROUTER_ALIF
+	bool "Alif Event Router (DMA Multiplexer) driver"
+	default y
+	depends on DMA_PL330
+	depends on DT_HAS_ALIF_EVENT_ROUTER_ENABLED
+	help
+	  Enable support for Alif Event Router, a DMA multiplexer that routes
+	  peripheral DMA requests to the ARM DMA-PL330 controller.
+
+	  The Event Router provides:
+	  - 32 output channels per instance
+	  - Each channel can multiplex from 4 peripheral inputs (dma_group)
+	  - 1:1 mapping to PL330 peripheral requests
+	  - Configurable hardware handshaking per channel
+
+	  This driver acts as a thin wrapper, delegating actual DMA operations
+	  to the DMA-PL330 driver while handling event routing configuration.
+
+	  Additionally provides a control API for non-DMA use cases such as
+	  UTIMER loopback where events are routed between peripherals without
+	  involving DMA transfers.
+
+if EVENT_ROUTER_ALIF
+
+config EVENT_ROUTER_ALIF_INIT_PRIORITY
+	int "Alif Event Router init priority"
+	default 41
+	help
+	  Event Router driver initialization priority. Must be higher than
+	  DMA controller initialization priority (CONFIG_DMA_INIT_PRIORITY,
+	  typically 40) to ensure the DMA controller is ready before the
+	  event router driver attempts to use it.
+
+module = EVENT_ROUTER_ALIF
+module-str = event_router_alif
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # EVENT_ROUTER_ALIF

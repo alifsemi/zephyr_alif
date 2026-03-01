@@ -1,0 +1,101 @@
+# SPDX-FileCopyrightText: Copyright Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Alif Event Router (DMA Multiplexer) controller
+
+  The Alif Event Router is a DMA multiplexer that routes peripheral DMA requests
+  to a DMA controller. Each event router has 32 channels, where each channel can
+  multiplex from 1-4 peripheral input sources (selected via dma-group 0-3).
+  Event router channels map 1:1 to DMA controller peripheral requests.
+
+  Event router clients use a two-cell specifier:
+  a phandle to the event router plus two integer cells.
+
+  Cell format:
+    Cell 0 (channel): Encoded value containing physical DMA channel, dma_group, and handshake
+      Bit layout: [reserved(19)][handshake(1)][dma_group(4)][channel(8)]
+      - channel (bits 0-7): Physical DMA channel (0-255)
+      - dma_group (bits 8-11): Input source selection (current hardware: 0-3, bits 8-9 only;
+                                bits 10-11 reserved for future expansion)
+      - handshake (bit 12): Handshaking enable (0=disable, 1=enable)
+      - reserved (bits 13-31): Reserved for future use
+
+    Cell 1 (periph): Peripheral request number
+
+  Use the ALIF_DMA_ENCODE() macro for encoding cell 0:
+    dmas = <&evtrtr0 ALIF_DMA_ENCODE(channel, dma_group, handshake) periph>;
+
+  Example for Alif Ensemble (using DMA-PL330 controller):
+    dma0: dma@49080000 {
+        compatible = "arm,dma-pl330";
+        reg = <0x49080000 0x1000>;
+        dma-channels = <8>;
+        #dma-cells = <2>;
+        status = "okay";
+    };
+
+    evtrtr0: event-router@49035000 {
+        compatible = "alif,event-router";
+        reg = <0x49035000 0x100>;
+        dma-controller = <&dma0>;
+        channels = <32>;
+        dma-groups = <4>;  /* Current hardware: 4 groups (0-3) */
+        #dma-cells = <2>;
+        status = "okay";
+    };
+
+  Example client (UART) using ALIF_DMA_ENCODE:
+    #include <zephyr/dt-bindings/dma/alif_dma.h>
+
+    uart4: uart@49022000 {
+        compatible = "arm,pl011";
+        dmas = <&evtrtr0 ALIF_DMA_ENCODE(0, 2, 1) 5>,   /* TX: ch=0, group=2, hs=on, periph=5 */
+               <&evtrtr0 ALIF_DMA_ENCODE(1, 3, 1) 6>;   /* RX: ch=1, group=3, hs=on, periph=6 */
+        dma-names = "tx", "rx";
+    };
+
+compatible: "alif,event-router"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+    description: Event router register base address and size
+
+  dma-controller:
+    type: phandle
+    required: true
+    description: Phandle to the associated DMA controller
+
+  channels:
+    type: int
+    required: true
+    description: Number of event router channels (typically 32)
+
+  dma-groups:
+    type: int
+    required: true
+    description: |
+      Number of DMA groups (peripheral input sources) per channel.
+      Each channel can multiplex from this many peripheral inputs.
+
+      Current hardware supports up to 4 groups (dma-groups = 4, valid values 0-3).
+      The encoding reserves 4 bits (0-15) for future hardware expansion.
+
+      Valid dma-group values in DMA specifier: 0 to (dma-groups - 1)
+
+  "#dma-cells":
+    type: int
+    const: 2
+    description: |
+      Number of items to expect in a DMA specifier.
+      This binding uses a two-cell format for Alif Event Router:
+        Cell 0 (channel): Encoded value [reserved(19)][handshake(1)][dma_group(4)][channel(8)]
+        Cell 1 (periph): Peripheral request number
+      Use ALIF_DMA_ENCODE(channel, dma_group, handshake) macro to encode cell 0.
+
+dma-cells:
+  - channel
+  - periph
