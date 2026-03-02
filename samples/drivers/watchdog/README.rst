@@ -35,6 +35,16 @@ The sample can be built and executed for the
 
 To build for another board, change "nucleo_f091rc" to the name of that board and provide a corresponding devicetree overlay.
 
+To build and flash this sample for the :ref:`alif_e7_dk/ae722f80f55d5xx/rtss_he`:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/drivers/watchdog
+   :board: alif_e7_dk/ae722f80f55d5xx/rtss_he
+   :goals: build
+   :gen-args: -S alif-wdt
+
+Replace "alif_e7_dk/ae722f80f55d5xx/rtss_he" with the appropriate board name for other supported boards.
+
 Sample output
 =============
 
