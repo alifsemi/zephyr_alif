@@ -648,7 +648,8 @@
 		#size-cells = <0>;
 		reg = <0x49010000 0x1000>;
 		pinctrl-0 = <&pinctrl_i2c0>;
-		pinctrl-names = "default";
+		pinctrl-1 = < &pinctrl_i2c0_sleep >;
+		pinctrl-names = "default", "sleep";
 		interrupt-parent = <&nvic>;
 		interrupts = <132 ALIF_DEFAULT_IRQ_PRIORITY>;
 		tx_threshold = <16>;
@@ -672,7 +673,8 @@
 		#size-cells = <0>;
 		reg = <0x49011000 0x1000>;
 		pinctrl-0 = <&pinctrl_i2c1>;
-		pinctrl-names = "default";
+		pinctrl-1 = < &pinctrl_i2c1_sleep >;
+		pinctrl-names = "default", "sleep";
 		interrupt-parent = <&nvic>;
 		interrupts = <133 ALIF_DEFAULT_IRQ_PRIORITY>;
 		tx_threshold = <16>;

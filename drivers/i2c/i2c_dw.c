@@ -743,7 +743,9 @@ static int i2c_dw_transfer(const struct device *dev, struct i2c_msg *msgs, uint8
 	 * somewhere else, or not needed as the driver's suspend()/resume()
 	 * can handle everything
 	 */
+#ifdef CONFIG_PM_DEVICE
 	pm_device_busy_set(dev);
+#endif /* CONFIG_PM_DEVICE */
 
 	/* Process all the messages */
 	while (msg_left > 0) {
@@ -811,7 +813,9 @@ static int i2c_dw_transfer(const struct device *dev, struct i2c_msg *msgs, uint8
 		msg_left--;
 	}
 
+#ifdef CONFIG_PM_DEVICE
 	pm_device_busy_clear(dev);
+#endif /* CONFIG_PM_DEVICE */
 
 error:
 	dw->state = I2C_DW_STATE_READY;
@@ -1213,15 +1217,28 @@ static int i2c_dw_initialize(const struct device *dev)
 
 static int i2c_dw_suspend(const struct device *dev)
 {
+
+	const struct i2c_dw_rom_config *const rom = dev->config;
+	int ret = 0;
+
+#if defined(CONFIG_PINCTRL)
+	ret = pinctrl_apply_state(rom->pcfg, PINCTRL_STATE_SLEEP);
+	if (ret) {
+		return ret;
+	}
+#endif
+
+	/* disable the controller */
+	clear_bit_enable_en(get_regs(dev));
+
 	return 0;
 }
 
 static int i2c_dw_resume(const struct device *dev)
 {
-#if defined(CONFIG_PINCTRL) || DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
 	const struct i2c_dw_rom_config *const rom = dev->config;
+	uint32_t reg_base = get_regs(dev);
 	int ret;
-#endif
 
 #if defined(CONFIG_PINCTRL)
 	ret = pinctrl_apply_state(rom->pcfg, PINCTRL_STATE_DEFAULT);
@@ -1245,7 +1262,8 @@ static int i2c_dw_resume(const struct device *dev)
 	}
 #endif
 
-	clear_bit_enable_en(get_regs(dev));
+	/* Enable the controller */
+	set_bit_enable_en(reg_base);
 
 	return 0;
 }
