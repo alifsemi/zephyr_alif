@@ -140,23 +140,25 @@
 
 	i2s2: i2s2@49016000 {
 		compatible = "snps,designware-i2s";
-		clock-frequency = <76800000>;
-		driver-instance	= "I2S_INSTANCE_2";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_i2s2>;
 		reg = <0x49016000 0x1000>;
+		power-domains = <&pd_syst>;
+		pinctrl-0 = <&pinctrl_i2s2>;
+		pinctrl-1 = <&pinctrl_i2s2_sleep>;
+		pinctrl-names = "default", "sleep";
 		interrupts = <143 ALIF_DEFAULT_IRQ_PRIORITY>;
+		clocks = <&clockctrl ALIF_I2S2_76M8_CLK>;
 		status = "disabled";
 	};
 
 	i2s3: i2s3@49017000 {
 		compatible = "snps,designware-i2s";
-		clock-frequency = <76800000>;
-		driver-instance	= "I2S_INSTANCE_3";
 		reg = <0x49017000 0x1000>;
-		pinctrl-names = "default";
+		power-domains = <&pd_syst>;
 		pinctrl-0 = <&pinctrl_i2s3>;
+		pinctrl-1 = <&pinctrl_i2s3_sleep>;
+		pinctrl-names = "default", "sleep";
 		interrupts = <144 ALIF_DEFAULT_IRQ_PRIORITY>;
+		clocks = <&clockctrl ALIF_I2S3_76M8_CLK>;
 		status = "disabled";
 	};
 

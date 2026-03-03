@@ -1612,37 +1612,38 @@
 
 	i2s0: i2s0@49014000 {
 		compatible = "snps,designware-i2s";
-		clock-frequency = <76800000>;
-		driver-instance	= "I2S_INSTANCE_0";
 		reg = <0x49014000 0x1000>;
-		pinctrl-names = "default";
+		power-domains = <&pd_syst>;
 		pinctrl-0 = <&pinctrl_i2s0>;
+		pinctrl-1 = <&pinctrl_i2s0_sleep>;
+		pinctrl-names = "default", "sleep";
 		interrupts = <141 ALIF_DEFAULT_IRQ_PRIORITY>;
+		clocks = <&clockctrl ALIF_I2S0_76M8_CLK>;
 		status = "disabled";
 	};
 
 	i2s1: i2s1@49015000 {
 		compatible = "snps,designware-i2s";
-		clock-frequency = <76800000>;
-		driver-instance	= "I2S_INSTANCE_1";
 		reg = <0x49015000 0x1000>;
-		pinctrl-names = "default";
+		power-domains = <&pd_syst>;
 		pinctrl-0 = <&pinctrl_i2s1>;
+		pinctrl-1 = <&pinctrl_i2s1_sleep>;
+		pinctrl-names = "default", "sleep";
 		interrupts = <142 ALIF_DEFAULT_IRQ_PRIORITY>;
+		clocks = <&clockctrl ALIF_I2S1_76M8_CLK>;
 		status = "disabled";
 	};
 
 	i2s4: lpi2s@43001000 {
 		compatible = "snps,designware-i2s";
-		clock-frequency = <76800000>;
-		driver-instance	= "I2S_INSTANCE_4";
 		reg = <0x43001000 0x1000>;
-		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_lpi2s>;
+		pinctrl-1 = <&pinctrl_lpi2s_sleep>;
+		pinctrl-names = "default", "sleep";
 		interrupts = <48 ALIF_DEFAULT_IRQ_PRIORITY>;
+		clocks = <&clockctrl ALIF_LPI2S_76M8_CLK>;
 		status = "disabled";
 	};
-
 	ospi0: ospi0@83000000 {
 		compatible = "snps,designware-ospi";
 		reg = <0x83000000 0x1000>;
