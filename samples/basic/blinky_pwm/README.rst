@@ -73,5 +73,15 @@ To build and flash this sample for the :ref:`nrf52840dk_nrf52840`:
 
 Change ``nrf52840dk/nrf52840`` appropriately for other supported boards.
 
+To build and flash this sample for the :ref:`alif_e7_dk/ae722f80f55d5xx/rtss_he`:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/basic/blinky_pwm
+   :board: alif_e7_dk/ae722f80f55d5xx/rtss_he
+   :goals: build
+   :gen-args: -S alif-blinky-pwm
+
+Replace "alif_e7_dk/ae722f80f55d5xx/rtss_he" with the appropriate board name for other supported boards.
+
 After flashing, the sample starts blinking the LED as described above. It also
 prints information to the board's console.

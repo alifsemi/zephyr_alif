@@ -1,5 +1,5 @@
-/* Copyright (c) 2025 Alif Semiconductor
- *
+/*
+ * SPDX-FileCopyrightText: Copyright Alif Semiconductor
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,7 +10,6 @@
 
 	pwmleds {
 		compatible = "pwm-leds";
-
 		pwm_led0_green: pwm_led_0 {
 			pwms = <&pwm10 0 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
 			label = "RED PWM GREEN 0";
