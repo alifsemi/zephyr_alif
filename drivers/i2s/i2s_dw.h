@@ -272,9 +272,6 @@ struct I2S_CONFIG_INFO {
 	/* I2S_WLEN_Type wlen; */
 	uint32_t wlen;
 
-	/*!< I2S clock source in Hz */
-	uint64_t clk_source;
-
 	/*!< I2S Rx FIFO Trigger Level */
 	I2S_FIFO_TRIGGER_LEVEL_Type rx_fifo_trg_lvl;
 
@@ -290,9 +287,6 @@ struct I2S_CONFIG_INFO {
 	/*!< I2S irq priority number */
 	const uint32_t irq_priority;
 
-	/*!< I2S External audio clock source */
-	bool ext_clk_src_enable;
-
 	uint32_t num_channels;
 
 	uint32_t channel_length;
@@ -302,9 +296,10 @@ struct I2S_CONFIG_INFO {
 struct i2s_dw_cfg {
 	struct I2S_CONFIG_INFO cfg;
 	struct I2S_Type *paddr;
-	const I2S_INSTANCE instance;
 	uint32_t i2s_clk_sel;
 	void (*irq_config)(const struct device *dev);
+	const struct device *clk_dev;
+	clock_control_subsys_t clkid;
 
 #if defined(CONFIG_PINCTRL)
 	const struct pinctrl_dev_config *pincfg;

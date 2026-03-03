@@ -11,8 +11,11 @@
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/irq.h>
+#include <zephyr/drivers/clock_control.h>
 
-#include "alif_i2s_clk_config.h"
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
+
 #include "i2s_dw.h"
 
 #define WSS_LEN			2
@@ -60,6 +63,7 @@ struct stream {
 
 /* Device run time data */
 struct i2s_dw_data {
+	uint32_t irq_mask_cache;
 	enum i2s_dir dir;
 	struct stream rx;
 	struct stream tx;
@@ -67,18 +71,11 @@ struct i2s_dw_data {
 
 #define MODULO_INC(val, max) { val = (++val < max) ? val : 0; }
 
-/*!< I2S Input Clock Source */
-#define I2S_CLK_SOURCE_76P8M_IN_HZ	76800000.0
-
-/*!< Clock divisor max/min value  */
-#define I2S_CLK_DIVISOR_MAX		0x3FF
-#define I2S_CLK_DIVISOR_MIN		2
-
 static int32_t i2s_configure_clocksource(bool enable,
 					const struct i2s_dw_cfg *i2s,
 					uint32_t sample_rate)
 {
-	uint32_t div = 0;
+	int32_t ret = 0;
 	uint32_t sclk = 0;
 	const uint32_t clock_cycles[WSS_CLOCK_CYCLES_MAX] = {16, 24, 32};
 
@@ -91,17 +88,16 @@ static int32_t i2s_configure_clocksource(bool enable,
 		/* WSS = 32 */
 		sclk = 2 * clock_cycles[i2s->cfg.wss_len] * (sample_rate);
 
-		div = i2s->cfg.clk_source/sclk;
-		if ((div > I2S_CLK_DIVISOR_MAX) || (div < I2S_CLK_DIVISOR_MIN)) {
-			return -1;
+		ret = clock_control_set_rate(i2s->clk_dev,
+				i2s->clkid, (clock_control_subsys_rate_t)sclk);
+		if (ret != 0) {
+			LOG_ERR("Unable to set desired frequency : err:%d", ret);
+			return ret;
 		}
-
-		set_i2s_clock_divisor(i2s->instance, div);
 	}
 
 	return 0;
 }
-
 
 /*
  * Get data from the queue
@@ -155,15 +151,9 @@ static int queue_put(struct dw_ring_buf *rb, void *mem_block, size_t size)
 	return 0;
 }
 
-static void i2s_enable_clock(const struct device *dev)
+static void i2s_enable_controller(const struct device *dev)
 {
 	const struct i2s_dw_cfg *i2s = dev->config;
-
-	select_i2s_clock_source(i2s->instance, i2s->cfg.ext_clk_src_enable);
-
-	/* Enable the I2S module clock */
-	enable_i2s_sclk_aon(i2s->instance);
-	enable_i2s_clock(i2s->instance);
 
 	/* Enable I2S */
 	i2s_global_enable(i2s);
@@ -171,6 +161,16 @@ static void i2s_enable_clock(const struct device *dev)
 	/* Enable Master Clock */
 	i2s_configure_clock(i2s);
 	i2s_clock_enable(i2s);
+}
+
+static void i2s_disable_controller(const struct device *dev)
+{
+	const struct i2s_dw_cfg *i2s = dev->config;
+
+	/* Disable I2S */
+	i2s_global_disable(i2s);
+
+	i2s_clock_disable(i2s);
 }
 
 static int i2s_dw_configure(const struct device *dev, enum i2s_dir dir,
@@ -267,6 +267,8 @@ static int i2s_dw_trigger(const struct device *dev, enum i2s_dir dir,
 			return ret;
 		}
 
+		pm_device_busy_set(dev);
+
 		stream->state = I2S_STATE_RUNNING;
 		stream->last_block = false;
 		break;
@@ -283,6 +285,8 @@ static int i2s_dw_trigger(const struct device *dev, enum i2s_dir dir,
 		stream->queue_drop(stream);
 		stream->state = I2S_STATE_READY;
 		stream->last_block = true;
+
+		pm_device_busy_clear(dev);
 		break;
 
 	case I2S_TRIGGER_DRAIN:
@@ -667,9 +671,6 @@ static int i2s_dw_initialize(const struct device *dev)
 	struct i2s_dw_data *const dev_data = dev->data;
 	int ret;
 
-	/* Enable I2S clock propagation */
-	i2s_enable_clock(dev);
-
 #if defined(CONFIG_PINCTRL)
 	if (i2s->pincfg != NULL) {
 		ret = pinctrl_apply_state(i2s->pincfg, PINCTRL_STATE_DEFAULT);
@@ -679,6 +680,31 @@ static int i2s_dw_initialize(const struct device *dev)
 		}
 	}
 #endif
+
+	/* check device availability */
+	if (!device_is_ready(i2s->clk_dev)) {
+		LOG_ERR("clock controller device not ready");
+		return -ENODEV;
+	}
+
+	/* Configure I2S clock sources */
+	ret = clock_control_configure(i2s->clk_dev,
+			i2s->clkid, NULL);
+	if (ret != 0) {
+		LOG_ERR("Unable to configure clock: err:%d", ret);
+		return ret;
+	}
+
+	/* Enable I2S clock from clock manager */
+	ret = clock_control_on(i2s->clk_dev, i2s->clkid);
+	if (ret != 0) {
+		LOG_ERR("Unable to turn on clock: err:%d", ret);
+		return ret;
+	}
+
+	/* Enable and configure the I2S controller */
+	i2s_enable_controller(dev);
+
 	i2s->irq_config(dev);
 
 	k_sem_init(&dev_data->rx.sem, 0, CONFIG_I2S_DW_RX_BLOCK_COUNT);
@@ -844,6 +870,96 @@ static void tx_queue_drop(struct stream *stream)
 	}
 }
 
+#if defined(CONFIG_PM_DEVICE)
+
+static int i2s_suspend(const struct device *dev)
+{
+	int ret;
+	const struct i2s_dw_cfg *i2s = dev->config;
+	struct i2s_dw_data *data = dev->data;
+
+	data->irq_mask_cache = i2s_get_interrupt_mask(i2s);
+
+	i2s_disable_tx_interrupt(i2s);
+	i2s_disable_rx_interrupt(i2s);
+
+	i2s_disable_controller(dev);
+
+	if (i2s->clk_dev != NULL) {
+		ret = clock_control_off(i2s->clk_dev, i2s->clkid);
+		if (ret != 0 && ret != -EALREADY) {
+			LOG_ERR("Unable to turn off clock: err:%d", ret);
+			return ret;
+		}
+	}
+
+#if defined(CONFIG_PINCTRL)
+	/* Apply sleep pin configuration if available */
+	if (i2s->pincfg != NULL) {
+		ret = pinctrl_apply_state(i2s->pincfg, PINCTRL_STATE_SLEEP);
+		if (ret < 0 && ret != -ENOENT) {
+			/* Ignore -ENOENT (sleep state not defined) */
+			return ret;
+		}
+	}
+#endif
+
+	return 0;
+}
+
+static int i2s_resume(const struct device *dev)
+{
+	const struct i2s_dw_cfg *i2s = dev->config;
+	struct i2s_dw_data *data = dev->data;
+	int ret;
+
+#if defined(CONFIG_PINCTRL)
+	if (i2s->pincfg != NULL) {
+		ret = pinctrl_apply_state(i2s->pincfg, PINCTRL_STATE_DEFAULT);
+		if (ret < 0) {
+			LOG_ERR("I2S pinctrl setup failed (%d)", ret);
+			return ret;
+		}
+	}
+#endif
+
+	if (i2s->clk_dev) {
+		ret = clock_control_on(i2s->clk_dev, i2s->clkid);
+		if (ret != 0 && ret != -EALREADY) {
+			LOG_ERR("Unable to turn on clock: err:%d", ret);
+			return ret;
+		}
+	}
+
+	i2s_enable_controller(dev);
+
+	i2s_set_interrupt_mask(data->irq_mask_cache, i2s);
+
+	return 0;
+}
+
+static int i2s_pm_action(const struct device *dev,
+			enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		return i2s_suspend(dev);
+
+	case PM_DEVICE_ACTION_RESUME:
+		return i2s_resume(dev);
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Power domain handling is automatic via PM framework */
+		return 0;
+
+	default:
+		break;
+	}
+	return -ENOTSUP;
+}
+#endif /* CONFIG_PM_DEVICE */
+
 #define I2S_DW_INIT(index)						\
 									\
 static void i2s_dw_irq_config_func_##index(const struct device *dev);	\
@@ -852,42 +968,41 @@ IF_ENABLED(DT_INST_NODE_HAS_PROP(index, pinctrl_0),			\
 	(PINCTRL_DT_INST_DEFINE(index)));				\
 									\
 static const struct i2s_dw_cfg i2s_dw_config_##index = {		\
-	.cfg.clk_source = DT_PROP(DT_DRV_INST(index), clock_frequency),	\
+	.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(index)),		\
+	.clkid = (clock_control_subsys_t) DT_INST_CLOCKS_CELL_BY_IDX(index, 0, clkid),	\
 	.cfg.wss_len = WSS_LEN,						\
-	.cfg.ext_clk_src_enable =					\
-		DT_PROP(DT_DRV_INST(index), ext_clk_src_enable) ? 1:0,	\
-	.cfg.tx_fifo_trg_lvl = TX_FIFO_TRG_LVL,		\
-	.cfg.rx_fifo_trg_lvl = RX_FIFO_TRG_LVL,		\
-	.instance = DT_INST_ENUM_IDX(index, driver_instance),		\
+	.cfg.tx_fifo_trg_lvl = TX_FIFO_TRG_LVL,				\
+	.cfg.rx_fifo_trg_lvl = RX_FIFO_TRG_LVL,				\
 	.paddr = (struct I2S_Type *)DT_INST_REG_ADDR(index),		\
 	.irq_config = i2s_dw_irq_config_func_##index,			\
 	IF_ENABLED(DT_INST_NODE_HAS_PROP(index, pinctrl_0),		\
 		(.pincfg = PINCTRL_DT_INST_DEV_CONFIG_GET(index),))	\
 };									\
 									\
-struct queue_item \
-rx_##index##_dw_ring_buf[CONFIG_I2S_DW_RX_BLOCK_COUNT + 1];	\
-struct queue_item \
-tx_##index##_dw_ring_buf[CONFIG_I2S_DW_TX_BLOCK_COUNT + 1];	\
+struct queue_item							\
+rx_##index##_dw_ring_buf[CONFIG_I2S_DW_RX_BLOCK_COUNT + 1];		\
+struct queue_item							\
+tx_##index##_dw_ring_buf[CONFIG_I2S_DW_TX_BLOCK_COUNT + 1];		\
 static struct i2s_dw_data i2s_dw_data_##index = {			\
 	.tx = {.stream_start = tx_stream_start,				\
 		.stream_disable = tx_stream_disable,			\
 		.queue_drop = tx_queue_drop,				\
-		.mem_block_queue.buf = tx_##index##_dw_ring_buf,		\
-		.mem_block_queue.len = ARRAY_SIZE(tx##_##index##_dw_ring_buf)  },\
-	.rx = {.stream_start = rx_stream_start, \
-		.stream_disable = rx_stream_disable, \
+		.mem_block_queue.buf = tx_##index##_dw_ring_buf,	\
+		.mem_block_queue.len = ARRAY_SIZE(tx_##index##_dw_ring_buf)  },\
+	.rx = {.stream_start = rx_stream_start,				\
+		.stream_disable = rx_stream_disable,			\
 		.queue_drop = rx_queue_drop,				\
-		.mem_block_queue.buf = rx_##index##_dw_ring_buf,		\
-		.mem_block_queue.len = ARRAY_SIZE(rx##_##index##_dw_ring_buf)  },\
+		.mem_block_queue.buf = rx_##index##_dw_ring_buf,	\
+		.mem_block_queue.len = ARRAY_SIZE(rx_##index##_dw_ring_buf)  },\
 };									\
+PM_DEVICE_DT_INST_DEFINE(index, i2s_pm_action);				\
 DEVICE_DT_INST_DEFINE(index,						\
-		      &i2s_dw_initialize, NULL,			\
-		      &i2s_dw_data_##index,			\
-		      &i2s_dw_config_##index, POST_KERNEL,	\
-		      CONFIG_I2S_INIT_PRIORITY, &i2s_dw_driver_api); \
+		      &i2s_dw_initialize, PM_DEVICE_DT_INST_GET(index),	\
+		      &i2s_dw_data_##index,				\
+		      &i2s_dw_config_##index, POST_KERNEL,		\
+		      CONFIG_I2S_INIT_PRIORITY, &i2s_dw_driver_api);	\
 									\
-static void i2s_dw_irq_config_func_##index(const struct device *dev) \
+static void i2s_dw_irq_config_func_##index(const struct device *dev)	\
 {									\
 	IRQ_CONNECT(DT_INST_IRQN(index),				\
 		    DT_INST_IRQ(index, priority),			\
