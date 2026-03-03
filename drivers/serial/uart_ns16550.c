@@ -824,11 +824,7 @@ static int uart_ns16550_configure(const struct device *dev,
 		struct dma_config *p_dma_cfg =
 			&dev_data->async.tx_dma_params.dma_cfg;
 		p_dma_cfg->source_burst_length = p_dma_cfg->dest_burst_length =
-			dev_data->fifo_size / 4
-#if CONFIG_DMA_PL330
-			- 1
-#endif
-			;
+			dev_data->fifo_size / 4;
 	}
 #endif
 
@@ -2329,12 +2325,8 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 
 #ifdef CONFIG_UART_ASYNC_API
 #if CONFIG_DMA_PL330
-#define DMA_BURST_LEN 0 /* Real len will be value + 1 */
-#define DMA_BURST_SIZE 0 /* Burst size is a shifter: 0x1 << DMA_BURST_SIZE bytes  */
 #define DMA_SLOT_GET(n, d) DT_INST_DMAS_CELL_BY_NAME(n, d, periph)
 #else
-#define DMA_BURST_LEN 1
-#define DMA_BURST_SIZE 1
 #define DMA_SLOT_GET(n, d) DT_INST_DMAS_CELL_BY_NAME(n, d, channel)
 #endif
 
@@ -2345,10 +2337,10 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 		.dma_channel =							\
 			DT_INST_DMAS_CELL_BY_NAME(n, tx, channel),		\
 		.dma_cfg = {							\
-			.source_burst_length = DMA_BURST_LEN,			\
-			.dest_burst_length = DMA_BURST_LEN,			\
-			.source_data_size = DMA_BURST_SIZE,			\
-			.dest_data_size = DMA_BURST_SIZE,			\
+			.source_burst_length = 1,				\
+			.dest_burst_length = 1,					\
+			.source_data_size = 1,					\
+			.dest_data_size = 1,					\
 			.complete_callback_en = 0,				\
 			.error_callback_dis = 1,				\
 			.block_count = 1,					\
@@ -2364,10 +2356,10 @@ static DEVICE_API(uart, uart_ns16550_driver_api) = {
 		.dma_channel =							\
 			DT_INST_DMAS_CELL_BY_NAME(n, rx, channel),		\
 		.dma_cfg = {							\
-			.source_burst_length = DMA_BURST_LEN,			\
-			.dest_burst_length = DMA_BURST_LEN,			\
-			.source_data_size = DMA_BURST_SIZE,			\
-			.dest_data_size = DMA_BURST_SIZE,			\
+			.source_burst_length = 1,				\
+			.dest_burst_length = 1,					\
+			.source_data_size = 1,					\
+			.dest_data_size = 1,					\
 			.complete_callback_en = 0,				\
 			.error_callback_dis = 1,				\
 			.block_count = 1,					\
