@@ -1,8 +1,7 @@
-/* Copyright (c) 2025 Alif Semiconductor
- *
+/*
+ * SPDX-FileCopyrightText: Copyright Alif Semiconductor
  * SPDX-License-Identifier: Apache-2.0
  */
-
 / {
 	aliases {
 		pwm-led0 = &pwm_led1_red;
