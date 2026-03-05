@@ -13,25 +13,3 @@ properties:
 
   interrupts:
     required: true
-
-  clock-frequency:
-    type: int
-    description: |
-      Clock frequency the I2S peripheral is being driven at, in Hz.
-    required: true
-
-  ext-clk-src-enable:
-    type: boolean
-    description : |
-      I2S driven by external clock source.
-
-  driver-instance:
-    type: string
-    description: instance identifier
-    enum:
-      -  "I2S_INSTANCE_0"
-      -  "I2S_INSTANCE_1"
-      -  "I2S_INSTANCE_2"
-      -  "I2S_INSTANCE_3"
-      -  "I2S_INSTANCE_4"
-
