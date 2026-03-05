@@ -136,6 +136,8 @@ static uint32_t alif_get_input_clock(uint32_t clock_name)
 		return ALIF_CLOCK_SYST_ACLK_FREQ;
 	case ALIF_LPSPI_CLK:
 		return ALIF_CLOCK_SYST_CORE_FREQ;
+	case ALIF_SPI_CLK:
+		return ALIF_CLOCK_SYST_HCLK_FREQ;
 	default:
 		return 0;
 	}

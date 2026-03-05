@@ -267,6 +267,8 @@ static uint32_t alif_get_input_clock(uint32_t const clock_name)
 	case ALIF_HCI_AHI_CLK:
 	case ALIF_LPSPI_CLK:
 		return get_he_clock_freq();
+	case ALIF_SPI_CLK:
+		return get_syst_hclk_freq();
 	default:
 		break;
 	}
