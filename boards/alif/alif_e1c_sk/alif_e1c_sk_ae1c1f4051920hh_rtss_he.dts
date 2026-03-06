@@ -48,6 +48,15 @@
 		reg = <0xb0000000 DT_SIZE_M(64)>;
 		zephyr,memory-region = "OSPI0";
 	};
+
+	cam_enbuf: cam_enbuf {
+		compatible = "arducam-enbuf";
+		enbuf-gpios = <&gpio3 2 GPIO_ACTIVE_HIGH>;
+	};
+};
+
+&gpio3 {
+	status = "okay";
 };
 
 &gpio4 {

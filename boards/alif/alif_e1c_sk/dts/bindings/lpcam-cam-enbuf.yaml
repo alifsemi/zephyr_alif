@@ -1,0 +1,17 @@
+# Copyright (C) 2026 Alif Semiconductor.
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  GPIO control for enabling the camera level shifter buffer.
+  The CAM_ENBUF signal controls the OE pin of the NXB0108
+  level shifter used between the camera sensor and ARD interface.
+
+compatible: "arducam-enbuf"
+
+properties:
+  enbuf-gpios:
+    type: phandle-array
+    required: true
+    description: |
+      GPIO used to enable the camera buffer level shifter.
+      Setting the GPIO active enables the NXB0108 buffer.

@@ -186,8 +186,8 @@
 
 	pinctrl_i2c1: pinctrl_i2c1 {
 		group0 {
-			pinmux = <PIN_P7_2__I2C1_SDA_C>,
-				 <PIN_P7_3__I2C1_SCL_C>;
+			pinmux = <PIN_P2_6__I2C1_SDA_B>,
+				 <PIN_P2_7__I2C1_SCL_B>;
 			read-enable = <0x1>;
 			driver-state-control = <0x1>;
 		};
@@ -373,18 +373,18 @@
 	pinctrl_lpcam: pinctrl_lpcam {
 		/* LP-CAM interface. */
 		group0 {
-			pinmux = <PIN_P8_4__LPCAM_VSYNC_C>,
-				 <PIN_P8_5__LPCAM_HSYNC_C>,
-				 <PIN_P8_6__LPCAM_PCLK_C>,
-				 <PIN_P8_7__LPCAM_XVCLK_C>,
-				 <PIN_P1_0__LPCAM_D0_A>,
-				 <PIN_P1_1__LPCAM_D1_A>,
-				 <PIN_P7_2__LPCAM_D2_B>,
-				 <PIN_P7_3__LPCAM_D3_B>,
-				 <PIN_P7_4__LPCAM_D4_B>,
-				 <PIN_P7_5__LPCAM_D5_B>,
-				 <PIN_P7_6__LPCAM_D6_B>,
-				 <PIN_P7_7__LPCAM_D7_B>;
+			pinmux = <PIN_P0_6__LPCAM_VSYNC_B>,
+				 <PIN_P2_0__LPCAM_HSYNC_B>,
+				 <PIN_P2_1__LPCAM_PCLK_B>,
+				 <PIN_P2_3__LPCAM_XVCLK_B>,
+				 <PIN_P4_0__LPCAM_D0_A>,
+				 <PIN_P4_1__LPCAM_D1_A>,
+				 <PIN_P4_2__LPCAM_D2_A>,
+				 <PIN_P4_3__LPCAM_D3_A>,
+				 <PIN_P4_4__LPCAM_D4_A>,
+				 <PIN_P4_5__LPCAM_D5_A>,
+				 <PIN_P4_6__LPCAM_D6_A>,
+				 <PIN_P4_7__LPCAM_D7_A>;
 		};
 	};
 
