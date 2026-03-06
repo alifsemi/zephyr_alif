@@ -92,16 +92,6 @@
 		zephyr,memory-region = "DTCM";
 	};
 
-	sram0: sram@2000000 {
-		compatible = "zephyr,memory-region","mmio-sram";
-		zephyr,memory-region = "SRAM0";
-	};
-
-	sram1: sram@8000000 {
-		compatible = "zephyr,memory-region","mmio-sram";
-		zephyr,memory-region = "SRAM1";
-	};
-
 	ns: ns@20020000 {
 		compatible = "zephyr,memory-region";
 		reg = <0x20020000 DT_SIZE_K(512)>;
