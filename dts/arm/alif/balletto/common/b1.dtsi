@@ -763,7 +763,7 @@
 		compatible = "alif,alif-pdm";
 		reg = <0x43002000 0x1000>;
 		interrupts = <49 ALIF_DEFAULT_IRQ_PRIORITY>;
-		interrupt-names = "warning_intr";
+		interrupt-names = "combined_intr";
 		pinctrl-0 = <&pinctrl_lppdm>;
 		pinctrl-names = "default";
 		clocks = <&clockctrl ALIF_LPPDM_76M8_CLK>;
