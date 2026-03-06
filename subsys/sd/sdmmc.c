@@ -811,30 +811,11 @@ int sdmmc_ioctl(struct sd_card *card, uint8_t cmd, void *buf)
 int sdmmc_read_blocks(struct sd_card *card, uint8_t *rbuf, uint32_t start_block,
 		      uint32_t num_blocks)
 {
-	int ret;
-
-	if (num_blocks > 1) {
-		ret = sdmmc_set_blockcnt(card, num_blocks);
-		if (!ret) {
-			return ret;
-		}
-	}
-
 	return card_read_blocks(card, rbuf, start_block, num_blocks);
 }
 
 int sdmmc_write_blocks(struct sd_card *card, const uint8_t *wbuf, uint32_t start_block,
 		       uint32_t num_blocks)
 {
-	int ret;
-
-	if (num_blocks > 1) {
-		ret = sdmmc_set_blockcnt(card, num_blocks);
-
-		if (!ret) {
-			return ret;
-		}
-	}
-
 	return card_write_blocks(card, wbuf, start_block, num_blocks);
 }
