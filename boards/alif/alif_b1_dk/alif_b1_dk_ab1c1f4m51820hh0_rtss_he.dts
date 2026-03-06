@@ -7,6 +7,7 @@
 
 #include <alif/balletto/b1/ab1c1f4m51820hh0.dtsi>
 #include "../common/balletto-pinctrl.dtsi"
+#include "alif_b1_dk_ab1c1f4m51820xx0_rtss_he.dtsi"
 
 /* Enable to use Event Router driver instead of manual configuration
  * When enabled:
