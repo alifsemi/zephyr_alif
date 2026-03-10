@@ -33,6 +33,11 @@ LOG_MODULE_REGISTER(dma_alif_event_router, CONFIG_DMA_ALIF_EVENT_ROUTER_LOG_LEVE
 
 #define DT_DRV_COMPAT alif_dma_event_router
 
+/*
+ * Maximum physical DMA channels supported by underlying controller.
+ */
+#define DMA_ALIF_EVTRTR_MAX_PHYS_CHANNELS  8
+
 /* Event Router register offsets */
 #define EVTRTR_DMA_CTRL0_OFFSET		0x00
 #define EVTRTR_DMA_REQ_CTRL_OFFSET	0x80
@@ -75,6 +80,14 @@ struct dma_alif_evtrtr_config {
 struct dma_alif_evtrtr_data {
 	DEVICE_MMIO_RAM;		/* Mapped MMIO region */
 	struct k_mutex lock;		/* Mutex for thread-safe access */
+
+	/* Callback mapping for channel translation (physical to encoded) */
+	struct {
+		uint32_t encoded_channel;	/* Encoded channel for peripheral driver */
+		dma_callback_t orig_callback;	/* Original peripheral callback */
+		void *orig_user_data;		/* Original peripheral user data */
+		bool in_use;			/* Active flag */
+	} channel_map[DMA_ALIF_EVTRTR_MAX_PHYS_CHANNELS];
 };
 
 /**
@@ -116,6 +129,55 @@ static int evtrtr_configure_channel(const struct device *dev, uint32_t channel,
 		dev->name, channel, dma_group, ack, enable_handshake ? "on" : "off");
 
 	return 0;
+}
+
+/**
+ * @brief Wrapper callback that translates physical channel to encoded channel
+ *
+ * This callback is registered with the DMA driver. When DMA driver invokes it
+ * with a physical channel number, we translate it back to the encoded channel
+ * number that the peripheral driver expects, then forward to the original callback.
+ *
+ * @param dma_dev DMA device
+ * @param user_data Pointer to event router device struct
+ * @param physical_channel Physical channel
+ * @param status Transfer status (DMA_STATUS_COMPLETE, DMA_STATUS_BLOCK, or error)
+ */
+static void evtrtr_callback_wrapper(const struct device *dma_dev, void *user_data,
+				     uint32_t physical_channel, int status)
+{
+	const struct device *evtrtr_dev = (const struct device *)user_data;
+	struct dma_alif_evtrtr_data *data = evtrtr_dev->data;
+	uint32_t encoded_channel;
+	dma_callback_t orig_callback;
+	void *orig_user_data;
+
+	ARG_UNUSED(dma_dev);
+
+	/* Validate physical channel */
+	if (physical_channel >= DMA_ALIF_EVTRTR_MAX_PHYS_CHANNELS) {
+		LOG_ERR("Invalid physical channel %u (max %u)", physical_channel,
+			DMA_ALIF_EVTRTR_MAX_PHYS_CHANNELS - 1);
+		return;
+	}
+
+	/* Check if this physical channel has a mapping */
+	if (!data->channel_map[physical_channel].in_use) {
+		LOG_WRN("Callback for unmapped physical channel %u", physical_channel);
+		return;
+	}
+
+	/* Retrieve mapping */
+	encoded_channel = data->channel_map[physical_channel].encoded_channel;
+	orig_callback = data->channel_map[physical_channel].orig_callback;
+	orig_user_data = data->channel_map[physical_channel].orig_user_data;
+
+	/* Invoke original peripheral callback with translated encoded channel */
+	if (orig_callback) {
+		LOG_DBG("Translating callback: phys_ch=%u → encoded_ch=0x%x",
+			physical_channel, encoded_channel);
+		orig_callback(evtrtr_dev, orig_user_data, encoded_channel, status);
+	}
 }
 
 /**
@@ -170,6 +232,13 @@ static int dma_alif_evtrtr_configure(const struct device *dev, uint32_t encoded_
 		goto unlock;
 	}
 
+	if (channel >= DMA_ALIF_EVTRTR_MAX_PHYS_CHANNELS) {
+		LOG_ERR("Invalid dma_ch %u (must be 0-%u)", channel,
+			DMA_ALIF_EVTRTR_MAX_PHYS_CHANNELS - 1);
+		ret = -EINVAL;
+		goto unlock;
+	}
+
 	LOG_INF("%s: Configuring periph=%u, dma_group=%u, dma_ch=%u, handshake=%s",
 		dev->name, periph, dma_group, channel,
 		enable_handshake ? "enabled" : "disabled");
@@ -184,11 +253,35 @@ static int dma_alif_evtrtr_configure(const struct device *dev, uint32_t encoded_
 
 	/*
 	 * Delegate to DMA driver with decoded physical channel.
+	 * If callback is provided, intercept it with our wrapper for channel translation.
 	 */
-	ret = dma_config(cfg->dma_dev, channel, config);
-	if (ret < 0) {
-		LOG_ERR("DMA configuration failed: %d", ret);
-		goto unlock;
+	if (config->dma_callback) {
+		/* Use a local copy to avoid modifying the caller's config struct */
+		struct dma_config local_cfg = *config;
+
+		local_cfg.dma_callback = evtrtr_callback_wrapper;
+		local_cfg.user_data = (void *)dev;
+
+		ret = dma_config(cfg->dma_dev, channel, &local_cfg);
+		if (ret < 0) {
+			LOG_ERR("DMA configuration failed: %d", ret);
+			goto unlock;
+		}
+
+		/* Only store mapping after successful dma_config */
+		data->channel_map[channel].encoded_channel = encoded_channel;
+		data->channel_map[channel].orig_callback = config->dma_callback;
+		data->channel_map[channel].orig_user_data = config->user_data;
+		data->channel_map[channel].in_use = true;
+
+		LOG_DBG("Registered callback wrapper: phys_ch=%u, encoded_ch=0x%x",
+			channel, encoded_channel);
+	} else {
+		ret = dma_config(cfg->dma_dev, channel, config);
+		if (ret < 0) {
+			LOG_ERR("DMA configuration failed: %d", ret);
+			goto unlock;
+		}
 	}
 
 	LOG_DBG("Event router and DMA configured successfully");
@@ -231,6 +324,15 @@ static int dma_alif_evtrtr_stop(const struct device *dev, uint32_t encoded_chann
 
 	k_mutex_lock(&data->lock, K_FOREVER);
 	ret = dma_stop(cfg->dma_dev, channel);
+
+	/* Clear callback mapping only if dma_stop() succeeded */
+	if (ret == 0 && channel < DMA_ALIF_EVTRTR_MAX_PHYS_CHANNELS) {
+		data->channel_map[channel].in_use = false;
+		data->channel_map[channel].orig_callback = NULL;
+		data->channel_map[channel].orig_user_data = NULL;
+		LOG_DBG("Cleared callback mapping for phys_ch=%u", channel);
+	}
+
 	k_mutex_unlock(&data->lock);
 
 	if (ret < 0) {
