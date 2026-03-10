@@ -1,0 +1,7 @@
+name: alif-dhcpv4-client
+
+boards:
+  /alif_(e3|e4|e7|e8)_(dk|ak)/.*/.*/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: ensemble.overlay
+      EXTRA_CONF_FILE: ensemble.conf

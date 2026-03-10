@@ -78,6 +78,16 @@ Run Zephyr samples/net/dhcpv4_client application in QEMU:
    :goals: run
    :compact:
 
+To build and flash this sample for ALIF boards :ref:`alif_e7_dk/ae722f80f55d5xx/rtss_he`:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/net/dhcpv4_client
+   :board: alif_e7_dk/ae722f80f55d5xx/rtss_he
+   :goals: build
+   :gen-args: -S alif-dhcpv4-client
+
+Replace "alif_e7_dk/ae722f80f55d5xx/rtss_he" with the appropriate board name for other supported boards.
+
 Once DHCPv4 client address negotiation completed with server, details
 are shown like this:
 
