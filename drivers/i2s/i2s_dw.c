@@ -163,16 +163,6 @@ static void i2s_enable_controller(const struct device *dev)
 	i2s_clock_enable(i2s);
 }
 
-static void i2s_disable_controller(const struct device *dev)
-{
-	const struct i2s_dw_cfg *i2s = dev->config;
-
-	/* Disable I2S */
-	i2s_global_disable(i2s);
-
-	i2s_clock_disable(i2s);
-}
-
 static int i2s_dw_configure(const struct device *dev, enum i2s_dir dir,
 			       const struct i2s_config *i2s_cfg)
 {
@@ -871,6 +861,16 @@ static void tx_queue_drop(struct stream *stream)
 }
 
 #if defined(CONFIG_PM_DEVICE)
+
+static void i2s_disable_controller(const struct device *dev)
+{
+	const struct i2s_dw_cfg *i2s = dev->config;
+
+	/* Disable I2S */
+	i2s_global_disable(i2s);
+
+	i2s_clock_disable(i2s);
+}
 
 static int i2s_suspend(const struct device *dev)
 {
