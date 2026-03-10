@@ -1097,19 +1097,20 @@ static uint32_t udc_dwc3_start_endpoint_config(udc_dwc3_driver_t *drv, uint8_t e
 	uint32_t ret;
 
 	phy_ep = USB_GET_PHYSICAL_EP(ep_num, dir);
-	if (phy_ep == 0) {
-		/* Issue the command to the hardware */
-		ret = udc_dwc3_send_ep_cmd(drv, phy_ep, USB_DEPCMD_DEPSTARTCFG, params);
+	if (phy_ep != 0) {
+		return 0;
+	}
+	/* Issue the command to the hardware */
+	ret = udc_dwc3_send_ep_cmd(drv, phy_ep, USB_DEPCMD_DEPSTARTCFG, params);
+	if (ret) {
+		LOG_ERR("USB_DEPCMD_DEPSTARTCFG cmd failed");
+		return ret;
+	}
+	for (ep_index = 0; ep_index < (drv->in_eps + drv->out_eps); ep_index++) {
+		ret = udc_dwc3_set_xfer_resource(drv, ep_index);
 		if (ret) {
-			LOG_ERR("USB_DEPCMD_DEPSTARTCFG cmd failed");
+			LOG_ERR("Failed to set the xferresource command");
 			return ret;
-		}
-		for (ep_index = 0; ep_index < (drv->in_eps + drv->out_eps); ep_index++) {
-			ret = udc_dwc3_set_xfer_resource(drv, ep_index);
-			if (ret) {
-				LOG_ERR("Failed to set the xferresource command");
-				return ret;
-			}
 		}
 	}
 
@@ -2069,12 +2070,41 @@ static int udc_dwc3_ctrl_feed_dout(const struct device *dev, size_t length)
 
 	return ret;
 }
+
+static void udc_dwc3_drop_control_transfers(const struct device *dev)
+{
+	struct net_buf *buf;
+
+	buf = udc_buf_get_all(dev, USB_CONTROL_EP_OUT);
+	if (buf != NULL) {
+		net_buf_unref(buf);
+	}
+
+	buf = udc_buf_get_all(dev, USB_CONTROL_EP_IN);
+	if (buf != NULL) {
+		net_buf_unref(buf);
+	}
+}
+
+
 static void handle_setup_pkt(struct udc_dwc3_data *priv)
 {
 	struct usb_setup_packet *setup = (struct usb_setup_packet *)&priv->drv.setup_data;
 	const struct device *dev = priv->dev;
 	struct net_buf *buf;
 	int err;
+
+	/* Free any stale buffers from the previous control transfer.
+	 * EP0 OUT data buffers were not being properly released.
+	 * For no-data control OUT transfers, the upper layer enqueues the
+	 * status IN buffer on EP0-IN. The status stage was handled
+	 * internally and the buffer may not be dequeued or freed afterward.
+	 *
+	 * This cleanup step drains any leftover buffers from both EP0-OUT
+	 * and EP0-IN queues before processing the next setup packet,
+	 * preventing exhaustion of the udc_ep_pool.
+	 */
+	udc_dwc3_drop_control_transfers(dev);
 
 	buf = udc_ctrl_alloc(dev, USB_CONTROL_EP_OUT, sizeof(struct usb_setup_packet));
 	if (buf == NULL) {
