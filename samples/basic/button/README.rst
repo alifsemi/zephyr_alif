@@ -107,6 +107,16 @@ for the nucleo_f103rb board:
    :goals: build
    :compact:
 
+To build and flash this sample for the :ref:`alif_e7_dk/ae722f80f55d5xx/rtss_he`:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/basic/button
+   :board: alif_e7_dk/ae722f80f55d5xx/rtss_he
+   :goals: build
+   :gen-args: -S alif-button
+
+Replace "alif_e7_dk/ae722f80f55d5xx/rtss_he" with the appropriate board name for other supported boards.
+
 After startup, the program looks up a predefined GPIO device, and configures the
 pin in input mode, enabling interrupt generation on falling edge. During each
 iteration of the main loop, the state of GPIO line is monitored and printed to
