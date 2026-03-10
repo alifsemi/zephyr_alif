@@ -316,6 +316,10 @@ static int alif_crc_compute(const struct device *dev, struct crc_params *params)
 {
 	struct crc_data *data = dev->data;
 
+	if (params->data_in == NULL || params->data_out == NULL || params->len == 0) {
+		return -EINVAL;
+	}
+
 	/* Initailizing crc parameters  */
 	crc_params_init(dev, params);
 
