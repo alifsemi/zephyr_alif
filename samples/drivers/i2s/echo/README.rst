@@ -44,6 +44,16 @@ To build and flash the application:
    :goals: build flash
    :compact:
 
+To build and flash this sample for ALIF boards :ref:`alif_e7_dk/ae722f80f55d5xx/rtss_he`:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/drivers/i2s/echo
+   :board: alif_e7_dk/ae722f80f55d5xx/rtss_he
+   :goals: build
+   :gen-args: -S alif-i2s-echo
+
+Replace "alif_e7_dk/ae722f80f55d5xx/rtss_he" with the appropriate board name for other supported boards.
+
 Press Button 1 to toggle the echo effect and Button 2 to stop the streams.
 
 .. _Audio Codec Shield: http://wiki.openmusiclabs.com/wiki/AudioCodecShield

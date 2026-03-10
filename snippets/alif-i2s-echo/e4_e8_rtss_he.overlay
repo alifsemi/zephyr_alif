@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Alif Semiconductor.
+ * SPDX-FileCopyrightText: Copyright Alif Semiconductor
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -15,4 +15,3 @@ i2s_tx: &i2s3 {
 i2s_rx: &i2s4 {
 	status = "okay";
 };
-
