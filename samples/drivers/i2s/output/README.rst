@@ -34,3 +34,13 @@ To build and flash the application:
    :board: mimxrt1060_evk@B
    :goals: build flash
    :compact:
+
+To build and flash this sample for ALIF boards :ref:`alif_e7_dk/ae722f80f55d5xx/rtss_he`:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/drivers/i2s/output
+   :board: alif_e7_dk/ae722f80f55d5xx/rtss_he
+   :goals: build flash
+   :gen-args: -S alif-i2s-output
+
+Replace "alif_e7_dk/ae722f80f55d5xx/rtss_he" with the appropriate board name for other supported boards.
