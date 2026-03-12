@@ -971,6 +971,13 @@ static int i2c_dw_set_slave_mode(const struct device *dev, uint16_t addr, uint8_
 	write_tx_tl(rom->tx_tl, reg_base);
 	write_rx_tl(rom->rx_tl, reg_base);
 
+#ifdef CONFIG_I2C_TARGET_BUFFER_MODE
+	struct i2c_dw_dev_config *const dw = dev->data;
+
+	dw->rx_pos = 0;
+	dw->tx_len = 0;
+	dw->tx_pos = 0;
+#endif
 	LOG_DBG("I2C: Host registered as Slave Device");
 
 	return 0;
