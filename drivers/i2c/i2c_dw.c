@@ -459,6 +459,37 @@ static void i2c_dw_isr(const struct device *port)
 
 		i2c_dw_slave_read_clear_intr_bits(port);
 
+		if (intr_stat.bits.start_det) {
+#ifdef CONFIG_I2C_TARGET_BUFFER_MODE
+			if (dw->rx_pos != 0) {
+				/* FIFO needs to be drained here
+				 * so we don't miss the next interrupt
+				 */
+				while (test_bit_status_rfne(reg_base)) {
+					data = i2c_dw_read_byte_non_blocking(port);
+					if (dw->rx_pos < CONFIG_I2C_TAR_DATA_BUF_MAX_LEN) {
+						dw->rx_buf[dw->rx_pos++] = data;
+					}
+				}
+
+				if (slave_cb->buf_write_received) {
+					slave_cb->buf_write_received(dw->slave_cfg,
+								dw->rx_buf,
+								dw->rx_pos);
+				}
+				dw->rx_pos = 0;
+			}
+
+			if (dw->tx_pos != 0) {
+				/* Just reset the write buffer and count values
+				 * if buffer write is incomplete
+				 */
+				dw->tx_pos = 0;
+				dw->tx_len = 0;
+				dw->tx_buf = NULL;
+			}
+#endif
+		}
 		if (intr_stat.bits.rx_full) {
 			if (dw->state != I2C_DW_CMD_SEND) {
 				dw->state = I2C_DW_CMD_SEND;
@@ -992,7 +1023,7 @@ static int i2c_dw_slave_register(const struct device *dev, struct i2c_target_con
 	dw->slave_cfg = cfg;
 	ret = i2c_dw_set_slave_mode(dev, cfg->address, cfg->flags);
 	write_intr_mask(DW_INTR_MASK_RX_FULL | DW_INTR_MASK_RD_REQ | DW_INTR_MASK_TX_ABRT |
-				DW_INTR_MASK_STOP_DET,
+			DW_INTR_MASK_START_DET | DW_INTR_MASK_STOP_DET,
 			reg_base);
 
 	return ret;
