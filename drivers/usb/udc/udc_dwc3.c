@@ -28,6 +28,7 @@ struct udc_dwc3_data {
 	uint32_t irq;
 	struct k_thread thread_data;
 	struct k_msgq dwc3_msgq_data;
+	enum udc_bus_speed speed;
 };
 
 struct udc_dwc3_config {
@@ -801,20 +802,32 @@ static void udc_dwc3_depevt_handler(udc_dwc3_driver_t *drv, uint32_t reg)
 
 static void udc_dwc3_connection_done_event(udc_dwc3_driver_t *drv)
 {
+	struct udc_dwc3_data *priv = DWC3DATA(drv);
 	uint32_t reg;
+	uint32_t speed;
 
 	reg = drv->regs->DSTS;
-	/* if speed value is 0 then it's HIGH SPEED */
-	if (!((reg & USB_DSTS_CONNECTSPD) == USB_DSTS_HIGHSPEED)) {
-		LOG_ERR("Non-high-speed connection detected");
+	speed = reg & USB_DSTS_CONNECTSPD;
+	switch (speed) {
+	case USB_DSTS_HIGHSPEED:
+		priv->speed = UDC_BUS_SPEED_HS;
+		/* Enable USB2 LPM Capability — HS only feature */
+		reg = drv->regs->DCFG;
+		SET_BIT(reg, USB_DCFG_LPM_CAP);
+		drv->regs->DCFG = reg;
+		reg = drv->regs->DCTL;
+		reg |= USB_DCTL_HIRD_THRES_MASK;
+		drv->regs->DCTL = reg;
+		break;
+	case USB_DSTS_FULLSPEED:
+		priv->speed = UDC_BUS_SPEED_FS;
+		LOG_WRN("Full-speed connection detected");
+		break;
+	default:
+		priv->speed = UDC_BUS_UNKNOWN;
+		LOG_ERR("Unsupported connection speed: 0x%x", speed);
+		break;
 	}
-	/* Enable USB2 LPM Capability */
-	reg = drv->regs->DCFG;
-	SET_BIT(reg, USB_DCFG_LPM_CAP);
-	drv->regs->DCFG = reg;
-	reg = drv->regs->DCTL;
-	reg |= USB_DCTL_HIRD_THRES_MASK;
-	drv->regs->DCTL = reg;
 }
 /* Reset the USB device */
 static void udc_dwc3_reset_event(udc_dwc3_driver_t *drv)
@@ -1053,7 +1066,7 @@ static int32_t udc_dwc3_ep_stall(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t
 
 	return ret;
 }
-static uint32_t udc_dwc3_configure_endpoint_parameters(udc_dwc3_driver_t *drv, uint8_t ep_num,
+static int32_t udc_dwc3_configure_endpoint_parameters(udc_dwc3_driver_t *drv, uint8_t ep_num,
 		uint8_t dir, uint8_t ep_type, uint16_t ep_max_packet_size, uint8_t ep_interval)
 {
 	udc_dwc3_ep_params_t params = {0};
@@ -1078,7 +1091,7 @@ static uint32_t udc_dwc3_configure_endpoint_parameters(udc_dwc3_driver_t *drv, u
 	return udc_dwc3_send_ep_cmd(drv, phy_ep, USB_DEPCMD_SETEPCONFIG, params);
 }
 
-static uint32_t udc_dwc3_set_xfer_resource(udc_dwc3_driver_t *drv, uint8_t phy_ep)
+static int32_t udc_dwc3_set_xfer_resource(udc_dwc3_driver_t *drv, uint8_t phy_ep)
 {
 	udc_dwc3_ep_params_t params = {0};
 	/* Set Endpoint Transfer Resource configuration parameter
@@ -1088,13 +1101,13 @@ static uint32_t udc_dwc3_set_xfer_resource(udc_dwc3_driver_t *drv, uint8_t phy_e
 	return udc_dwc3_send_ep_cmd(drv, phy_ep, USB_DEPCMD_SETTRANSFRESOURCE, params);
 }
 
-static uint32_t udc_dwc3_start_endpoint_config(udc_dwc3_driver_t *drv, uint8_t ep_num,
+static int32_t udc_dwc3_start_endpoint_config(udc_dwc3_driver_t *drv, uint8_t ep_num,
 		uint8_t dir)
 {
 	udc_dwc3_ep_params_t params = {0};
 	uint8_t phy_ep;
 	uint8_t ep_index;
-	uint32_t ret;
+	int32_t ret;
 
 	phy_ep = USB_GET_PHYSICAL_EP(ep_num, dir);
 	if (phy_ep != 0) {
@@ -1117,13 +1130,13 @@ static uint32_t udc_dwc3_start_endpoint_config(udc_dwc3_driver_t *drv, uint8_t e
 	return ret;
 }
 
-static uint32_t udc_dwc3_ep_enable(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t dir,
+static int32_t udc_dwc3_ep_enable(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t dir,
 		uint8_t ep_type, uint16_t ep_max_packet_size, uint8_t ep_interval)
 {
 	udc_dwc3_ep_t *ept;
 	uint32_t reg;
 	uint8_t phy_ep;
-	uint32_t ret;
+	int32_t ret;
 
 	phy_ep = USB_GET_PHYSICAL_EP(ep_num, dir);
 	ept = &drv->eps[phy_ep];
@@ -2041,6 +2054,13 @@ static int udc_dwc3_ep_dequeue(const struct device *dev, struct udc_ep_config *e
 	return 0;
 }
 
+static enum udc_bus_speed udc_dwc3_device_speed(const struct device *dev)
+{
+	struct udc_dwc3_data *priv = udc_get_private(dev);
+
+	return priv->speed;
+}
+
 static void udc_dwc3_isr_handler(const struct device *dev)
 {
 	const struct udc_dwc3_data *priv =  udc_get_private(dev);
@@ -2234,9 +2254,11 @@ static int udc_dwc3_driver_preinit(const struct device *dev)
 	data->caps.rwup = true;
 	data->caps.out_ack = false;
 	data->caps.mps0 = UDC_MPS0_64;
+	priv->speed = UDC_BUS_SPEED_FS;
 	if (cfg->max_speed == 2) {
 		data->caps.hs = true;
 		mps = 1024;
+		priv->speed = UDC_BUS_SPEED_HS;
 	}
 	for (unsigned int i = 0; i < cfg->num_out_eps; i++) {
 		cfg->ep_cfg_out[i].caps.out = 1;
@@ -2286,6 +2308,7 @@ static int udc_dwc3_driver_preinit(const struct device *dev)
 static const struct udc_api udc_dwc3_api = {
 	.lock = udc_dwc3_lock,
 	.unlock = udc_dwc3_unlock,
+	.device_speed = udc_dwc3_device_speed,
 	.init = udc_dwc3_init,
 	.enable = udc_dwc3_enable,
 	.disable = udc_dwc3_disable,

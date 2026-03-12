@@ -265,6 +265,7 @@ typedef struct {     /*!< (@ 0x48200000) USB Structure */
 
 #define USB_DSTS_CONNECTSPD                              (7 << 0)
 #define USB_DSTS_HIGHSPEED                               (0 << 0)
+#define USB_DSTS_FULLSPEED                               (1 << 0)
 
 /* bit 30 and 31 is Config action of endpoint
  * value 0 for Initialize endpoint state
