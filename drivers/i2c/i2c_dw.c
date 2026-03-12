@@ -751,10 +751,6 @@ static int i2c_dw_transfer(const struct device *dev, struct i2c_msg *msgs, uint8
 		dw->xfr_flags = cur_msg->flags;
 		dw->rx_pending = 0U;
 
-#ifdef CONFIG_I2C_TARGET_BUFFER_MODE
-		dw->buf_pos = 0U;
-#endif
-
 		/* Need to RESTART if changing transfer direction */
 		if ((pflags & I2C_MSG_RW_MASK) != (dw->xfr_flags & I2C_MSG_RW_MASK)) {
 			dw->xfr_flags |= I2C_MSG_RESTART;
