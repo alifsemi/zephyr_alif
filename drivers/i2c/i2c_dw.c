@@ -471,8 +471,8 @@ static void i2c_dw_isr(const struct device *port)
 			for (index = 0; index < rx_fifo_level; index++) {
 				data = i2c_dw_read_byte_non_blocking(port);
 #ifdef CONFIG_I2C_TARGET_BUFFER_MODE
-				if (dw->buf_pos < CONFIG_I2C_TAR_DATA_BUF_MAX_LEN) {
-					dw->rx_buf[dw->buf_pos++] = data;
+				if (dw->rx_pos < CONFIG_I2C_TAR_DATA_BUF_MAX_LEN) {
+					dw->rx_buf[dw->rx_pos++] = data;
 				}
 #else
 				if (slave_cb->write_received) {
@@ -487,19 +487,19 @@ static void i2c_dw_isr(const struct device *port)
 #ifdef CONFIG_I2C_TARGET_BUFFER_MODE
 			for (index = 0; index < rx_fifo_level; index++) {
 				data = i2c_dw_read_byte_non_blocking(port);
-				if (dw->buf_pos < CONFIG_I2C_TAR_DATA_BUF_MAX_LEN) {
-					dw->rx_buf[dw->buf_pos++] = data;
+				if (dw->rx_pos < CONFIG_I2C_TAR_DATA_BUF_MAX_LEN) {
+					dw->rx_buf[dw->rx_pos++] = data;
 				}
 			}
 
-			if ((dw->buf_pos != 0) && (dw->buf_pos <=
+			if ((dw->rx_pos != 0) && (dw->rx_pos <=
 						CONFIG_I2C_TAR_DATA_BUF_MAX_LEN)) {
 				if (slave_cb->buf_write_received) {
 					slave_cb->buf_write_received(dw->slave_cfg,
 							dw->rx_buf,
-							dw->buf_pos);
+							dw->rx_pos);
 				}
-				dw->buf_pos = 0;
+				dw->rx_pos = 0;
 			}
 #else
 			if (rx_fifo_level) {
@@ -519,7 +519,7 @@ static void i2c_dw_isr(const struct device *port)
 			read_clr_rd_req(reg_base);
 			dw->state = I2C_DW_CMD_RECV;
 #ifdef CONFIG_I2C_TARGET_BUFFER_MODE
-			if (dw->buf_pos == 0) {
+			if (dw->tx_pos == 0) {
 				dw->tx_len = 0;
 				dw->tx_buf = NULL;
 				if (slave_cb->buf_read_requested) {
@@ -531,12 +531,12 @@ static void i2c_dw_isr(const struct device *port)
 
 			if (dw->tx_buf) {
 				while (test_bit_status_tfnt(reg_base)) {
-					if (dw->buf_pos >= dw->tx_len) {
-						dw->buf_pos = 0;
+					if (dw->tx_pos >= dw->tx_len) {
+						dw->tx_pos = 0;
 						break;
 					}
 
-					data = dw->tx_buf[dw->buf_pos++];
+					data = dw->tx_buf[dw->tx_pos++];
 					i2c_dw_write_byte_non_blocking(port, data);
 				}
 			}

@@ -184,7 +184,8 @@ struct i2c_dw_dev_config {
 	uint8_t    rx_buf[CONFIG_I2C_TAR_DATA_BUF_MAX_LEN];
 	uint8_t    *tx_buf;
 	uint32_t   tx_len;
-	uint32_t   buf_pos;
+	uint32_t   tx_pos;
+	uint32_t   rx_pos;
 #endif
 
 	struct i2c_target_config *slave_cfg;
