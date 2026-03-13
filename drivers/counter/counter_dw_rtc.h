@@ -66,6 +66,11 @@ extern "C" {
 #define DW_RTC_CCR_PSCLR_EN		(4)
 #define DW_RTC_CCR_PROT_LEVEL		(5)
 
+/* Reconfiguration flags */
+#define DW_RTC_RECONFIG_LOAD_VALUE	BIT(0)
+#define DW_RTC_RECONFIG_PRESCALER	BIT(1)
+#define DW_RTC_RECONFIG_WRAP_ENABLE	BIT(2)
+
 /* STAT settings */
 #define DW_RTC_STAT_IS_BIT		(0)
 
@@ -85,6 +90,7 @@ DEFINE_MM_REG_READ(rstat, DW_RTC_REG_RSTAT, 32)
 DEFINE_MM_REG_READ(eoi, DW_RTC_REG_EOI, 32)
 DEFINE_MM_REG_READ(comp_version, DW_RTC_REG_COMP_VERSION, 32)
 DEFINE_MM_REG_WRITE(cpsr, DW_RTC_REG_CPSR, 32)
+DEFINE_MM_REG_READ(cpsr, DW_RTC_REG_CPSR, 32)
 DEFINE_MM_REG_READ(cpcvr, DW_RTC_REG_CPCVR, 32)
 
 /* ICR is on a unique bit */
