@@ -5,11 +5,6 @@
 
 #include "e3_e5_e7.dtsi"
 
-/* sram1 is 4MB */
-&sram1 {
-	reg = <0x08000000 DT_SIZE_K(4096)>;
-};
-
 /* sdhc reset pins */
 &sdhc {
 	reset-gpios = <&gpio14 7 GPIO_ACTIVE_HIGH>;
@@ -20,6 +15,7 @@
 };
 
 /delete-node/ &lpcmp;
+/delete-node/ &sram1;
 
 &usb {
 	num-out-eps = <5>;
@@ -27,6 +23,11 @@
 };
 
 &{/soc} {
+	sram1: sram@2400000 {
+		compatible = "zephyr,memory-region","mmio-sram";
+		reg = <0x02400000 DT_SIZE_K(4096)>;
+		zephyr,memory-region = "SRAM1";
+	};
 
 	ethosu1: ethosu85@49042000 {
 		compatible = "arm,ethos-u";

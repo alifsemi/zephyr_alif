@@ -9,10 +9,6 @@
 	reg = <0x02000000 DT_SIZE_K(4096)>;
 };
 
-&sram1 {
-	reg = <0x08000000 DT_SIZE_K(4096)>;
-};
-
 &mram_flash {
 	reg = <0x80000000 DT_SIZE_K(5632)>;
 };
