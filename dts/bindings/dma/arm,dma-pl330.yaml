@@ -51,6 +51,14 @@ include: dma-controller.yaml
 properties:
   reg:
     required: true
+  dma-channels:
+    description: |
+      Number of DMA channels supported by the controller. When the
+      microcode property is not set, the driver statically allocates
+      a fixed-size microcode buffer (~1KB) per channel, so this
+      property directly impacts RAM usage. When the microcode property
+      is provided, the driver uses that external memory address and no
+      static buffer is allocated.
   microcode:
     type: array
     description: microcode's physical memory address

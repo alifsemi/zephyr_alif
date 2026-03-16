@@ -760,16 +760,22 @@
 		compatible = "arm,dma-pl330";
 		reg = <0x400C0000 0x1000>;
 		reg-names = "pl330_regs";
-		dma-channels = <4>;
+		dma-channels = <8>;
 		#dma-cells = <2>;
 		interrupt-parent = <&nvic>;
 		interrupts = <0 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <1 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <2 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <3 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <4 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <5 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <6 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <7 ALIF_DEFAULT_IRQ_PRIORITY>,
 			     <32 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "channel0", "channel1",
 				"channel2", "channel3",
+				"channel4", "channel5",
+				"channel6", "channel7",
 				"abort";
 		status = "disabled";
 	};
