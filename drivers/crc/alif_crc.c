@@ -12,8 +12,11 @@
 #include "alif_crc_reg.h"
 #include <zephyr/pm/device.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/logging/log.h>
 
 #define CONF_CRC_INIT_PRIORITY	40
+
+LOG_MODULE_REGISTER(alif_crc, LOG_LEVEL_INF);
 
 /**
  * @fn		crc_bit_reflect(uint32_t input)
@@ -163,14 +166,21 @@ static void crc_calculate_32bit_unaligned_sw(const struct device *dev, struct cr
 	uint32_t aligned_length = params->len - (params->len % 4);
 	const uint8_t *input = (const uint8_t *)params->data_in + aligned_length;
 
+	uint32_t crc_algo = (sys_read32(reg_base + CRC_CONTROL) & CRC_ALGO_MASK);
+
 	if (unaligned_length > 0) {
 		/* Check for the custom polynomial bit   */
 		if (params->custom_poly) {
 			/* add the user polynomial  */
 			custom = sys_read32(reg_base + CRC_POLY_CUSTOM);
 		} else {
-			/* add the 32 bit CRC standard polynomial  */
-			custom = CRC_STANDARD_POLY;
+			if (crc_algo == CRC_32) {
+				/* add the CRC32 standard polynomial */
+				custom = CRC_32_STANDARD_POLY;
+			} else {
+				/* add the CRC32C standard polynomial */
+				custom = CRC_32C_STANDARD_POLY;
+			}
 		}
 
 		if (params->invert) {
@@ -198,60 +208,86 @@ static void crc_calculate_32bit_unaligned_sw(const struct device *dev, struct cr
 }
 
 /**
- * @fn		void crc_enable_8bit(const struct device *dev, crc_params *params)
- * @brief	Enable 8 bit CRC algorithm and size.
+ * @fn		void crc_enable_crc8_ccitt(const struct device *dev)
+ * @brief	Enable CRC-8-CCITT algorithm and size.
  * @param[in]   dev	: pointer to Runtime device structure
  * @return	None
  */
-static inline void crc_enable_8bit(const struct device *dev)
+static inline void crc_enable_crc8_ccitt(const struct device *dev)
 {
 	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
 	uint32_t val = sys_read32(reg_base + CRC_CONTROL);
 
+	val &= ~(CRC_ALGO_MASK | CRC_ALGO_SIZE_MASK);
 	val |= (CRC_8_CCITT | CRC_ALGO_8_BIT_SIZE | CRC_INIT_BIT);
 
 	sys_write32(val, reg_base + CRC_CONTROL);
 }
 
 /**
- * @fn		void crc_enable_16bit(const struct device *dev, crc_params *params)
- * @brief	Enable 16 bit CRC algorithm and size.
+ * @fn		void crc_enable_crc16(const struct device *dev)
+ * @brief	Enable CRC-16 algorithm and size.
  * @param[in]   dev	: pointer to Runtime device structure
  * @return	None
  */
-static inline void crc_enable_16bit(const struct device *dev)
+static inline void crc_enable_crc16(const struct device *dev)
 {
 	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
 	uint32_t val = sys_read32(reg_base + CRC_CONTROL);
 
+	val &= ~(CRC_ALGO_MASK | CRC_ALGO_SIZE_MASK);
+	val |= (CRC_16 | CRC_ALGO_16_BIT_SIZE | CRC_INIT_BIT);
+
+	sys_write32(val, reg_base + CRC_CONTROL);
+}
+
+/**
+ * @fn		void crc_enable_crc16_ccitt(const struct device *dev)
+ * @brief	Enable CRC-16-CCITT algorithm and size.
+ * @param[in]   dev	: pointer to Runtime device structure
+ * @return	None
+ */
+static inline void crc_enable_crc16_ccitt(const struct device *dev)
+{
+	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
+	uint32_t val = sys_read32(reg_base + CRC_CONTROL);
+
+	val &= ~(CRC_ALGO_MASK | CRC_ALGO_SIZE_MASK);
 	val |= (CRC_16_CCITT | CRC_ALGO_16_BIT_SIZE | CRC_INIT_BIT);
 
 	sys_write32(val, reg_base + CRC_CONTROL);
 }
 
 /**
- * @fn		void crc_enable_32bit(const struct device *dev, crc_params *params)
- * @brief	Enable 32 bit CRC algorithm and size.
- * @param[in]   params  : if custom_poly is enabled then enable CRC32 custom polynomial
-			  else enable CRC32 algorithm and size.
+ * @fn		void crc_enable_crc32(const struct device *dev)
+ * @brief	Enable CRC32 algorithm and size.
  * @param[in]   dev	: pointer to Runtime device structure
  * @return	None
  */
-static inline void crc_enable_32bit(const struct device *dev, struct crc_params *params)
+static inline void crc_enable_crc32(const struct device *dev)
 {
 	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
 	uint32_t val = sys_read32(reg_base + CRC_CONTROL);
 
-	if (params->custom_poly) {
-		/* enable 32 bit poly custom CRC  */
-		val |= CRC_32C;
-	} else {
-		/* enable 32 bit CRC  */
-		val |= CRC_32;
-	}
+	val &= ~(CRC_ALGO_MASK | CRC_ALGO_SIZE_MASK);
+	val |= (CRC_32 | CRC_ALGO_32_BIT_SIZE | CRC_INIT_BIT);
 
-	/* enable 32 bit algorithm size  */
-	val |= (CRC_ALGO_32_BIT_SIZE | CRC_INIT_BIT);
+	sys_write32(val, reg_base + CRC_CONTROL);
+}
+
+/**
+ * @fn		void crc_enable_32c(const struct device *dev)
+ * @brief	Enable CRC32C algorithm and size.
+ * @param[in]   dev	: pointer to Runtime device structure
+ * @return	None
+ */
+static inline void crc_enable_32c(const struct device *dev)
+{
+	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
+	uint32_t val = sys_read32(reg_base + CRC_CONTROL);
+
+	val &= ~(CRC_ALGO_MASK | CRC_ALGO_SIZE_MASK);
+	val |= (CRC_32C | CRC_ALGO_32_BIT_SIZE | CRC_INIT_BIT);
 
 	sys_write32(val, reg_base + CRC_CONTROL);
 }
@@ -295,17 +331,18 @@ static void crc_params_init(const struct device *dev, struct crc_params *params)
 
 /**
  * @fn		int alif_crc_compute(const struct device *dev, crc_params *params)
- * @brief		1.calculate the CRC result for 8 bit 16 bit and 32 bit CRC algorithm.
-			2.For 8 bit and 16 bit CRC algorithm our hardware can able to
-			calculate the CRC result for both aligned and unaligned CRC input
-			data by loading the CRC inputs in DATA_IN_8 bit register.
-			3.For 32 bit CRC our hardware will support for aligned data to
-			calculate the CRC Result.
-			4.For unaligned data CRC_calculate_Unaligned function will calculate
-			the CRC result for unaligned CRC input
-			5. In CRC_calculate_Unaligned function load the aligned CRC result from
-			the hardware ,unaligned CRC input,length of unaligned input data and
-			the polynomial for the 32 bit CRC
+ * @brief	1.calculate the CRC result for CRC-8-CCITT, CRC-16, CRC-16-CCITT
+ *		CRC-32 and CRC-32C CRC algorithm.
+		2.For 8 bit and 16 bit CRC algorithm our hardware can able to
+		calculate the CRC result for both aligned and unaligned CRC input
+		data by loading the CRC inputs in DATA_IN_8 bit register.
+		3.For 32 bit CRC our hardware will support for aligned data to
+		calculate the CRC Result.
+		4.For unaligned data CRC_calculate_Unaligned function will calculate
+		the CRC result for unaligned CRC input
+		5. In CRC_calculate_Unaligned function load the aligned CRC result from
+		the hardware ,unaligned CRC input,length of unaligned input data and
+		the polynomial for the 32 bit CRC
  * @param[in]  dev	: pointer to Runtime device structure
  * @param[in]  params   : pointer to crc_params which has input buffer, length of the
 			  input buffer, pointer to crc output, reflect, invert, bit
@@ -320,45 +357,74 @@ static int alif_crc_compute(const struct device *dev, struct crc_params *params)
 		return -EINVAL;
 	}
 
-	/* Initailizing crc parameters  */
+	/* Initializing crc parameters  */
 	crc_params_init(dev, params);
 
 	switch (data->crc_algo) {
-	/* 8 bit CRC  */
-	case CRC_8_BIT_SIZE:
+		/* CRC-8-CCITT algorithm */
+	case CRC_ALGO_CRC8_CCITT:
 
-		/* enable 8 bit CRC algorithm and size  */
-		crc_enable_8bit(dev);
+		/* Enable CRC-8-CCITT algorithm */
+		crc_enable_crc8_ccitt(dev);
 
-		/* Calculate the CRC output  for 8 bit CRC algorithm  */
+		/* Calculate the CRC output for CRC-8-CCITT algorithm  */
 		crc_calculate_8bit(dev, params);
 
 		break;
 
-		/* 16 bit CRC  */
-	case CRC_16_BIT_SIZE:
+		/* CRC-16 algorithm */
+	case CRC_ALGO_CRC16:
 
-		/* enable 16 bit CRC algorithm and size  */
-		crc_enable_16bit(dev);
+		/* Enable CRC-16 algorithm */
+		crc_enable_crc16(dev);
 
-		/* Calculate the CRC output  for 16 bit CRC algorithm  */
+		/* Calculate the CRC output for CRC-16 algorithm  */
 		crc_calculate_16bit(dev, params);
 
 		break;
 
-		/* 32 bit CRC  */
-	case CRC_32_BIT_SIZE:
+		/* CRC-16-CCITT algorithm */
+	case CRC_ALGO_CRC16_CCITT:
 
-		/* enable 32 bit CRC algorithm and size  */
-		crc_enable_32bit(dev, params);
+		/* Enable CRC-16-CCITT algorithm */
+		crc_enable_crc16_ccitt(dev);
 
-		/* Calculate the CRC output  for 32 bit CRC algorithm  */
+		/* Calculate the CRC output for CRC-16-CCITT algorithm  */
+		crc_calculate_16bit(dev, params);
+
+		break;
+
+		/* CRC-32 algorithm */
+	case CRC_ALGO_CRC32:
+
+		/* Enable CRC-32 algorithm */
+		crc_enable_crc32(dev);
+
+		/* Calculate the CRC output for CRC-32 algorithm  */
 		crc_calculate_32bit(dev, params);
 
-		/* Calculate the 32bit CRC output for the unaligned part  */
+		/* Handle remaining unaligned bytes in software */
 		crc_calculate_32bit_unaligned_sw(dev, params);
 
 		break;
+
+		/* CRC-32C algorithm */
+	case CRC_ALGO_CRC32C:
+
+		/* Enable CRC-32C algorithm */
+		crc_enable_32c(dev);
+
+		/* Calculate the CRC output for CRC-32C algorithm  */
+		crc_calculate_32bit(dev, params);
+
+		/* Handle remaining unaligned bytes in software */
+		crc_calculate_32bit_unaligned_sw(dev, params);
+
+		break;
+
+	default:
+		LOG_ERR("Unsupported CRC algorithm");
+		return -EINVAL;
 	}
 	return 0;
 }

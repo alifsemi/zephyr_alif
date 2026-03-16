@@ -1258,14 +1258,14 @@
 	crc0: crc0@48107000 {
 		compatible = "alif,alif-crc";
 		reg = <0x48107000 0x1000>;
-		crc_algo = "CRC_8_BIT_SIZE";
+		crc-algo = "crc8-ccitt";
 		status = "disabled";
 	};
 
 	crc1: crc1@48108000 {
 		compatible = "alif,alif-crc";
 		reg = <0x48108000 0x1000>;
-		crc_algo = "CRC_8_BIT_SIZE";
+		crc-algo = "crc8-ccitt";
 		status = "disabled";
 	};
 

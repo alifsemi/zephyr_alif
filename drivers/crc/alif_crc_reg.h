@@ -40,21 +40,37 @@ struct crc_config {
 #define CRC_16_BIT_SIZE           1
 #define CRC_32_BIT_SIZE           2
 
-#define CRC_8_CCITT              (0 << 3)	/* To select the CRC_8_CCITT           */
-#define CRC_ALGO_8_BIT_SIZE      (0 << 1)	/* To select the 8 bit algorithm size  */
-#define CRC_ALGO_16_BIT_SIZE     (1 << 1)	/* To select the 16 bit algorithm size */
-#define CRC_16_CCITT             (3 << 3)	/* To select the CRC_16_CCITT          */
-#define CRC_INIT_BIT              BIT(0)	/* To select the init value            */
-#define CRC_ALGO_32_BIT_SIZE     (2 << 1)	/* To select the 32 bit algorithm size */
-#define CRC_BIT_SWAP             (1 << 8)	/* To enable the Bit swap              */
-#define CRC_BYTE_SWAP            (1 << 7)	/* To enable the Byte swap             */
-#define CRC_REFLECT              (1 << 11)	/* To Reflect the CRC value            */
-#define CRC_INVERT               (1 << 10)	/* To Invert the CRC value             */
-#define CRC_32                   (4 << 3)	/* To select the CRC_32                */
-#define CRC_32C                  (5 << 3)	/* To select the CRC_32C               */
-#define CRC_CUSTOM_POLY          (1 << 9)	/* To enable the poly custom           */
+/* CRC Algorithm Selection Macros */
+#define CRC_ALGO_CRC8_CCITT     0
+#define CRC_ALGO_CRC16          1
+#define CRC_ALGO_CRC16_CCITT    2
+#define CRC_ALGO_CRC32          3
+#define CRC_ALGO_CRC32C         4
 
-#define CRC_STANDARD_POLY       0x04C11DB7	/* Standard polynomial for 32 bit CRC  */
+#define CRC_ALGO_SHIFT          3
+#define CRC_ALGO_SIZE_SHIFT     1
+
+#define CRC_8_CCITT             (0 << CRC_ALGO_SHIFT)	/* To select the CRC_8_CCITT  */
+#define CRC_16                  (2 << CRC_ALGO_SHIFT)	/* To select the CRC_16       */
+#define CRC_16_CCITT            (3 << CRC_ALGO_SHIFT)	/* To select the CRC_16_CCITT */
+#define CRC_32                  (4 << CRC_ALGO_SHIFT)	/* To select the CRC_32       */
+#define CRC_32C                 (5 << CRC_ALGO_SHIFT)	/* To select the CRC_32C      */
+
+#define CRC_ALGO_8_BIT_SIZE     (0 << CRC_ALGO_SIZE_SHIFT) /* select the 8 bit algorithm size */
+#define CRC_ALGO_16_BIT_SIZE    (1 << CRC_ALGO_SIZE_SHIFT) /* select the 16 bit algorithm size */
+#define CRC_ALGO_32_BIT_SIZE    (2 << CRC_ALGO_SIZE_SHIFT) /* select the 32 bit algorithm size */
+
+#define CRC_INIT_BIT             BIT(0)	  /* To select the init value  */
+#define CRC_BIT_SWAP            (1 << 8)  /* To enable the Bit swap    */
+#define CRC_BYTE_SWAP           (1 << 7)  /* To enable the Byte swap   */
+#define CRC_REFLECT             (1 << 11) /* To Reflect the CRC value  */
+#define CRC_INVERT              (1 << 10) /* To Invert the CRC value   */
+#define CRC_CUSTOM_POLY         (1 << 9)  /* To enable the poly custom */
+#define CRC_ALGO_MASK           GENMASK(6, 3)
+#define CRC_ALGO_SIZE_MASK      GENMASK(2, 1)
+
+#define CRC_32_STANDARD_POLY      0x04C11DB7	/* CRC_32 Standard polynomial for 32 bit CRC */
+#define CRC_32C_STANDARD_POLY     0x1EDC6F41	/* CRC_32C Standard polynomial for 32 bit CRC */
 
 #ifdef __cplusplus
 }

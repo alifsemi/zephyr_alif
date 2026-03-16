@@ -10,11 +10,13 @@ properties:
   reg:
     required: true
 
-  crc_algo:
+  crc-algo:
     type: string
     required: true
     description: Select CRC algorithm
     enum:
-      - "CRC_8_BIT_SIZE"
-      - "CRC_16_BIT_SIZE"
-      - "CRC_32_BIT_SIZE"
+      - "crc8-ccitt"
+      - "crc16"
+      - "crc16-ccitt"
+      - "crc32"
+      - "crc32c"
