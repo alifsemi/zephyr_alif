@@ -1,0 +1,22 @@
+/*
+ * SPDX-FileCopyrightText: Copyright Alif Semiconductor
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+&ns {
+	status = "okay";
+};
+
+zephyr_udc0: &usb {
+	status = "okay";
+};
+
+&sdhc {
+	status = "okay";
+
+	mmc {
+		status = "okay";
+		disk-name = "SD";
+	};
+};
+

@@ -11,6 +11,7 @@ SECTION_PROLOGUE(_ALIF_SRAM0_SECTION_NAME, (NOLOAD),)
 KEEP(*(.alif_sram0))
 KEEP(*(".alif_sram0.*"))
 KEEP(*(.noinit.*kheap_buf_video_buffer_pool))
+KEEP(*(.bss.disk_buf_0))
 	} GROUP_LINK_IN(SRAM0)
 
 GROUP_END(SRAM0)
