@@ -170,15 +170,18 @@ static int isp_attach_buffer_to_hw(const struct device *dev, struct video_buffer
 	}
 
 	for (i = 0; i < num_planes; i++) {
-		size_plane = fourcc_to_plane_size(channel->output_fmt.pixelformat,
-				i, vbuf->size);
-		if (size_plane == 0 || size_plane > vbuf->size) {
-			LOG_ERR("Unsupported format!");
-			return -ENOTSUP;
-		}
+		if (!i) {
+			planes[i] = POINTER_TO_UINT(local_to_global(vbuf->buffer));
+		} else {
+			size_plane = fourcc_to_plane_size(channel->output_fmt.pixelformat,
+					i - 1, vbuf->size);
+			if (size_plane == 0 || size_plane > vbuf->size) {
+				LOG_ERR("Unsupported format!");
+				return -ENOTSUP;
+			}
 
-		planes[i] = (i) ? (planes[i-1] + size_plane) :
-			POINTER_TO_UINT(local_to_global(vbuf->buffer));
+			planes[i] = (planes[i-1] + size_plane);
+		}
 	}
 
 	LOG_DBG("planes: 0x%08x 0x%08x 0x%08x", planes[0], planes[1], planes[2]);
