@@ -5,6 +5,8 @@
 add_subdirectory(${SOC_SERIES})
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../common ${CMAKE_CURRENT_BINARY_DIR}/common)
 
+include(${CMAKE_CURRENT_LIST_DIR}/common/debug_metadata.cmake)
+
 zephyr_include_directories(common)
 zephyr_sources(common/soc_common.c)
 

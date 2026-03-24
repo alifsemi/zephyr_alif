@@ -1,0 +1,17 @@
+# Alif debug metadata manifest for Zephyr RTOS
+# This file enables fetching the Alif CMSIS-DFP package using west
+# Usage:
+#   west config manifest.project-filter -- +alif-debug
+#   west update
+#
+manifest:
+  remotes:
+    - name: alif
+      url-base: https://github.com/alifsemi
+  projects:
+    - name: alif_ensemble-cmsis-dfp
+      remote: alif
+      revision: main
+      path: tools/alif_ensemble-cmsis-dfp
+      groups:
+        - alif-debug
