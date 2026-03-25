@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: Copyright Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config SDHC_DWC
+	bool "Synopsys DesignWare Core SDHC driver"
+	default y
+	depends on DT_HAS_SNPS_DWC_SDHC_ENABLED
+	select SDHC_SUPPORTS_NATIVE_MODE
+	select EVENTS
+	help
+	  Enable Synopsys DesignWare Core SDHC driver.
+
+if SDHC_DWC
+
+config SDHC_BUFFER_ALIGNMENT
+	int "SDHC buffer alignment"
+	default 512
+
+config SDHC_DESCRIPTOR_SECTION
+	string "Linker section for SDHC DMA descriptors"
+	default ""
+	help
+	  Linker section for SDHC driver data including DMA descriptors.
+	  Leave empty to use the default data section. SoC defconfigs
+	  may override this to place descriptors in a specific region
+	  (e.g. non-secure memory).
+
+config SDHC_DWC_SDMA
+	bool "Use SDMA mode"
+	help
+	  Use Single-operation DMA (SDMA) for data transfers. SDMA uses
+	  the SDMA System Address register and requires handling DMA
+	  boundary interrupts for transfers crossing 4 KB pages.
+
+config SDHC_DWC_ADMA
+	bool "Use ADMA2 mode"
+	default y
+	depends on !SDHC_DWC_SDMA
+	help
+	  Use Advanced DMA 2 (ADMA2) for data transfers. ADMA2 uses a
+	  descriptor table that allows scatter-gather transfers without
+	  boundary interrupt handling. This is the recommended DMA mode.
+
+config SDHC_DWC_ADMA_MAX_DESC
+	int "SDHC DWC ADMA Maximum Descriptor count"
+	depends on SDHC_DWC_ADMA
+	default 32
+	help
+	  SDHC DWC ADMA Maximum Descriptor count.
+
+endif # SDHC_DWC

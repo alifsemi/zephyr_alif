@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: Copyright Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Synopsys DesignWare Core SD Host Controller
+
+compatible: "snps,dwc-sdhc"
+
+include: [sdhc.yaml, pinctrl-device.yaml]
+
+properties:
+  reg:
+    required: true
+  interrupts:
+    required: true
+    description: |
+      At least one interrupt is required:
+        - "sdmmc": main SDMMC interrupt (command/transfer/error/card detect)
+        - "sdmmc_wakeup": Card Insert/Remove/SDIO card wakeup interrupt (optional)
+  interrupt-names:
+    required: true
+  pinctrl-0:
+    required: true
+  pinctrl-names:
+    required: true
+  cd-gpios:
+    type: phandle-array
+    description: |
+      Card detect pin.
+      This pin is active-low when a card is inserted,
+      high when a card is absent. The property value should ensure
+      the flags properly describe the signal that is presented
+      to the driver.
+  bus-width:
+    type: int
+    default: 4
+    description: |
+      Data bus width supported by the board wiring.
+      Valid values are 1, 4, or 8. Default is 4.
+  no-1-8-v:
+    type: boolean
+    description: |
+      If present, the board does not support 1.8V signaling
+      even if the controller hardware is capable of it.
+  reset-gpios:
+    type: phandle-array
+    description: |
+      Hardware reset pin for the SD card slot.
+      Active-high to trigger a card reset.
