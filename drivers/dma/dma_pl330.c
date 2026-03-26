@@ -30,6 +30,45 @@ LOG_MODULE_REGISTER(dma_pl330);
 static int dma_pl330_submit(const struct device *dev, uint64_t dst,
 			    uint64_t src, uint32_t channel, uint32_t size);
 
+
+/*
+ * Start a scatter-gather block transfer
+ *
+ * Loads the given block's configuration into the channel and initiates
+ * the DMA transfer for that block. Used for both initial block start and
+ * advancing through the scatter-gather chain.
+ */
+static int dma_pl330_start_block(const struct device *dev,
+				 uint32_t channel,
+				 struct dma_block_config *blk)
+{
+	const struct dma_pl330_dev_data *const dev_data = dev->data;
+	struct dma_pl330_ch_config *channel_cfg = &dev_data->channels[channel];
+
+	/* ensure there is a valid block to transfer */
+	if (!blk) {
+		return -EINVAL;
+	}
+
+	/* load the current block's source, destination and size
+	 * into the channel config so dma_pl330_submit() can use them
+	 */
+	channel_cfg->src_addr = local_to_global(UINT_TO_POINTER(blk->source_address));
+	channel_cfg->dst_addr = local_to_global(UINT_TO_POINTER(blk->dest_address));
+	channel_cfg->trans_size = blk->block_size;
+
+	/* set address adjustments per block for scatter-gather */
+	channel_cfg->src_addr_adj = blk->source_addr_adj;
+	channel_cfg->dst_addr_adj = blk->dest_addr_adj;
+
+	/* kick off the DMA transfer for this block — writes microcode
+	 * and fires DMAGO via the PL330 debug interface
+	 */
+	return dma_pl330_submit(dev, channel_cfg->dst_addr,
+			 channel_cfg->src_addr, channel,
+			 channel_cfg->trans_size);
+}
+
 static void dma_pl330_get_counter(struct dma_pl330_ch_internal *ch_handle,
 				  uint32_t *psrc_byte_width,
 				  uint32_t *pdst_byte_width,
@@ -692,6 +731,19 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 	channel_cfg->dma_callback = cfg->dma_callback;
 	channel_cfg->user_data = cfg->user_data;
 
+	/*
+	 * Scatter-gather configuration
+	 *
+	 * Initialize the scatter-gather chain pointers and count the total
+	 * number of blocks. Validate that address adjustments are supported.
+	 */
+	if (!cfg->head_block) {
+		return -EINVAL;
+	}
+
+	channel_cfg->head_block = cfg->head_block;
+	channel_cfg->current_block = cfg->head_block;
+
 	if (cfg->head_block->source_addr_adj == DMA_ADDR_ADJ_INCREMENT ||
 	    cfg->head_block->source_addr_adj == DMA_ADDR_ADJ_NO_CHANGE) {
 		channel_cfg->src_addr_adj = cfg->head_block->source_addr_adj;
@@ -728,9 +780,14 @@ static int dma_pl330_transfer_start(const struct device *dev,
 		return -EBUSY;
 	}
 
-	ret = dma_pl330_submit(dev, channel_cfg->dst_addr,
-			       channel_cfg->src_addr, channel,
-			       channel_cfg->trans_size);
+	/*
+	 * Scatter-gather initialization
+	 *
+	 * Reset to the head block and start the first block transfer.
+	 * The ISR will handle advancing through subsequent blocks.
+	 */
+	channel_cfg->current_block = channel_cfg->head_block;
+	ret = dma_pl330_start_block(dev, channel, channel_cfg->current_block);
 
 	if (!channel_cfg->dma_callback || ret) {
 		/* Free the channel if polling was used or en error has happen */
@@ -828,17 +885,16 @@ static void dma_pl330_isr(const struct device *dev)
 	uint32_t intmis, fsrc, ch;
 	uint32_t reg_base = dev_cfg->reg_base;
 
-	/* First make sure there is no Abort in Manager */
+	/* check manager fault — log only, keep going */
 	if (sys_read32(reg_base + DMAC_PL330_FSRD) & 0x1) {
 		LOG_ERR("DMA Manager thread is faulting = %x",
 			sys_read32(reg_base + DMAC_PL330_FTRD));
 	}
 
-	/*
-	 *	Read Channel Fault status
-	 */
+	/* read channel fault status */
 	fsrc = sys_read32(reg_base + DMAC_PL330_FSRC);
 	if (fsrc) {
+		/* fault path */
 		for (ch = 0; ch < dev_cfg->max_dma_channels; ch++) {
 			if (fsrc & (1 << ch)) {
 				channel_cfg = &dev_data->channels[ch];
@@ -849,7 +905,6 @@ static void dma_pl330_isr(const struct device *dev)
 				(void)dma_pl330_stop_dma_ch(dev, reg_base, ch);
 
 				channel_cfg = &dev_data->channels[ch];
-
 				atomic_set(&channel_cfg->channel_is_active, DMA_CHANNEL_IS_FREE);
 
 				if (channel_cfg->dma_callback) {
@@ -859,19 +914,50 @@ static void dma_pl330_isr(const struct device *dev)
 			}
 		}
 	} else {
-		/*
-		 *	Issue channel callback
-		 *	Here the assumption is that channel number and irq number
-		 *	are mapped one-to-one
-		 */
+		/* normal completion path */
 		intmis = sys_read32(reg_base + DMAC_PL330_INTMIS);
 
 		for (ch = 0; ch < dev_cfg->max_dma_channels; ch++) {
 			if (intmis & (1 << ch)) {
+
+				/* clear interrupt first */
 				sys_write32((1 << ch), reg_base + DMAC_PL330_INTCLR);
 
 				channel_cfg = &dev_data->channels[ch];
 
+				/*
+				 * Scatter-gather block chaining
+				 *
+				 * If there are more blocks in the chain, advance to the next
+				 * block and start its transfer. Skip the completion callback
+				 * until all blocks are done.
+				 */
+				if (channel_cfg->current_block &&
+					channel_cfg->current_block->next_block) {
+
+					/* advance to next block */
+					channel_cfg->current_block =
+						channel_cfg->current_block->next_block;
+
+					/* start next block; on error fall through to callback */
+					if (dma_pl330_start_block(dev, ch,
+							channel_cfg->current_block) == 0) {
+						/* skip callback — not done yet */
+						continue;
+					}
+
+					/* error starting next block */
+					atomic_set(&channel_cfg->channel_is_active,
+						   DMA_CHANNEL_IS_FREE);
+					if (channel_cfg->dma_callback) {
+						channel_cfg->dma_callback(dev,
+							channel_cfg->user_data,
+							ch, -EIO);
+					}
+					continue;
+				}
+
+				/* no more blocks — all done */
 				atomic_set(&channel_cfg->channel_is_active, DMA_CHANNEL_IS_FREE);
 
 				if (channel_cfg->dma_callback) {

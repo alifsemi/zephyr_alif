@@ -197,6 +197,15 @@ struct dma_pl330_ch_config {
 	/* Channel specific private data */
 	struct dma_pl330_ch_internal internal;
 	size_t loop_counter0;
+
+	/*
+	 * Scatter-gather support fields
+	 *
+	 * head_block: Pointer to the first block in the scatter-gather chain
+	 * current_block: Pointer to the block currently being transferred
+	 */
+	struct dma_block_config *head_block;
+	struct dma_block_config *current_block;
 };
 
 struct dma_pl330_config {
