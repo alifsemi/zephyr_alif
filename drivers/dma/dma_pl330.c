@@ -12,6 +12,8 @@
 #include <soc.h>
 #include <zephyr/sys/__assert.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/cache.h>
+#include <zephyr/drivers/dma/dma_pl330.h>
 
 #include "dma_pl330.h"
 #include <soc_memory_map.h>
@@ -730,6 +732,59 @@ static int dma_pl330_transfer_start(const struct device *dev,
 
 	if (!channel_cfg->dma_callback || ret) {
 		/* Free the channel if polling was used or en error has happen */
+		atomic_set(&channel_cfg->channel_is_active, DMA_CHANNEL_IS_FREE);
+	}
+
+	return ret;
+}
+
+int dma_pl330_start_with_mcode(const struct device *dev,
+				uint32_t channel,
+				const uint8_t *mcode_addr,
+				size_t mcode_len)
+{
+	const struct dma_pl330_config *const dev_cfg = dev->config;
+	struct dma_pl330_dev_data *const dev_data = dev->data;
+	struct dma_pl330_ch_config *channel_cfg;
+	struct dma_pl330_ch_internal *ch_handle;
+	int ret;
+
+	if (channel >= dev_cfg->max_dma_channels) {
+		return -EINVAL;
+	}
+
+	if (!mcode_len || mcode_len > MICROCODE_SIZE_MAX) {
+		return -EINVAL;
+	}
+
+	if (!mcode_addr) {
+		return -EINVAL;
+	}
+
+	channel_cfg = &dev_data->channels[channel];
+	ch_handle = &channel_cfg->internal;
+
+	if (!atomic_cas(&channel_cfg->channel_is_active, DMA_CHANNEL_IS_FREE,
+			DMA_CHANNEL_IS_IN_USE)) {
+		return -EBUSY;
+	}
+
+	memcpy(UINT_TO_POINTER(channel_cfg->dma_exec_addr), mcode_addr, mcode_len);
+	sys_cache_data_flush_range(UINT_TO_POINTER(channel_cfg->dma_exec_addr), mcode_len);
+
+	ret = dma_pl330_start_dma_ch(dev, dev_cfg->reg_base, channel,
+				     ch_handle->nonsec_mode);
+	if (ret) {
+		LOG_ERR("Failed to start DMA PL330 with custom microcode");
+		atomic_set(&channel_cfg->channel_is_active, DMA_CHANNEL_IS_FREE);
+		return ret;
+	}
+
+	if (!channel_cfg->dma_callback) {
+		ret = dma_pl330_wait(dev_cfg->reg_base, channel);
+		if (ret) {
+			LOG_ERR("Timeout waiting for DMA PL330 custom microcode");
+		}
 		atomic_set(&channel_cfg->channel_is_active, DMA_CHANNEL_IS_FREE);
 	}
 
