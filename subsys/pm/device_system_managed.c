@@ -51,7 +51,7 @@ bool pm_suspend_devices(void)
 		if ((ret == -ENOSYS) || (ret == -ENOTSUP) || (ret == -EALREADY)) {
 			continue;
 		} else if (ret < 0) {
-			LOG_ERR("Device %s did not enter %s state (%d)",
+			LOG_WRN("Device %s did not enter %s state (%d)",
 				dev->name,
 				pm_device_state_str(PM_DEVICE_STATE_SUSPENDED),
 				ret);
