@@ -350,7 +350,8 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 			break;
 		}
 
-		data_cnt = (OSPI_MAX_TX_COUNT - (address % OSPI_MAX_TX_COUNT));
+		data_cnt = (OSPI_MAX_TX_COUNT - ((address / f_param->write_block_size) %
+							OSPI_MAX_TX_COUNT));
 		if (data_cnt > cnt) {
 			data_cnt = cnt;
 		}
