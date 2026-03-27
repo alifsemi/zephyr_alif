@@ -349,6 +349,8 @@ static int dma_pl330_setup_ch(const struct device *dev,
 
 	channel_cfg->loop_counter0 = loop_counter0;
 
+	sys_cache_data_flush_range(UINT_TO_POINTER(dma_exec_addr), offset + 4);
+
 	return 0;
 }
 
