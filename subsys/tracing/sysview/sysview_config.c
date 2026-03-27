@@ -50,6 +50,23 @@ void sys_trace_thread_info(struct k_thread *thread)
 	SEGGER_SYSVIEW_SendTaskInfo(&Info);
 }
 
+/**
+ * @brief User-defined SystemView system description hook.
+ *
+ * Override this weak function in your application to inject additional
+ * SEGGER_SYSVIEW_SendSysDesc() calls — e.g. IRQ name mappings:
+ *
+ *   void sysview_app_send_sys_desc(void) {
+ *       SEGGER_SYSVIEW_SendSysDesc("I#15=SysTick");
+ *   }
+ *
+ * The function is called at the end of every cbSendSystemDesc() invocation,
+ * including reconnects from the SystemView host.
+ */
+__attribute__((weak)) void sysview_app_send_sys_desc(void)
+{
+}
+
 
 static void cbSendSystemDesc(void)
 {
@@ -74,6 +91,7 @@ static void cbSendSystemDesc(void)
 		SEGGER_SYSVIEW_SendSysDesc(isr_desc);
 	}
 #endif
+	sysview_app_send_sys_desc();
 }
 
 static void send_task_list_cb(void)
