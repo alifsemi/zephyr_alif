@@ -26,6 +26,7 @@
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/pm/device.h>
 #include <zephyr/sys/sys_io.h>
 #include <zephyr/sys/device_mmio.h>
 
@@ -502,6 +503,30 @@ static int dma_alif_evtrtr_init(const struct device *dev)
 }
 
 /* Device instantiation macros */
+#ifdef CONFIG_PM_DEVICE
+static int dma_alif_evtrtr_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	int ret = 0;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		sys_write32(EVTRTR_DMA_REQ_CTRL_CB | EVTRTR_DMA_REQ_CTRL_CLB |
+			    EVTRTR_DMA_REQ_CTRL_CS | EVTRTR_DMA_REQ_CTRL_CLS,
+			    DEVICE_MMIO_GET(dev) + EVTRTR_DMA_REQ_CTRL_OFFSET);
+		break;
+	case PM_DEVICE_ACTION_SUSPEND:
+	case PM_DEVICE_ACTION_TURN_ON:
+	case PM_DEVICE_ACTION_TURN_OFF:
+		break;
+	default:
+		ret = -ENOTSUP;
+		break;
+	}
+
+	return ret;
+}
+#endif /* CONFIG_PM_DEVICE */
+
 #define DMA_ALIF_EVTRTR_INIT(inst)							\
 										\
 	static struct dma_alif_evtrtr_data dma_alif_evtrtr_data_##inst;		\
@@ -513,9 +538,11 @@ static int dma_alif_evtrtr_init(const struct device *dev)
 		.num_groups = DT_INST_PROP(inst, dma_groups),			\
 	};									\
 										\
+	PM_DEVICE_DT_INST_DEFINE(inst, dma_alif_evtrtr_pm_action);		\
+										\
 	DEVICE_DT_INST_DEFINE(inst,						\
 			      dma_alif_evtrtr_init,					\
-			      NULL,						\
+			      PM_DEVICE_DT_INST_GET(inst),			\
 			      &dma_alif_evtrtr_data_##inst,			\
 			      &dma_alif_evtrtr_config_##inst,			\
 			      POST_KERNEL,					\
