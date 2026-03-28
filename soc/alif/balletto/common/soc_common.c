@@ -13,6 +13,7 @@
 LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 
 #include <zephyr/pm/policy.h>
+#include <zephyr/dt-bindings/dma/alif_dma_event_router.h>
 
 /*
  * Lock deeper power states during early boot to prevent premature sleep
@@ -49,6 +50,24 @@ static int soc_pm_unlock_boot_states(void)
 	return 0;
 }
 SYS_INIT(soc_pm_unlock_boot_states, APPLICATION, 0);
+
+/* Configure HE_DMA_SEL register for LP-SPI based on DTS dmas property.
+ * B1: lpspi0 always uses DMA2.
+ *   HE_DMA_SEL[5:4]: 0x0 = DMA2 group 1, 0x1/0x2/0x3 = DMA2 group 2
+ */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay) && DT_NODE_HAS_PROP(DT_NODELABEL(lpspi0), dmas)
+static void soc_configure_he_dma_sel_lpspi(void)
+{
+	uint32_t dma_group = ALIF_DMA_DECODE_GROUP(
+		DT_PHA_BY_IDX(DT_NODELABEL(lpspi0), dmas, 0, channel));
+	/* group 1 = 0x0 (DMA2 group 1); group 2+ = 0x1 (DMA2 group 2) */
+	uint32_t sel_val = (dma_group == 1U) ? 0x0U : 0x1U;
+
+	sys_clear_bits(M55HE_CFG_HE_DMA_SEL, HE_DMA_SEL_LPSPI_Msk);
+	sys_set_bits(M55HE_CFG_HE_DMA_SEL,
+		     (sel_val << HE_DMA_SEL_LPSPI_Pos) & HE_DMA_SEL_LPSPI_Msk);
+}
+#endif /* lpspi0 with dmas */
 
 /**
  * @brief Perform common SoC initialization at boot
@@ -105,6 +124,11 @@ static int soc_init(void)
 	sys_write32(0U, M55HE_CFG_HE_DMA_IRQ);
 	sys_write32(0U, M55HE_CFG_HE_DMA_PERIPH);
 	sys_set_bits(M55HE_CFG_HE_DMA_CTRL, BIT(16));
+#endif
+
+	/* Configure HE_DMA_SEL mux for LP-SPI */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay) && DT_NODE_HAS_PROP(DT_NODELABEL(lpspi0), dmas)
+	soc_configure_he_dma_sel_lpspi();
 #endif
 
 	/* RTC Clk Enable */

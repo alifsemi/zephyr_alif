@@ -78,6 +78,10 @@
 #define M55HE_CFG_HE_DMA_PERIPH                 (M55HE_CFG_HE_CFG_BASE + 0x8)
 #define M55HE_CFG_HE_DMA_SEL                    (M55HE_CFG_HE_CFG_BASE + 0xC)
 #define M55HE_CFG_HE_CLK_ENA                    (M55HE_CFG_HE_CFG_BASE + 0x10)
+
+/* HE_DMA_SEL bit-field: LPSPI DMA selection (bits [5:4]) */
+#define HE_DMA_SEL_LPSPI_Pos                    4U
+#define HE_DMA_SEL_LPSPI_Msk                    (0x3U << HE_DMA_SEL_LPSPI_Pos)
 #define M55HE_CFG_HE_CAMERA_PIXCLK              (M55HE_CFG_HE_CFG_BASE + 0x20)
 
 /* lptimer helper macro */

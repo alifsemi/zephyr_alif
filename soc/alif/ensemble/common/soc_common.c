@@ -7,6 +7,7 @@
 #include <zephyr/arch/cpu.h>
 #include <soc_common.h>
 #include <zephyr/pm/policy.h>
+#include <zephyr/dt-bindings/dma/alif_dma_event_router.h>
 
 #if CONFIG_ENSEMBLE_GEN2 /* ENSEMBLE_GEN2 SoC */
 /* GPIO: enable debounce clock / divisor. */
@@ -98,6 +99,53 @@ static int soc_pm_unlock_boot_states(void)
 }
 SYS_INIT(soc_pm_unlock_boot_states, APPLICATION, 0);
 
+/* Configure HE_DMA_SEL register for LP-SPI based on DTS dmas property.
+ *
+ * E1C: lpspi0 always uses DMA2.
+ *   HE_DMA_SEL[5:4]: 0x0 = DMA2 group 1, 0x1/0x2/0x3 = DMA2 group 2
+ *
+ * E7/E5/E3/E8/E6/E4: spi4 can use DMA2 or DMA0.
+ *   HE_DMA_SEL[5:4]: 0x0 = DMA2, 0x1 = DMA0 group 1, 0x2/0x3 = DMA0 group 2
+ */
+#if IS_ENABLED(CONFIG_RTSS_HE)
+#if IS_ENABLED(CONFIG_SOC_SERIES_E1C)
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay) && DT_NODE_HAS_PROP(DT_NODELABEL(lpspi0), dmas)
+static void soc_configure_he_dma_sel_lpspi(void)
+{
+	uint32_t dma_group = ALIF_DMA_DECODE_GROUP(
+		DT_PHA_BY_IDX(DT_NODELABEL(lpspi0), dmas, 0, channel));
+	/* group 1 = 0x0 (DMA2 group 1); group 2+ = 0x1 (DMA2 group 2) */
+	uint32_t sel_val = (dma_group == 1U) ? 0x0U : 0x1U;
+
+	sys_clear_bits(M55HE_CFG_HE_DMA_SEL, HE_DMA_SEL_LPSPI_Msk);
+	sys_set_bits(M55HE_CFG_HE_DMA_SEL,
+		     (sel_val << HE_DMA_SEL_LPSPI_Pos) & HE_DMA_SEL_LPSPI_Msk);
+}
+#endif /* lpspi0 with dmas - E1C */
+#else /* E7/E5/E3/E8/E6/E4 */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi4), okay) && DT_NODE_HAS_PROP(DT_NODELABEL(spi4), dmas)
+static void soc_configure_he_dma_sel_lpspi(void)
+{
+	uint32_t sel_val;
+
+#if DT_SAME_NODE(DT_PHANDLE_BY_IDX(DT_NODELABEL(spi4), dmas, 0), DT_NODELABEL(evtrtr2))
+	sel_val = 0x0U; /* DMA2 selected */
+#else
+	/* DMA0 selected — determine group */
+	uint32_t dma_group = ALIF_DMA_DECODE_GROUP(
+		DT_PHA_BY_IDX(DT_NODELABEL(spi4), dmas, 0, channel));
+	/* group 1 = 0x1 (DMA0 group 1); group 2+ = 0x2 (DMA0 group 2) */
+	sel_val = (dma_group == 1U) ? 0x1U : 0x2U;
+#endif
+
+	sys_clear_bits(M55HE_CFG_HE_DMA_SEL, HE_DMA_SEL_LPSPI_Msk);
+	sys_set_bits(M55HE_CFG_HE_DMA_SEL,
+		     (sel_val << HE_DMA_SEL_LPSPI_Pos) & HE_DMA_SEL_LPSPI_Msk);
+}
+#endif /* spi4 with dmas - E-series */
+#endif /* CONFIG_SOC_SERIES_E1C */
+#endif /* CONFIG_RTSS_HE */
+
 /**
  * @brief Perform common SoC initialization at boot
  *        for ensemble family.
@@ -178,6 +226,19 @@ static int soc_init(void)
 	sys_write32(0U, M55HE_CFG_HE_DMA_PERIPH);
 	sys_set_bits(M55HE_CFG_HE_DMA_CTRL, BIT(16));
 #endif
+
+	/* Configure HE_DMA_SEL mux for LP-SPI */
+#if IS_ENABLED(CONFIG_RTSS_HE)
+#if IS_ENABLED(CONFIG_SOC_SERIES_E1C)
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay) && DT_NODE_HAS_PROP(DT_NODELABEL(lpspi0), dmas)
+	soc_configure_he_dma_sel_lpspi();
+#endif
+#else
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi4), okay) && DT_NODE_HAS_PROP(DT_NODELABEL(spi4), dmas)
+	soc_configure_he_dma_sel_lpspi();
+#endif
+#endif /* CONFIG_SOC_SERIES_E1C */
+#endif /* CONFIG_RTSS_HE */
 
 	/* Enable LPRTC Clock via VBAT registers */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(rtc0), okay)
