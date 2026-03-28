@@ -6,8 +6,11 @@
 #include <zephyr/init.h>
 #include <zephyr/arch/cpu.h>
 #include <soc_common.h>
+#include <zephyr/pm/pm.h>
 #include <zephyr/pm/policy.h>
 #include <zephyr/dt-bindings/dma/alif_dma_event_router.h>
+#include <se_service.h>
+#include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
 
 #if CONFIG_ENSEMBLE_GEN2 /* ENSEMBLE_GEN2 SoC */
 /* GPIO: enable debounce clock / divisor. */
@@ -98,6 +101,79 @@ static int soc_pm_unlock_boot_states(void)
 	return 0;
 }
 SYS_INIT(soc_pm_unlock_boot_states, APPLICATION, 0);
+
+/*
+ * Single SoC PM notifier for save/restore of SoC-level peripheral
+ * configuration registers across deep power states (SOFT_OFF, SUSPEND_TO_RAM).
+ */
+#if IS_ENABLED(CONFIG_PM)
+
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay)
+/* Saved HE_DMA_SEL value (LP-SPI mux) — restored before dma2 driver resumes */
+static uint32_t he_dma_sel_saved;
+#endif
+
+static void soc_pm_save_dma(void)
+{
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay)
+	he_dma_sel_saved = sys_read32(M55HE_CFG_HE_DMA_SEL);
+#endif
+}
+
+static void soc_pm_restore_dma(void)
+{
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma0), arm_dma_pl330, okay)
+	/* DMA0 registers are in SYSTOP — ensure it is ON before restoring. */
+	se_service_enable_pd(ALIF_PD_SYST);
+	sys_clear_bits(CLKCTRL_PER_MST_DMA_CTRL, BIT(0));
+	sys_write32(0U, CLKCTRL_PER_MST_DMA_IRQ);
+	sys_write32(0U, CLKCTRL_PER_MST_DMA_PERIPH);
+	sys_set_bits(CLKCTRL_PER_MST_DMA_CTRL, BIT(16));
+#endif
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma1), arm_dma_pl330, okay)
+	sys_clear_bits(M55HP_CFG_HP_DMA_CTRL, BIT(0));
+	sys_write32(0U, M55HP_CFG_HP_DMA_IRQ);
+	sys_write32(0U, M55HP_CFG_HP_DMA_PERIPH);
+	sys_set_bits(M55HP_CFG_HP_DMA_CTRL, BIT(16));
+#endif
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay)
+	sys_clear_bits(M55HE_CFG_HE_DMA_CTRL, BIT(0));
+	sys_write32(0U, M55HE_CFG_HE_DMA_IRQ);
+	sys_write32(0U, M55HE_CFG_HE_DMA_PERIPH);
+	sys_set_bits(M55HE_CFG_HE_DMA_CTRL, BIT(16));
+	sys_write32(he_dma_sel_saved, M55HE_CFG_HE_DMA_SEL);
+#endif
+}
+
+static void soc_pm_state_entry(enum pm_state state)
+{
+	if (state == PM_STATE_RUNTIME_IDLE || state == PM_STATE_SUSPEND_TO_IDLE) {
+		return;
+	}
+	soc_pm_save_dma();
+}
+
+static void soc_pm_pre_device_resume(enum pm_state state)
+{
+	if (state == PM_STATE_RUNTIME_IDLE || state == PM_STATE_SUSPEND_TO_IDLE) {
+		return;
+	}
+	soc_pm_restore_dma();
+}
+
+static struct pm_notifier soc_pm_notifier = {
+	.state_entry = soc_pm_state_entry,
+	.pre_device_resume = soc_pm_pre_device_resume,
+};
+
+static int soc_pm_notifier_init(void)
+{
+	pm_notifier_register(&soc_pm_notifier);
+	return 0;
+}
+SYS_INIT(soc_pm_notifier_init, PRE_KERNEL_2, 1);
+
+#endif /* CONFIG_PM */
 
 /* Configure HE_DMA_SEL register for LP-SPI based on DTS dmas property.
  *
