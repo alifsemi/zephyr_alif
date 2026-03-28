@@ -154,7 +154,6 @@ static int soc_init(void)
 	/* Enable DMA */
 #if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma0), arm_dma_pl330, okay) /* dma0 */
 	sys_set_bits(CLKCTRL_PER_MST_PERIPH_CLK_EN, BIT(4));
-	sys_write32(0x1111, EVTRTR0_DMA_REQ_CTRL);
 	sys_clear_bits(CLKCTRL_PER_MST_DMA_CTRL, BIT(0));
 	sys_write32(0U, CLKCTRL_PER_MST_DMA_IRQ);
 	sys_write32(0U, CLKCTRL_PER_MST_DMA_PERIPH);
@@ -163,7 +162,6 @@ static int soc_init(void)
 
 #if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma1), arm_dma_pl330, okay) /* dma1 */
 	sys_set_bits(M55HP_CFG_HP_CLK_ENA, BIT(4));
-	sys_write32(0x1111, EVTRTRLOCAL_DMA_REQ_CTRL);
 	sys_clear_bits(M55HP_CFG_HP_DMA_CTRL, BIT(0));
 	sys_write32(0U, M55HP_CFG_HP_DMA_IRQ);
 	sys_write32(0U, M55HP_CFG_HP_DMA_PERIPH);
@@ -172,7 +170,6 @@ static int soc_init(void)
 
 #if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay) /* dma2 */
 	sys_set_bits(M55HE_CFG_HE_CLK_ENA, BIT(4));
-	sys_write32(0x1111, EVTRTRLOCAL_DMA_REQ_CTRL);
 	sys_clear_bits(M55HE_CFG_HE_DMA_CTRL, BIT(0));
 	sys_write32(0U, M55HE_CFG_HE_DMA_IRQ);
 	sys_write32(0U, M55HE_CFG_HE_DMA_PERIPH);

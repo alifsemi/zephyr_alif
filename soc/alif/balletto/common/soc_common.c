@@ -100,7 +100,6 @@ static int soc_init(void)
 	/* Enable DMA */
 #if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay)
 	sys_set_bits(M55HE_CFG_HE_CLK_ENA, BIT(4));
-	sys_write32(0x1111, EVTRTRLOCAL_DMA_REQ_CTRL);
 	sys_clear_bits(M55HE_CFG_HE_DMA_CTRL, BIT(0));
 	sys_write32(0U, M55HE_CFG_HE_DMA_IRQ);
 	sys_write32(0U, M55HE_CFG_HE_DMA_PERIPH);
