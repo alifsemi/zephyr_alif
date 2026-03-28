@@ -14,6 +14,7 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/cache.h>
 #include <zephyr/drivers/dma/dma_pl330.h>
+#include <zephyr/pm/device.h>
 
 #include "dma_pl330.h"
 #include <soc_memory_map.h>
@@ -1068,6 +1069,48 @@ static DEVICE_API(dma, pl330_driver_api) = {
 	.get_status = dma_pl330_get_status,
 };
 
+#ifdef CONFIG_PM_DEVICE
+static int dma_pl330_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	const struct dma_pl330_config *const dev_cfg = dev->config;
+	struct dma_pl330_dev_data *const dev_data = dev->data;
+	int ret = 0;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		if (dev_cfg->clk_dev != NULL) {
+			ret = clock_control_on(dev_cfg->clk_dev, dev_cfg->clk_subsys);
+			if (ret == -EALREADY) {
+				ret = 0;
+			}
+		}
+		break;
+	case PM_DEVICE_ACTION_SUSPEND:
+		for (int ch = 0; ch < dev_cfg->max_dma_channels; ch++) {
+			if (atomic_get(&dev_data->channels[ch].channel_is_active) !=
+			    DMA_CHANNEL_IS_FREE) {
+				return -EBUSY;
+			}
+		}
+		if (dev_cfg->clk_dev != NULL) {
+			ret = clock_control_off(dev_cfg->clk_dev, dev_cfg->clk_subsys);
+			if (ret == -EALREADY) {
+				ret = 0;
+			}
+		}
+		break;
+	case PM_DEVICE_ACTION_TURN_ON:
+	case PM_DEVICE_ACTION_TURN_OFF:
+		break;
+	default:
+		ret = -ENOTSUP;
+		break;
+	}
+
+	return ret;
+}
+#endif /* CONFIG_PM_DEVICE */
+
 #define IRQ_CONFIGURE(n, inst)                                                                 \
 	IRQ_CONNECT(DT_INST_IRQ_BY_IDX(inst, n, irq),                                          \
 		    DT_INST_IRQ_BY_IDX(inst, n, priority), dma_pl330_isr,                      \
@@ -1125,7 +1168,9 @@ static DEVICE_API(dma, pl330_driver_api) = {
 		.channels = dma##inst##_pl330_channels,                                        \
 	};                                                                                     \
                                                                                                \
-	DEVICE_DT_INST_DEFINE(inst, &dma_pl330_initialize, NULL,                               \
+	PM_DEVICE_DT_INST_DEFINE(inst, dma_pl330_pm_action);                                   \
+                                                                                               \
+	DEVICE_DT_INST_DEFINE(inst, &dma_pl330_initialize, PM_DEVICE_DT_INST_GET(inst),        \
 				&pl330_data##inst, &pl330_config##inst,                        \
 				POST_KERNEL, CONFIG_DMA_INIT_PRIORITY,                         \
 				&pl330_driver_api);                                            \
