@@ -41,6 +41,7 @@
 				"channel4", "channel5",
 				"channel6", "channel7",
 				"abort";
+		clocks = <&clockctrl ALIF_DMA1_CLK>;
 		status = "disabled";
 	};
 
