@@ -969,6 +969,20 @@ static int dma_pl330_initialize(const struct device *dev)
 	struct dma_pl330_ch_config *channel_cfg;
 	uint8_t event_index;
 
+	if (dev_cfg->clk_dev != NULL) {
+		if (!device_is_ready(dev_cfg->clk_dev)) {
+			LOG_ERR("%s: clock device %s not ready",
+				dev->name, dev_cfg->clk_dev->name);
+			return -ENODEV;
+		}
+		int ret = clock_control_on(dev_cfg->clk_dev, dev_cfg->clk_subsys);
+
+		if (ret < 0 && ret != -EALREADY) {
+			LOG_ERR("%s: failed to enable DMA clock: %d", dev->name, ret);
+			return ret;
+		}
+	}
+
 	for (int channel = 0; channel < dev_cfg->max_dma_channels; channel++) {
 		channel_cfg = &dev_data->channels[channel];
 		channel_cfg->dma_exec_addr = dev_cfg->mcode_base +
@@ -1084,6 +1098,12 @@ static DEVICE_API(dma, pl330_driver_api) = {
 	[DT_INST_PROP(inst, dma_channels)];
 
 /********************** Device Definition per instance Macros. ***********************/
+#define CLOCK_CFG(inst)                                                                       \
+	COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, clocks),                                      \
+		(.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(inst)),                         \
+		 .clk_subsys = (clock_control_subsys_t)DT_INST_CLOCKS_CELL(inst, clkid),),    \
+		(.clk_dev = NULL, .clk_subsys = NULL,))
+
 #define DMAC_PL330_INIT(inst)                                                                  \
 	static void dma_pl330_irq_configure_##inst(const struct device *dev);                  \
 	MCODE_BASE_ALLOC(inst);                                                                \
@@ -1098,6 +1118,7 @@ static DEVICE_API(dma, pl330_driver_api) = {
 		.max_dma_channels = DT_INST_PROP(inst, dma_channels),                          \
 		.irq_configure = dma_pl330_irq_configure_##inst,                               \
 		.num_irqs = DT_NUM_IRQS(DT_DRV_INST(inst)),                                    \
+		CLOCK_CFG(inst)                                                                \
 	};                                                                                     \
                                                                                                \
 	static struct dma_pl330_dev_data pl330_data##inst = {                                  \

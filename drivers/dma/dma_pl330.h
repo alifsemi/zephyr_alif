@@ -8,6 +8,7 @@
 #define DMA_PL330_H
 
 #include <zephyr/drivers/dma.h>
+#include <zephyr/drivers/clock_control.h>
 
 #define DT_DRV_COMPAT arm_dma_pl330
 /*
@@ -218,6 +219,8 @@ struct dma_pl330_config {
 
 	uint8_t num_irqs;
 	void (*irq_configure)(const struct device *dev);
+	const struct device *clk_dev;
+	clock_control_subsys_t clk_subsys;
 };
 
 struct dma_pl330_dev_data {
