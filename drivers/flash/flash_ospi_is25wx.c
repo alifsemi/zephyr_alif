@@ -217,12 +217,6 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 		return -EINVAL;
 	}
 
-	/*In DDR Mode bytes and length should be in multiple of write_block_size */
-	if (length % f_param->write_block_size
-		|| !(IS_ALIGNED(buffer, f_param->write_block_size))) {
-		return -EINVAL;
-	}
-
 	/* Lock */
 	ret = k_sem_take(&dev_data->sem, K_MSEC(MAX_SEM_TIMEOUT));
 	if (ret != 0) {
@@ -232,7 +226,8 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 	LOG_DBG("read address %u length to read %d", (uint32_t) address, length);
 
 	/* number of block count */
-	length /= f_param->write_block_size;
+	size_t aligned_len = length & ~(f_param->write_block_size - 1);
+	size_t remaining = length - aligned_len;
 
 	data_ptr = (uint8_t *) buffer;
 
@@ -248,15 +243,17 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 		return ret;
 	}
 
-	while (length) {
+	size_t blocks = aligned_len / f_param->write_block_size;
+
+	while (blocks) {
 		ret = set_cs_pin(dev_data->ospi_handle, SLAVE_ACTIVATE);
 		if (ret != 0) {
 			break;
 		}
 
 		data_cnt = OSPI_MAX_RX_COUNT;
-		if (data_cnt > length) {
-			data_cnt = length;
+		if (data_cnt > blocks) {
+			data_cnt = blocks;
 		}
 
 		/* Prepare command with address */
@@ -264,7 +261,7 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 		cmd[1] = address;
 
 		k_event_clear(&dev_data->event_f,
-			      OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST);
+				  OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST);
 
 		ret = alif_hal_ospi_transfer(dev_data->ospi_handle, cmd, data_ptr, data_cnt);
 		if (ret != 0) {
@@ -273,8 +270,8 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 		}
 
 		event = k_event_wait(&dev_data->event_f,
-				     OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST, false,
-				     K_FOREVER);
+					 OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST, false,
+					 K_FOREVER);
 
 		if (!(event & OSPI_EVENT_TRANSFER_COMPLETE)) {
 			LOG_ERR("F-Read: Incomplete Event [%d]", event);
@@ -288,11 +285,53 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 			break;
 		}
 
-		length -= data_cnt;
+		blocks -= data_cnt;
 
 		/* Update address and data offset with configured block size*/
 		address += (data_cnt * f_param->write_block_size);
 		data_ptr += (data_cnt * f_param->write_block_size);
+	}
+
+	/* Handle remaining odd bytes if any:
+	 * read one full block into a temp buffer,then copy only the needed bytes.
+	 * write_block_size is 1, 2, or 4 so temp_buf[4] is always large enough.
+	 */
+	if (ret == 0 && remaining > 0) {
+		uint8_t temp_buf[4] = {0};
+
+		dev_data->trans_conf.wait_cycles = 16;
+		dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_32_BITS;
+		dev_data->trans_conf.frame_size = dev_cfg->rw_dfs;
+
+		ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle, &dev_data->trans_conf);
+		if (ret == 0) {
+			ret = set_cs_pin(dev_data->ospi_handle, SLAVE_ACTIVATE);
+		}
+		if (ret == 0) {
+			cmd[0] = CMD_READ_DATA;
+			cmd[1] = address;
+			k_event_clear(&dev_data->event_f,
+					  OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST);
+
+			ret = alif_hal_ospi_transfer(dev_data->ospi_handle, cmd, temp_buf, 1);
+		}
+		if (ret == 0) {
+			event = k_event_wait(&dev_data->event_f,
+						OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST,
+						false, K_FOREVER);
+
+			if (!(event & OSPI_EVENT_TRANSFER_COMPLETE)) {
+				LOG_ERR("F-Read: Incomplete Event [%d]", event);
+				set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+				ret = -EIO;
+			}
+		}
+		if (ret == 0) {
+			ret = set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+		}
+		if (ret == 0) {
+			memcpy(data_ptr, temp_buf, remaining);
+		}
 	}
 
 	k_sem_give(&dev_data->sem);
