@@ -50,6 +50,7 @@ struct udc_dwc3_msg {
 	uint8_t type;
 	uint8_t ep;
 	uint16_t recv_bytes;
+	struct usb_setup_packet setup;
 };
 
 enum udc_dwc3_msg_type {
@@ -717,7 +718,7 @@ static void udc_dwc3_depevt_handler(udc_dwc3_driver_t *drv, uint32_t reg)
 	drv->endp_number = endp_number;
 	ept = &drv->eps[endp_number];
 	if (!(ept->ep_status & USB_EP_ENABLED)) {
-		LOG_ERR("endpoint has not enabled");
+		LOG_ERR("ep%u: stale DEPEVT discarded (endpoint not enabled)", endp_number);
 		return;
 	}
 	/*  Get the event type  */
@@ -858,6 +859,9 @@ static void udc_dwc3_devt_handler(udc_dwc3_driver_t *drv, uint32_t reg)
 	event_type = USB_DEVT_TYPE(reg);
 	switch (event_type) {
 	case USB_EVENT_WAKEUP:
+		if (drv->udc_dwc3_wakeup_cb != NULL) {
+			drv->udc_dwc3_wakeup_cb(drv);
+		}
 		break;
 	case USB_EVENT_DISCONNECT:
 		if (drv->udc_dwc3_disconnect_cb != NULL) {
@@ -879,10 +883,34 @@ static void udc_dwc3_devt_handler(udc_dwc3_driver_t *drv, uint32_t reg)
 		}
 		udc_dwc3_prepare_setup(drv);
 		break;
-	case USB_EVENT_LINK_STATUS_CHANGE:
+	case USB_EVENT_LINK_STATUS_CHANGE: {
+		uint32_t link_state = USB_DEVT_LINK_STATE_INFO(reg);
+
+		switch (link_state) {
+		case USB_LINK_STATE_ON:
+			LOG_DBG("Link state: On (U0)");
+			break;
+		case USB_LINK_STATE_SLEEP_L1:
+			LOG_DBG("Link state: Sleep (L1)");
+			break;
+		case USB_LINK_STATE_SUSPEND:
+			LOG_DBG("Link state: Suspend (L2)");
+			if (drv->udc_dwc3_suspend_cb != NULL) {
+				drv->udc_dwc3_suspend_cb(drv);
+			}
+			break;
+		case USB_LINK_STATE_DISCONNECTED:
+			LOG_DBG("Link state: Disconnected");
+			break;
+		case USB_LINK_STATE_EARLY_SUSPEND:
+			LOG_DBG("Link state: Early Suspend");
+			break;
+		default:
+			LOG_DBG("Link state: Unknown (0x%x)", link_state);
+			break;
+		}
 		break;
-	case USB_EVENT_HIBER_REQ:
-		break;
+	}
 	default:
 		break;
 	}
@@ -1243,24 +1271,25 @@ static void udc_dwc3_set_speed(udc_dwc3_driver_t *drv)
 
 static void udc_dwc3_initialize_physical_eps(udc_dwc3_driver_t *drv)
 {
-	uint8_t  i;
-	uint8_t phy_ep;
+	uint8_t  ep_num;
 
-	for (i = 0U; i < drv->out_eps; i++) {
-		phy_ep = (i << 1U) | USB_DIR_OUT;
-		drv->eps[phy_ep].phy_ep            = phy_ep;
-		drv->eps[phy_ep].ep_dir            = USB_DIR_OUT;
-		drv->eps[phy_ep].ep_resource_index = 0U;
-	}
-	for (i = 0U; i < drv->in_eps; i++) {
-		phy_ep = (i << 1U) | USB_DIR_IN;
-		drv->eps[phy_ep].phy_ep            = phy_ep;
-		drv->eps[phy_ep].ep_dir            = USB_DIR_IN;
-		drv->eps[phy_ep].ep_resource_index = 0U;
+	for (ep_num = 0; ep_num < (drv->out_eps + drv->in_eps); ep_num++) {
+		drv->eps[ep_num].phy_ep             = 0;
+		drv->eps[ep_num].ep_dir             = 0;
+		drv->eps[ep_num].ep_resource_index  = 0U;
+		drv->eps[ep_num].ep_status          = 0U;
+		drv->eps[ep_num].ep_index           = 0U;
+		drv->eps[ep_num].ep_transfer_status = 0U;
+		drv->eps[ep_num].ep_maxpacket       = 0U;
+		drv->eps[ep_num].ep_requested_bytes = 0U;
+		drv->eps[ep_num].trb_enqueue        = 0U;
+		drv->eps[ep_num].trb_dequeue        = 0U;
+		drv->eps[ep_num].bytes_txed         = 0U;
+		drv->eps[ep_num].unaligned_txed     = 0U;
 	}
 	/* Fill the TRB memory with zeros */
-	for (i = 0; i < (drv->out_eps + drv->in_eps); i++) {
-		memset(&drv->eps[i].ep_trb[0], 0x00, USB_TRBS_PER_EP * USB_TRB_STRUCTURE_SIZE);
+	for (ep_num = 0; ep_num < (drv->out_eps + drv->in_eps); ep_num++) {
+		memset(&drv->eps[ep_num].ep_trb[0], 0x00, USB_TRBS_PER_EP * USB_TRB_STRUCTURE_SIZE);
 	}
 }
 
@@ -1310,6 +1339,20 @@ static int32_t wait_for_depcmd_completion(udc_dwc3_driver_t *drv, uint8_t ep_ind
 	}
 
 	return USB_SUCCESS;
+}
+
+
+static void udc_dwc3_enable_events(udc_dwc3_driver_t *drv)
+{
+	uint32_t reg;
+
+	reg = drv->regs->DEVTEN;
+	SET_BIT(reg, USB_DEV_DISSCONNEVTEN);
+	SET_BIT(reg, USB_DEV_USBRSTEVTEN);
+	SET_BIT(reg, USB_DEV_CONNECTDONEEVTEN);
+	SET_BIT(reg, USB_DEV_WKUPEVTEN);
+	SET_BIT(reg, USB_DEV_EVENT_ULSTCNGEN);
+	drv->regs->DEVTEN = reg;
 }
 
 static uint32_t udc_dwc3_device_init(udc_dwc3_driver_t *drv)
@@ -1406,11 +1449,7 @@ static uint32_t udc_dwc3_device_init(udc_dwc3_driver_t *drv)
 	/* Restore the USB2 phy state  */
 	udc_dwc3_restore_suspend_state(drv);
 	/* enable USB Reset, Connection Done, and USB/Link State Change events */
-	reg = drv->regs->DEVTEN;
-	SET_BIT(reg, USB_DEV_DISSCONNEVTEN);
-	SET_BIT(reg, USB_DEV_USBRSTEVTEN);
-	SET_BIT(reg, USB_DEV_CONNECTDONEEVTEN);
-	drv->regs->DEVTEN = reg;
+	udc_dwc3_enable_events(drv);
 
 	return ret;
 }
@@ -1479,6 +1518,22 @@ static void udc_dwc3_configure_fladj_register(udc_dwc3_driver_t *drv)
 static void udc_dwc3_configure_global_control_reg(udc_dwc3_driver_t *drv)
 {
 	uint32_t reg;
+	uint32_t pwropt = USB_GHWPARAMS1_EN_PWROPT(drv->hwparams.hwparams1);
+
+	/* DWC_USB3_EN_PWROPT > 0: clock gating supported
+	 * DWC_USB3_EN_PWROPT = 2: hibernation  supported
+	 */
+	switch (pwropt) {
+	case USB_GHWPARAMS1_EN_PWROPT_HIB:
+		LOG_INF("clock gating and hibernation supported");
+		break;
+	case USB_GHWPARAMS1_EN_PWROPT_CLK:
+		LOG_INF("clock gating supported");
+		break;
+	default:
+		LOG_INF("No power optimization supported");
+		break;
+	}
 
 	reg = drv->regs->GCTL;
 	SET_BIT(reg, USB_GCTL_DSBLCLKGTNG);
@@ -1609,13 +1664,40 @@ static bool udc_dwc3_verify_ip_core(udc_dwc3_driver_t *drv)
 	return true;
 }
 
-static void udc_dwc3_disconnect(udc_dwc3_driver_t *drv)
+static void udc_dwc3_disable_events(udc_dwc3_driver_t *drv)
 {
 	uint32_t reg;
+
+	reg = drv->regs->DEVTEN;
+	CLEAR_BIT(reg, USB_DEV_DISSCONNEVTEN);
+	CLEAR_BIT(reg, USB_DEV_USBRSTEVTEN);
+	CLEAR_BIT(reg, USB_DEV_CONNECTDONEEVTEN);
+	CLEAR_BIT(reg, USB_DEV_WKUPEVTEN);
+	CLEAR_BIT(reg, USB_DEV_EVENT_ULSTCNGEN);
+	drv->regs->DEVTEN = reg;
+}
+
+static int32_t udc_dwc3_disconnect(udc_dwc3_driver_t *drv)
+{
+	uint32_t reg;
+	int32_t timeout = USB_DCTL_START_TIMEOUT;
 
 	reg = drv->regs->DCTL;
 	CLEAR_BIT(reg, USB_DCTL_START);
 	drv->regs->DCTL = reg;
+
+	/* Wait for controller to halt (DSTS.DEVCTRLHLT set) */
+	do {
+		reg = drv->regs->DSTS;
+		if (reg & USB_DSTS_DEVCTRLHLT) {
+			LOG_INF("USB controller stopped");
+			return USB_SUCCESS;
+		}
+		k_busy_wait(1);
+	} while (--timeout);
+
+	LOG_ERR("Timeout waiting for controller to stop");
+	return USB_CONTROLLER_INIT_FAILED;
 }
 
 static int32_t udc_dwc3_connect(udc_dwc3_driver_t *drv)
@@ -1663,6 +1745,8 @@ static int32_t udc_dwc3_initialize(udc_dwc3_driver_t *drv)
 	drv->udc_dwc3_connect_cb = dwc3_connect_cb;
 	drv->udc_dwc3_setupstage_cb = dwc3_setupstage_cb;
 	drv->udc_dwc3_disconnect_cb = dwc3_disconnect_cb;
+	drv->udc_dwc3_wakeup_cb = dwc3_wakeup_cb;
+	drv->udc_dwc3_suspend_cb = dwc3_suspend_cb;
 	drv->udc_dwc3_data_in_cb = dwc3_data_in_cb;
 	drv->udc_dwc3_data_out_cb = dwc3_data_out_cb;
 	/* Verify the USB controller's IP core is valid */
@@ -1755,12 +1839,41 @@ void dwc3_disconnect_cb(udc_dwc3_driver_t *drv)
 	udc_submit_event(priv->dev, UDC_EVT_VBUS_REMOVED, 0);
 }
 
+void dwc3_wakeup_cb(udc_dwc3_driver_t *drv)
+{
+	struct udc_dwc3_data *priv = DWC3DATA(drv);
+	uint32_t reg;
+
+	/* Disable clock gating — restore normal operation after suspend */
+	reg = drv->regs->GCTL;
+	SET_BIT(reg, USB_GCTL_DSBLCLKGTNG);
+	drv->regs->GCTL = reg;
+	udc_set_suspended(priv->dev, false);
+	udc_submit_event(priv->dev, UDC_EVT_RESUME, 0);
+}
+
+void dwc3_suspend_cb(udc_dwc3_driver_t *drv)
+{
+	struct udc_dwc3_data *priv = DWC3DATA(drv);
+	uint32_t reg;
+
+	/* Enable clock gating — allow controller to save power during USB suspend */
+	reg = drv->regs->GCTL;
+	CLEAR_BIT(reg, USB_GCTL_DSBLCLKGTNG);
+	drv->regs->GCTL = reg;
+	if (!udc_is_suspended(priv->dev)) {
+		udc_set_suspended(priv->dev, true);
+	}
+	udc_submit_event(priv->dev, UDC_EVT_SUSPEND, 0);
+}
+
 void dwc3_setupstage_cb(udc_dwc3_driver_t *drv)
 {
 	struct udc_dwc3_data *priv = DWC3DATA(drv);
 	struct udc_dwc3_msg msg = {.type = UDC_DWC3_MSG_SETUP};
 	int err;
 
+	memcpy(&msg.setup, &drv->setup_data, sizeof(msg.setup));
 	err = k_msgq_put(&priv->dwc3_msgq_data, &msg, K_NO_WAIT);
 	if (err < 0) {
 		LOG_ERR("UDC Message queue overrun");
@@ -1879,7 +1992,11 @@ static int udc_dwc3_disable(const struct device *dev)
 		LOG_DBG("Failed to disable control endpoint");
 		return -EIO;
 	}
-	udc_dwc3_disconnect(&priv->drv);
+	if (udc_dwc3_disconnect(&priv->drv) != USB_SUCCESS) {
+		LOG_ERR("Failed to stop USB controller");
+		return -EIO;
+	}
+	udc_dwc3_disable_events(&priv->drv);
 	cfg->irq_disable_func(dev);
 
 	return 0;
@@ -1887,17 +2004,29 @@ static int udc_dwc3_disable(const struct device *dev)
 static int udc_dwc3_shutdown(const struct device *dev)
 {
 	struct udc_dwc3_data *priv = udc_get_private(dev);
+	struct udc_ep_config *cfg;
+	int ret;
 
 	irq_disable(priv->irq);
-	if (udc_ep_disable_internal(dev, USB_CONTROL_EP_OUT)) {
-		LOG_DBG("Failed to disable control endpoint");
-		return -EIO;
+
+	cfg = udc_get_ep_cfg(dev, USB_CONTROL_EP_OUT);
+	if (cfg && cfg->stat.enabled) {
+		ret = udc_ep_disable_internal(dev, USB_CONTROL_EP_OUT);
+		if (ret) {
+			LOG_DBG("Failed to disable control endpoint");
+			return -EIO;
+		}
 	}
 
-	if (udc_ep_disable_internal(dev, USB_CONTROL_EP_IN)) {
-		LOG_DBG("Failed to disable control endpoint");
-		return -EIO;
+	cfg = udc_get_ep_cfg(dev, USB_CONTROL_EP_IN);
+	if (cfg && cfg->stat.enabled) {
+		ret = udc_ep_disable_internal(dev, USB_CONTROL_EP_IN);
+		if (ret) {
+			LOG_DBG("Failed to disable control endpoint");
+			return -EIO;
+		}
 	}
+
 	return 0;
 }
 
@@ -1910,8 +2039,29 @@ static int udc_dwc3_set_address(const struct device *dev, const uint8_t addr)
 
 static int udc_dwc3_host_wakeup(const struct device *dev)
 {
-	return 0;
+	struct udc_dwc3_data *priv = udc_get_private(dev);
+	uint32_t reg;
+	uint32_t timeout = USB_TRANSFER_WAKEUP_RETRY;
+
+	/* Request link state transition to Recovery to generate Resume signaling */
+	reg = priv->drv.regs->DCTL;
+	reg &= ~USB_DCTL_ULSTCHNGREQ_MASK;
+	reg |= USB_DCTL_ULSTCHNGREQ(USB_DCTL_ULSTCHNGREQ_REMOTE_WAKEUP);
+	priv->drv.regs->DCTL = reg;
+
+	/* Wait for link to return to active (U0/On) state */
+	do {
+		reg = priv->drv.regs->DSTS;
+		if (USB_DSTS_USBLNKST(reg) == USB_LINK_STATE_ON) {
+			return 0;
+		}
+		k_busy_wait(1);
+	} while (--timeout);
+
+	LOG_ERR("Remote wakeup failed: link state timeout");
+	return -ETIMEDOUT;
 }
+
 static int udc_dwc3_ep_activate(const struct device *dev, struct udc_ep_config *ep_cfg)
 {
 	uint8_t  ep_num;
@@ -2075,10 +2225,13 @@ static int udc_dwc3_ctrl_feed_dout(const struct device *dev, size_t length)
 	struct net_buf *buf;
 	uint8_t  ep_num, ep_dir;
 	int ret;
+	size_t alloc_len = length;
 
+	/* Control OUT buffers must be multiple of bMaxPacketSize0 */
+	alloc_len = ROUND_UP(length, USB_CONTROL_EP_MAX_PKT);
 	ep_num = EP_NUM(cfg->addr);
 	ep_dir = (cfg->addr & USB_EP_DIR_MASK) ? USB_DIR_IN : USB_DIR_OUT;
-	buf = udc_ctrl_alloc(dev, USB_CONTROL_EP_OUT, length);
+	buf = udc_ctrl_alloc(dev, USB_CONTROL_EP_OUT, alloc_len);
 	if (buf == NULL) {
 		return -ENOMEM;
 	}
@@ -2107,9 +2260,10 @@ static void udc_dwc3_drop_control_transfers(const struct device *dev)
 }
 
 
-static void handle_setup_pkt(struct udc_dwc3_data *priv)
+static void handle_setup_pkt(struct udc_dwc3_data *priv,
+			    const struct udc_dwc3_msg *msg)
 {
-	struct usb_setup_packet *setup = (struct usb_setup_packet *)&priv->drv.setup_data;
+	const struct usb_setup_packet *setup = &msg->setup;
 	const struct device *dev = priv->dev;
 	struct net_buf *buf;
 	int err;
@@ -2230,7 +2384,7 @@ static void udc_dwc3_thread_handler(void *const arg)
 		k_msgq_get(&priv->dwc3_msgq_data, &msg, K_FOREVER);
 		switch (msg.type) {
 		case UDC_DWC3_MSG_SETUP:
-			handle_setup_pkt(priv);
+			handle_setup_pkt(priv, &msg);
 			break;
 		case UDC_DWC3_MSG_DATA_IN:
 			handle_data_in(priv, msg.ep);

@@ -206,6 +206,14 @@ typedef struct {     /*!< (@ 0x48200000) USB Structure */
 #define USB_GSBUSCFG0_INCRBRSTENA                        BIT(0) /* undefined length enable */
 #define USB_GSBUSCFG0_INCRBRST_MASK                      0xFF
 
+/* GHWPARAMS1: Power optimization capability (bits [25:24]) */
+#define USB_GHWPARAMS1_EN_PWROPT_MSK                     (0x3U << 24)
+#define USB_GHWPARAMS1_EN_PWROPT(reg)                   (((reg) & USB_GHWPARAMS1_EN_PWROPT_MSK) \
+									>> 24)
+#define USB_GHWPARAMS1_EN_PWROPT_NONE                    0  /* No power optimization */
+#define USB_GHWPARAMS1_EN_PWROPT_CLK                     1  /* Clock gating only */
+#define USB_GHWPARAMS1_EN_PWROPT_HIB                     2  /* Hibernation supported */
+
 /* dwc3 global control register bits   */
 #define USB_GCTL_CORESOFTRESET                           BIT(11)
 #define USB_GCTL_SOFITPSYNC                              BIT(10)
@@ -239,6 +247,7 @@ typedef struct {     /*!< (@ 0x48200000) USB Structure */
 #define USB_DCTL_ULSTCHNGREQ_MASK                        0x1E0
 #define USB_DCTL_ULSTCHNGREQ(n)                          (((n) << USB_DCTL_ULSTCHNGREQ_POS) \
 								& USB_DCTL_ULSTCHNGREQ_MASK)
+#define USB_DCTL_ULSTCHNGREQ_REMOTE_WAKEUP               0x8
 #define USB_DCTL_L1_HIBER_EN                             BIT(18)
 #define USB_DCTL_HIRD_THRES_POS                          24
 #define USB_DCTL_HIRD_THRES_MASK                         (0x1F << USB_DCTL_HIRD_THRES_POS)
@@ -254,6 +263,8 @@ typedef struct {     /*!< (@ 0x48200000) USB Structure */
 #define USB_DEV_CONNECTDONEEVTEN                         BIT(2)
 /* USB device link state change event  */
 #define USB_DEV_EVENT_ULSTCNGEN                          BIT(3)
+/* USB wakeup event */
+#define USB_DEV_WKUPEVTEN                                BIT(4)
 
 /* Dwc3 device status register      */
 #define USB_DSTS_USBLNKST_POS                            18
@@ -262,6 +273,15 @@ typedef struct {     /*!< (@ 0x48200000) USB Structure */
 								 >> USB_DSTS_USBLNKST_POS)
 #define USB_DSTS_DEVCTRLHLT                              BIT(22)
 #define USB_DSTS_DCNRD                                   BIT(29)
+
+/* USB link state values from DSTS.USBLnkSt[21:18] and link state change event info
+ * Valid in HS/FS/LS mode per DWC3 programming guide
+ */
+#define USB_LINK_STATE_ON                                0x0  /* On (U0) */
+#define USB_LINK_STATE_SLEEP_L1                          0x2  /* Sleep (L1) */
+#define USB_LINK_STATE_SUSPEND                           0x3  /* Suspend (L2) */
+#define USB_LINK_STATE_DISCONNECTED                      0x4  /* Disconnected (default) */
+#define USB_LINK_STATE_EARLY_SUSPEND                     0x5  /* Early Suspend */
 
 #define USB_DSTS_CONNECTSPD                              (7 << 0)
 #define USB_DSTS_HIGHSPEED                               (0 << 0)
@@ -434,7 +454,7 @@ typedef struct {     /*!< (@ 0x48200000) USB Structure */
 #define USB_DEVT_POS                                     8
 #define USB_DEVT_TYPE(reg)                               ((reg & USB_DEVT_MSK) >> USB_DEVT_POS)
 /* device Link state change event info  */
-#define USB_DEVT_LINK_STATE_MSK                          0xF0000
+#define USB_DEVT_LINK_STATE_MSK                          0x000F0000
 #define USB_DEVT_LINK_STATE_POS                          16
 #define USB_DEVT_LINK_STATE_INFO(reg)                    ((reg & USB_DEVT_LINK_STATE_MSK) \
 								>> USB_DEVT_LINK_STATE_POS)

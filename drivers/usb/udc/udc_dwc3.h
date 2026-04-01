@@ -216,6 +216,8 @@ typedef struct udc_dwc3_driver {
 	void                 (*udc_dwc3_device_reset_cb)(struct udc_dwc3_driver *drv);
 	void                 (*udc_dwc3_connect_cb)(struct udc_dwc3_driver *drv);
 	void                 (*udc_dwc3_disconnect_cb)(struct udc_dwc3_driver *drv);
+	void                 (*udc_dwc3_wakeup_cb)(struct udc_dwc3_driver *drv);
+	void                 (*udc_dwc3_suspend_cb)(struct udc_dwc3_driver *drv);
 	void                 (*udc_dwc3_setupstage_cb)(struct udc_dwc3_driver *drv);
 	void                 (*udc_dwc3_data_in_cb)(struct udc_dwc3_driver *drv, uint8_t ep_num);
 	void                 (*udc_dwc3_data_out_cb)(struct udc_dwc3_driver *drv, uint8_t ep_num);
@@ -248,6 +250,8 @@ void dwc3_reset_cb(udc_dwc3_driver_t *drv);
 void dwc3_setupstage_cb(udc_dwc3_driver_t *drv);
 void dwc3_disconnect_cb(udc_dwc3_driver_t *drv);
 void dwc3_connect_cb(udc_dwc3_driver_t *drv);
+void dwc3_wakeup_cb(udc_dwc3_driver_t *drv);
+void dwc3_suspend_cb(udc_dwc3_driver_t *drv);
 void dwc3_data_in_cb(udc_dwc3_driver_t *drv, uint8_t ep_num);
 void dwc3_data_out_cb(udc_dwc3_driver_t *drv, uint8_t ep_num);
 
