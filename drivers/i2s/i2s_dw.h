@@ -158,7 +158,6 @@ struct i2s_dw_cfg {
 /* Device runtime data */
 struct i2s_dw_data {
 	DEVICE_MMIO_RAM;
-	enum i2s_dir dir;
 	uint32_t imr_cache;
 	struct i2s_dw_stream rx;
 	struct i2s_dw_stream tx;
