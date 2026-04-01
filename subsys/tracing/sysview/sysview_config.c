@@ -63,7 +63,7 @@ void sys_trace_thread_info(struct k_thread *thread)
  * The function is called at the end of every cbSendSystemDesc() invocation,
  * including reconnects from the SystemView host.
  */
-__attribute__((weak)) void sysview_app_send_sys_desc(void)
+__weak void sysview_app_send_sys_desc(void)
 {
 }
 
