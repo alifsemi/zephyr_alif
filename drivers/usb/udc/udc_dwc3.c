@@ -12,6 +12,7 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/usb/udc.h>
 #include <zephyr/drivers/clock_control.h>
+#include <zephyr/pm/device.h>
 
 #include "udc_common.h"
 #if CONFIG_UDC_DWC3_ALIF
@@ -2305,6 +2306,185 @@ static int udc_dwc3_driver_preinit(const struct device *dev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_DEVICE
+static bool udc_dwc3_is_transfer_ongoing(struct udc_dwc3_data *priv)
+{
+	udc_dwc3_driver_t *drv = &priv->drv;
+	udc_dwc3_ep_t *ept;
+	udc_dwc3_trb_t *trb_ptr;
+	uint8_t ep_num;
+
+	/* Check control endpoint: if not in SETUP phase, transfer is active */
+	if (drv->ep0_state != EP0_SETUP_PHASE) {
+		LOG_WRN("PM suspend: Control EP has ongoing transfer (ep0_state=%d)",
+			drv->ep0_state);
+		return true;
+	}
+
+	/* Check non-control endpoints */
+	for (ep_num = 2; ep_num < (drv->out_eps + drv->in_eps); ep_num++) {
+		ept = &drv->eps[ep_num];
+
+		/* Skip endpoints that are not enabled */
+		if (!(ept->ep_status & USB_EP_ENABLED)) {
+			continue;
+		}
+
+		/* Skip if no transfer has been started on this endpoint */
+		if (ept->trb_enqueue == ept->trb_dequeue &&
+			!(ept->ep_status & USB_EP_BUSY)) {
+			continue;
+		}
+
+		/* Check HWO bit on the TRB at enqueue index.
+		 * HWO=1: hardware owns TRB, device is ready/waiting for host
+		 * HWO=0: transfer completed, pending software processing
+		 */
+		trb_ptr = &ept->ep_trb[ept->trb_enqueue];
+
+		if (!(trb_ptr->ctrl & USB_TRB_CTRL_HWO)) {
+			LOG_WRN("PM suspend: EP %d has ongoing transfer processing",
+				ep_num);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static int udc_dwc3_suspend(const struct device *dev)
+{
+	struct udc_dwc3_data *priv = udc_get_private(dev);
+	const struct udc_dwc3_config *cfg = dev->config;
+	int32_t ret;
+
+	/* Check for any ongoing transfers before suspending */
+	if (udc_dwc3_is_transfer_ongoing(priv)) {
+		LOG_ERR("PM suspend: Cannot suspend with ongoing transfers");
+		return -EBUSY;
+	}
+
+	/* Disable events to prevent spurious events during disconnect */
+	udc_dwc3_disable_events(&priv->drv);
+	/* Stop controller: RunStop=0, wait for DEVCTRLHLT */
+	ret = udc_dwc3_disconnect(&priv->drv);
+	if (ret != USB_SUCCESS) {
+		LOG_ERR("PM suspend: controller stop failed");
+		goto err_restore_events;
+	}
+	/* Disable the control endpoints */
+	udc_ep_disable_internal(dev, USB_CONTROL_EP_OUT);
+	udc_ep_disable_internal(dev, USB_CONTROL_EP_IN);
+	/* Disable USB IRQ at NVIC */
+	cfg->irq_disable_func(dev);
+	/* Cleanup event buffer */
+	udc_dwc3_cleanup_event_buffer(&priv->drv);
+	/* Disable clock (USB) */
+	ret = clock_control_off(cfg->clock_dev, cfg->clock_subsys);
+	if (ret != 0 && ret != -EALREADY) {
+		LOG_ERR("PM suspend: clock disable failed (%d)", ret);
+		return ret;
+	}
+#if DT_INST_NUM_CLOCKS(0) > 1
+	ret = clock_control_off(cfg->clock_dev, cfg->clock_subsys2);
+	if (ret != 0 && ret != -EALREADY) {
+		LOG_ERR("PM suspend: clock disable failed (%d)", ret);
+		return ret;
+	}
+#endif
+
+	return 0;
+
+err_restore_events:
+	udc_dwc3_enable_events(&priv->drv);
+	return -EIO;
+}
+
+static int udc_dwc3_resume(const struct device *dev)
+{
+	struct udc_dwc3_data *priv = udc_get_private(dev);
+	const struct udc_dwc3_config *cfg = dev->config;
+	int32_t ret;
+
+	if (!device_is_ready(cfg->clock_dev)) {
+		return -ENODEV;
+	}
+	/* Enable clock (USB) */
+	ret = clock_control_on(cfg->clock_dev, cfg->clock_subsys);
+	if (ret != 0 && ret != -EALREADY) {
+		LOG_ERR("PM resume: clock enable failed (%d)", ret);
+		return ret;
+	}
+#if DT_INST_NUM_CLOCKS(0) > 1
+	ret = clock_control_on(cfg->clock_dev, cfg->clock_subsys2);
+	if (ret != 0 && ret != -EALREADY) {
+		LOG_ERR("PM resume: clock enable failed (%d)", ret);
+		goto err_clock_off;
+	}
+#endif
+
+	ret = udc_dwc3_device_init(&priv->drv);
+	if (ret) {
+		LOG_ERR("PM resume: device_init failed (%d)", ret);
+		goto err_clock_off;
+	}
+
+	/* Enable the default control endpoint */
+	ret = udc_ep_enable_internal(dev, USB_CONTROL_EP_OUT, USB_EP_TYPE_CONTROL,
+				     USB_CONTROL_EP_MAX_PKT, 0);
+	if (ret) {
+		LOG_ERR("PM resume: Failed enabling ep 0x%02x", USB_CONTROL_EP_OUT);
+		goto err_clock_off;
+	}
+	ret = udc_ep_enable_internal(dev, USB_CONTROL_EP_IN, USB_EP_TYPE_CONTROL,
+				     USB_CONTROL_EP_MAX_PKT, 0);
+	if (ret) {
+		LOG_ERR("PM resume: Failed enabling ep 0x%02x", USB_CONTROL_EP_IN);
+		goto err_disable_ep_out;
+	}
+	/* Restart controller: RunStop=1 */
+	ret = udc_dwc3_connect(&priv->drv);
+	if (ret != USB_SUCCESS) {
+		LOG_ERR("PM resume: controller start failed");
+		goto err_disable_eps;
+	}
+
+	/* Re-enable USB IRQ at NVIC */
+	cfg->irq_enable_func(dev);
+
+	return 0;
+
+err_disable_eps:
+	udc_ep_disable_internal(dev, USB_CONTROL_EP_IN);
+err_disable_ep_out:
+	udc_ep_disable_internal(dev, USB_CONTROL_EP_OUT);
+err_clock_off:
+	udc_dwc3_disable_events(&priv->drv);
+	clock_control_off(cfg->clock_dev, cfg->clock_subsys);
+#if DT_INST_NUM_CLOCKS(0) > 1
+	clock_control_off(cfg->clock_dev, cfg->clock_subsys2);
+#endif
+	return -EIO;
+}
+
+static int udc_dwc3_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		return udc_dwc3_suspend(dev);
+	case PM_DEVICE_ACTION_RESUME:
+		return udc_dwc3_resume(dev);
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Power domain handling is automatic via PM framework */
+		break;
+	default:
+		return -ENOTSUP;
+	}
+	return 0;
+}
+#endif /* CONFIG_PM_DEVICE */
+
 static const struct udc_api udc_dwc3_api = {
 	.lock = udc_dwc3_lock,
 	.unlock = udc_dwc3_unlock,
@@ -2397,9 +2577,14 @@ static const struct udc_api udc_dwc3_api = {
 	.clock_subsys = (clock_control_subsys_t) DT_INST_CLOCKS_CELL_BY_IDX(n, 0, clkid),\
 	UDC_DWC3_CLOCK_SUBSYS2(n)							\
 	};													\
-														\
-	DEVICE_DT_INST_DEFINE(n, udc_dwc3_driver_preinit, NULL,	\
-			&udc_data_##n, &udc_dwc3_cfg_##n,				\
-			POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &udc_dwc3_api);\
+								\
+	PM_DEVICE_DT_INST_DEFINE(n, udc_dwc3_pm_action);	\
+								\
+	DEVICE_DT_INST_DEFINE(n, udc_dwc3_driver_preinit,	\
+			PM_DEVICE_DT_INST_GET(n),		\
+			&udc_data_##n, &udc_dwc3_cfg_##n,	\
+			POST_KERNEL,				\
+			CONFIG_KERNEL_INIT_PRIORITY_DEVICE,	\
+			&udc_dwc3_api);\
 
 DT_INST_FOREACH_STATUS_OKAY(UDC_DWC3_DEVICE_DEFINE)
