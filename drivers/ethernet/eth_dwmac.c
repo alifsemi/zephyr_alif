@@ -532,8 +532,14 @@ static int dwmac_set_config(const struct device *dev,
 
 static void dwmac_iface_init(struct net_if *iface)
 {
-	struct dwmac_priv *p = net_if_get_device(iface)->data;
+	const struct device *dev = net_if_get_device(iface);
+	struct dwmac_priv *p = dev->data;
 	uint32_t reg_val;
+
+	if (!device_is_ready(dev)) {
+		LOG_ERR("device not ready (probe failed), skipping iface init");
+		return;
+	}
 
 	__ASSERT(!p->iface, "interface already initialized?");
 	p->iface = iface;
