@@ -1,0 +1,156 @@
+# SPDX-FileCopyrightText: Copyright Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Alif AIPM run-profile node.
+
+  Contains child run-profile nodes — one per PM state/substate combination.
+  One child without a pm-state property is the cold-boot default and the
+  universal fallback for any PM state not explicitly covered by another child.
+
+  At build time, se_service.c uses DT_FOREACH_CHILD_STATUS_OKAY to generate a
+  compile-time lookup table (aipm_profiles[]). At runtime, the matching child
+  is selected by (pm-state, pm-substate); the default child is used as fallback.
+
+  Timing guarantees:
+    Cold boot  — profile is applied at the end of se_service_mhuv2_nodes_init(),
+                 which runs at PRE_KERNEL_1, CONFIG_SE_SERVICE_INIT_PRIORITY
+                 (default 45).  Power domains declared in aipm-power-domains are
+                 active from that point onward.  Drivers or SYS_INIT callbacks
+                 that require a power domain (e.g. SYSTOP for peripheral register
+                 access) must run at PRE_KERNEL_1 priority > 45.
+
+    PM resume  — profile is applied in the pre_device_resume PM notifier, which
+                 fires before pm_resume_devices().  Apps registering their own
+                 pre_device_resume notifier must register after se_service
+                 (i.e. at a later SYS_INIT priority) so that the run profile —
+                 and thus any required power domains — is already active when
+                 their notifier runs.
+
+  Child nodes with status = "disabled" are excluded from the compiled table.
+  Set status = "disabled" on a DTSI-defined child in a board overlay to suppress
+  it and replace it with a custom child in the same overlay.
+
+compatible: "alif,aipm-run"
+
+child-binding:
+  description: |
+    Run profile for a specific PM state/substate, mapping to run_profile_t.
+    A child without pm-state is the cold-boot default / universal fallback.
+    Set status = "disabled" to exclude this child from the compiled table.
+
+  properties:
+    pm-state:
+      type: int
+      description: |
+        Zephyr pm_state enum value this profile targets on resume.
+        Omit entirely for the cold-boot default / universal fallback node.
+        Values: 0=ACTIVE, 1=RUNTIME_IDLE, 2=SUSPEND_TO_IDLE,
+                3=SUSPEND_TO_RAM, 4=SUSPEND_TO_DISK, 5=SOFT_OFF.
+
+    pm-substate:
+      type: int
+      default: 0
+      description: Substate index within pm-state. Default 0.
+
+    aipm-power-domains:
+      type: int
+      description: |
+        Power domain bitmask (run_profile_t.power_domains).
+        Use ALIF_PD_*_MASK constants from
+        dt-bindings/misc/alif_aipm_common.h.
+
+    dcdc-voltage:
+      type: int
+      description: |
+        DCDC output voltage in millivolts (run_profile_t.dcdc_voltage).
+        Valid values: 800, 825, 850.
+
+    dcdc-mode:
+      type: string
+      enum:
+        - "off"
+        - "pfm-auto"
+        - "pfm-forced"
+        - "pwm"
+      description: |
+        DCDC operating mode (run_profile_t.dcdc_mode).
+          "off"        - DCDC_MODE_OFF
+          "pfm-auto"   - DCDC_MODE_PFM_AUTO
+          "pfm-forced" - DCDC_MODE_PFM_FORCED
+          "pwm"        - DCDC_MODE_PWM
+
+    aon-clk-src:
+      type: string
+      enum:
+        - "lfrc"
+        - "lfxo"
+      description: |
+        Always-on low-frequency clock source (run_profile_t.aon_clk_src).
+          "lfrc" - CLK_SRC_LFRC
+          "lfxo" - CLK_SRC_LFXO
+
+    clk-src:
+      type: string
+      enum:
+        - "hfrc"
+        - "hfxo"
+        - "pll"
+      description: |
+        High-frequency run clock source (run_profile_t.run_clk_src).
+          "hfrc" - CLK_SRC_HFRC
+          "hfxo" - CLK_SRC_HFXO
+          "pll"  - CLK_SRC_PLL
+
+    cpu-clk-freq:
+      type: int
+      required: true
+      description: |
+        CPU clock frequency (run_profile_t.cpu_clk_freq).
+        Use ALIF_CLOCK_FREQ_* constants from
+        dt-bindings/misc/alif_aipm_common.h.
+
+    scaled-clk-freq:
+      type: int
+      default: 0
+      description: |
+        Scaled clock frequency (run_profile_t.scaled_clk_freq).
+        Use ALIF_SCALED_FREQ_* constants from dt-bindings/misc/alif_aipm_common.h.
+        Default 0 = ALIF_SCALED_FREQ_RC_ACTIVE_76_8_MHZ (no explicit scaling override).
+
+    memory-blocks:
+      type: int
+      description: |
+        Memory block retention bitmask (run_profile_t.memory_blocks).
+        Use ALIF_*_MASK constants from the per-SoC header:
+          alif_aipm_ensemble.h        — base Ensemble (E1/E3/E5/E7)
+          alif_aipm_ensemble_gen2.h   — Ensemble Gen2 (E4/E6/E8)
+          alif_aipm_ensemble_e1c.h    — Ensemble E1C
+          alif_aipm_balletto_b1.h     — Balletto B1
+
+    ip-clock-gating:
+      type: int
+      default: 0
+      description: |
+        IP clock-gate bitmask (run_profile_t.ip_clock_gating).
+        0 = all IPs gated.
+        Use ALIF_IP_CLK_GATE_*_MASK constants from dt-bindings/misc/alif_aipm_common.h.
+
+    phy-pwr-gating:
+      type: int
+      default: 0
+      description: |
+        PHY power-gate bitmask (run_profile_t.phy_pwr_gating).
+        0 = all PHYs gated.
+        Use ALIF_PHY_GATE_*_MASK constants from dt-bindings/misc/alif_aipm_common.h.
+
+    vdd-ioflex:
+      type: int
+      default: 1
+      description: |
+        IOFLEX voltage level (run_profile_t.vdd_ioflex_3V3 = ioflex_mode_t).
+        Use ALIF_IOFLEX_LEVEL_* constants from dt-bindings/misc/alif_aipm_common.h.
+          ALIF_IOFLEX_LEVEL_3V3 = 0  (3.3 V GPIOs)
+          ALIF_IOFLEX_LEVEL_1V8 = 1  (1.8 V GPIOs, default)
+        Note: the enum ordering is counter-intuitive (3V3 = 0); always use
+        the named constants rather than a raw integer.
