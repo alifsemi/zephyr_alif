@@ -99,6 +99,17 @@ config SD_DATA_RETRIES
 	  Number of times to retry sending data to SD card in case of failure
 
 
+config SDIO_USE_INTERNAL_BUFFER
+	bool "Use internal buffer for SDIO data transfers"
+	depends on SDIO_STACK
+	default n
+	help
+	  When enabled, SDIO extended I/O transfers copy data through the
+	  SD card internal buffer. This is needed on platforms where the
+	  caller's buffer may not meet DMA alignment or memory region
+	  requirements of the SDHC driver. When disabled, the caller's
+	  buffer is passed directly to the SDHC driver.
+
 config SD_UHS_PROTOCOL
 	bool "Ultra high speed SD card protocol support"
 	default y if SDHC_SUPPORTS_UHS

@@ -132,6 +132,7 @@ static int sdio_io_rw_extended(struct sd_card *card,
 {
 	struct sdhc_command cmd = {0};
 	struct sdhc_data data = {0};
+	int ret;
 
 	cmd.opcode = SDIO_RW_EXTENDED;
 	cmd.arg = (func << SDIO_CMD_ARG_FUNC_NUM_SHIFT) |
@@ -151,9 +152,24 @@ static int sdio_io_rw_extended(struct sd_card *card,
 	data.block_size = block_size;
 	/* Host expects blocks to be at least 1 */
 	data.blocks = blocks ? blocks : 1;
-	data.data = buf;
+
+	if (IS_ENABLED(CONFIG_SDIO_USE_INTERNAL_BUFFER)) {
+		if (direction == SDIO_IO_WRITE) {
+			memcpy(card->card_buffer, buf, block_size * data.blocks);
+		}
+		data.data = card->card_buffer;
+	} else {
+		data.data = buf;
+	}
 	data.timeout_ms = CONFIG_SD_DATA_TIMEOUT;
-	return sdhc_request(card->sdhc, &cmd, &data);
+	ret = sdhc_request(card->sdhc, &cmd, &data);
+
+	if (IS_ENABLED(CONFIG_SDIO_USE_INTERNAL_BUFFER) && !ret &&
+	    (direction == SDIO_IO_READ)) {
+		memcpy(buf, card->card_buffer, block_size * data.blocks);
+	}
+
+	return ret;
 }
 
 /*
