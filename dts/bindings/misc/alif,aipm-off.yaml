@@ -1,0 +1,171 @@
+# SPDX-FileCopyrightText: Copyright Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Alif AIPM off-profile node.
+
+  Contains child off-profile nodes — one per PM state/substate the system
+  can enter.  Each child maps to an off_profile_t sent to the SE just before
+  the CPU is power-gated.
+
+  The parent node carries vtor-address: the vector-table base address the SE
+  uses to resume the CPU after wakeup.  All children in one node belong to
+  one image, so vtor-address is the same for every state.  SoC DTSI defaults:
+    - RTSS-HE, E1C, B1: 0x80000000  (MRAM boot)
+    - RTSS-HP:          0x80200000  (MRAM boot)
+  Override in a board overlay for MRAM or SRAM-relocation boot.
+
+  At build time, se_service.c uses DT_FOREACH_CHILD_STATUS_OKAY to generate a
+  compile-time lookup table (aipm_off_profiles[]).  At runtime, matching is by
+  (pm-state, pm-substate) in the state_entry PM notifier, just before the CPU
+  enters the low-power state.
+
+  wakeup-events and ewic-cfg default to 0 in SoC DTSIs and must be set in a
+  board overlay to enable wakeup sources.  The node itself is status = "disabled"
+  in SoC DTSIs; a board overlay sets status = "okay" to activate it.
+
+
+compatible: "alif,aipm-off"
+
+properties:
+  vtor-address:
+    type: int
+    required: true
+    description: |
+      Vector table base address (off_profile_t.vtor_address).
+      The SE uses this to resume CPU execution after wakeup.
+      Must match the active VTOR at the time of entry:
+        0x00000000   — TCM boot (RTSS-HE, E1C, B1)
+        0x80200000   — MRAM boot (RTSS-HP default)
+        0x80000000   — MRAM boot (RTSS-HE default)
+      Override in a board overlay if the vector table is relocated to SRAM.
+
+child-binding:
+  description: |
+    Off profile for a specific PM state/substate, mapping to off_profile_t.
+    pm-state is required — every child must target an explicit state.
+    Set status = "disabled" to exclude this child from the compiled table.
+
+  properties:
+    pm-state:
+      type: int
+      required: true
+      description: |
+        Zephyr pm_state enum value this off profile applies to.
+        Values: 3=SUSPEND_TO_RAM, 5=SOFT_OFF.
+
+    pm-substate:
+      type: int
+      default: 0
+      description: Substate index within pm-state. Default 0.
+
+    aipm-power-domains:
+      type: int
+      description: |
+        Power domain bitmask (off_profile_t.power_domains).
+        Domains kept powered during sleep.
+        Use ALIF_PD_*_MASK constants from
+        dt-bindings/misc/alif_aipm_common.h.
+
+    dcdc-voltage:
+      type: int
+      description: |
+        DCDC output voltage (off_profile_t.dcdc_voltage).
+        Valid values: 800, 825, 850.
+
+    dcdc-mode:
+      type: string
+      enum:
+        - "off"
+        - "pfm-auto"
+        - "pfm-forced"
+        - "pwm"
+      description: |
+        DCDC operating mode (off_profile_t.dcdc_mode).
+          "off"        - DCDC_MODE_OFF  (typical for sleep)
+          "pfm-auto"   - DCDC_MODE_PFM_AUTO
+          "pfm-forced" - DCDC_MODE_PFM_FORCED
+          "pwm"        - DCDC_MODE_PWM
+
+    aon-clk-src:
+      type: string
+      enum:
+        - "lfrc"
+        - "lfxo"
+      description: |
+        Always-on low-frequency clock source (off_profile_t.aon_clk_src).
+          "lfrc" - CLK_SRC_LFRC
+          "lfxo" - CLK_SRC_LFXO (default; more accurate)
+
+    stby-clk-src:
+      type: string
+      enum:
+        - "hfrc"
+        - "hfxo"
+        - "pll"
+      description: |
+        High-frequency standby clock source (off_profile_t.stby_clk_src).
+        Used by the SE in SoC standby mode.
+          "hfrc" - CLK_SRC_HFRC (default)
+          "hfxo" - CLK_SRC_HFXO
+          "pll"  - CLK_SRC_PLL
+
+    stby-clk-freq:
+      type: int
+      description: |
+        Scaled standby clock frequency (off_profile_t.stby_clk_freq).
+        Use ALIF_SCALED_FREQ_RC_STDBY_* constants from
+        dt-bindings/misc/alif_aipm_common.h.
+        Default ALIF_SCALED_FREQ_RC_STDBY_76_8_MHZ (= 8) when omitted.
+
+    memory-blocks:
+      type: int
+      description: |
+        Memory block retention bitmask (off_profile_t.memory_blocks).
+        Memories kept powered and retained during sleep.
+        Defaults to 0 (no retention) if omitted.
+        Use ALIF_*_MASK constants from the per-SoC header:
+          alif_aipm_ensemble.h        — base Ensemble (E1/E3/E5/E7)
+          alif_aipm_ensemble_gen2.h   — Ensemble Gen2 (E4/E6/E8)
+          alif_aipm_ensemble_e1c.h    — Ensemble E1C
+          alif_aipm_balletto_b1.h     — Balletto B1
+
+    ip-clock-gating:
+      type: int
+      default: 0
+      description: |
+        IP clock-gate bitmask (off_profile_t.ip_clock_gating).
+        Use ALIF_IP_CLK_GATE_*_MASK from dt-bindings/misc/alif_aipm_common.h.
+
+    phy-pwr-gating:
+      type: int
+      default: 0
+      description: |
+        PHY power-gate bitmask (off_profile_t.phy_pwr_gating).
+        Use ALIF_PHY_GATE_*_MASK from dt-bindings/misc/alif_aipm_common.h.
+
+    vdd-ioflex:
+      type: int
+      default: 1
+      description: |
+        IOFLEX voltage level (off_profile_t.vdd_ioflex_3V3 = ioflex_mode_t).
+        Use ALIF_IOFLEX_LEVEL_* constants from dt-bindings/misc/alif_aipm_common.h.
+          ALIF_IOFLEX_LEVEL_3V3 = 0  (3.3 V GPIOs)
+          ALIF_IOFLEX_LEVEL_1V8 = 1  (1.8 V GPIOs, default)
+
+    wakeup-events:
+      type: int
+      default: 0
+      description: |
+        Wakeup event bitmask (off_profile_t.wakeup_events).
+        0 = no wakeup sources (default in SoC DTSI; set in board overlay).
+        Use ALIF_WE_* constants from dt-bindings/misc/alif_aipm_common.h.
+
+    ewic-cfg:
+      type: int
+      default: 0
+      description: |
+        EWIC (External Wakeup Interrupt Controller) configuration bitmask
+        (off_profile_t.ewic_cfg).
+        0 = no EWIC sources (default in SoC DTSI; set in board overlay).
+        Use ALIF_EWIC_* constants from the per-SoC header.
