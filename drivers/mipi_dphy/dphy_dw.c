@@ -698,37 +698,10 @@ int dphy_dw_slave_setup(const struct device *dev, struct dphy_csi2_settings *phy
 	tmp = CSI_PHY_STOPSTATE_PHY_STOPSTATECLK | CSI_PHY_STOPSTATE_PHY_STOPSTATEDATA_0;
 	tmp = (phy->num_lanes == 2) ? (tmp | CSI_PHY_STOPSTATE_PHY_STOPSTATEDATA_1) : tmp;
 
-	for (int i = 0; (i < 10000) && ((sys_read32(csi_regs + CSI_PHY_STOPSTATE) & tmp) != tmp);
+	for (int i = 0; (i < 1000000) && ((sys_read32(csi_regs + CSI_PHY_STOPSTATE) & tmp) != tmp);
 	     i++) {
-		uint8_t phy_state;
-
-		phy_state = mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x1E);
-		if (!dphy_id) {
-			LOG_DBG("RX DPHY state: 0x%x", phy_state);
-		} else {
-			LOG_DBG("TX DPHY as RX state: 0x%x", phy_state);
-		}
-		k_busy_wait(100);
+		k_busy_wait(1);
 	}
-
-	if (dphy_id) {
-		LOG_DBG("TX DPHY as RX state: 0x%x, DPHY ID: %d",
-			mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x1E),
-			dphy_id);
-	} else {
-		LOG_DBG("RX DPHY state: 0x%x, DPHY ID: %d",
-			mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x1E),
-			dphy_id);
-	}
-
-	LOG_DBG("dphy4txtester_DIG_RDWR_TX_SLEW_0: 0x%x",
-		mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x26B));
-	LOG_DBG("dphy4txtester_DIG_RDWR_TX_SLEW_1: 0x%x ",
-		mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x26C));
-	LOG_DBG("dphy4txtester_DIG_RDWR_TX_SLEW_2: 0x%x ",
-		mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x26D));
-	LOG_DBG("dphy4txtester_DIG_RDWR_TX_SLEW_3: 0x%x ",
-		mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x26E));
 
 	if ((sys_read32(csi_regs + CSI_PHY_STOPSTATE) & tmp) != tmp) {
 		LOG_ERR("D-PHY not locked to Stop-state. PHY status - 0x%08x "
@@ -736,6 +709,12 @@ int dphy_dw_slave_setup(const struct device *dev, struct dphy_csi2_settings *phy
 			sys_read32(csi_regs + CSI_PHY_RX), dphy_id);
 		return -ETIMEDOUT;
 	}
+
+	LOG_DBG("PHY RX status: 0x%08x, STOPSTATE: 0x%08x, RX DPHY state: 0x%x, DPHY ID: %d",
+		sys_read32(csi_regs + CSI_PHY_RX),
+		sys_read32(csi_regs + CSI_PHY_STOPSTATE),
+		mipi_dphy_read_register(test_ctrl0, test_ctrl1, 0x1E),
+		dphy_id);
 
 	/* Set ForceRX bits to zero per lane. */
 	tmp = (1U << phy->num_lanes) - 1;

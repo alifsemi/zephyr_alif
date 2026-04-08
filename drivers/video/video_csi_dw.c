@@ -32,6 +32,7 @@ static int csi2_is_format_supported(uint32_t fourcc)
 	case VIDEO_PIX_FMT_GBRG8:
 	case VIDEO_PIX_FMT_GRBG8:
 	case VIDEO_PIX_FMT_RGGB8:
+	case VIDEO_PIX_FMT_RGB565:
 		return true;
 	default:
 		return false;
@@ -60,6 +61,8 @@ static int32_t fourcc_to_csi_data_type(uint32_t fourcc)
 		return CSI2_DT_RAW14;
 	case VIDEO_PIX_FMT_Y16:
 		return CSI2_DT_RAW16;
+	case VIDEO_PIX_FMT_RGB565:
+		return CSI2_DT_RGB565;
 	}
 	return -ENOTSUP;
 }
@@ -343,7 +346,6 @@ static int csi2_dw_validate_data(const struct device *dev)
 	 * balanced pixel clock = pix_clk * 1.2
 	 */
 	pixclock = ((phy->pll_fin << 1) * phy->num_lanes * CSI2_BANDWIDTH_SCALER) / bpp;
-
 	LOG_DBG("pll_fin - %d, Check pixclock = %d (CSI_PIXCLK_CTRL)", phy->pll_fin,
 		(uint32_t)pixclock);
 

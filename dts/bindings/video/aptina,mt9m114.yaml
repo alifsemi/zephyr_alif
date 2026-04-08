@@ -7,7 +7,15 @@ description: MT9M114 CMOS video sensor
 
 compatible: "aptina,mt9m114"
 
-include: i2c-device.yaml
+include: [base.yaml, i2c-device.yaml]
+
+properties:
+  reset-gpios:
+    type: phandle-array
+    description: |
+      The RESETn pin is asserted to disable the sensor causing a hard
+      reset. This pin is an alias for the XSHUTDOWN pin in sensor schematics.
+      The sensor receives this as an active-low signal.
 
 child-binding:
   child-binding:

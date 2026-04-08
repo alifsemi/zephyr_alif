@@ -9,22 +9,30 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
-#include <zephyr/logging/log.h>
+
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/drivers/video.h>
 #include <zephyr/drivers/video-controls.h>
 #include <zephyr/drivers/i2c.h>
 
-LOG_MODULE_REGISTER(video_mt9m114, CONFIG_VIDEO_LOG_LEVEL);
+#include <zephyr/drivers/gpio.h>
+
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(mt9m114, CONFIG_VIDEO_LOG_LEVEL);
 
 #define MT9M114_CHIP_ID_VAL 0x2481
 
 /* Sysctl registers */
-#define MT9M114_CHIP_ID                    0x0000
-#define MT9M114_COMMAND_REGISTER           0x0080
-#define MT9M114_COMMAND_REGISTER_SET_STATE (1 << 1)
-#define MT9M114_COMMAND_REGISTER_OK        (1 << 15)
-#define MT9M114_RST_AND_MISC_CONTROL       0x001A
+#define MT9M114_CHIP_ID                         0x0000
+#define MT9M114_COMMAND_REGISTER                0x0080
+#define MT9M114_COMMAND_REGISTER_APPLY_PATCH    BIT(0)
+#define MT9M114_COMMAND_REGISTER_SET_STATE      BIT(1)
+#define MT9M114_COMMAND_REGISTER_REFRESH        BIT(2)
+#define MT9M114_COMMAND_REGISTER_WAIT_FOR_EVENT BIT(3)
+#define MT9M114_COMMAND_REGISTER_OK             BIT(15)
+#define MT9M114_RST_AND_MISC_CONTROL            0x001A
+#define MT9M114_MIPI_CONTROL_REGISTER           0x3C40
+#define MT9M114_MIPI_CONTROL_REGISTER_CONT_CLK  BIT(2)
 
 /* Camera Control registers */
 #define MT9M114_CAM_SENSOR_CFG_Y_ADDR_START     0xC800
@@ -44,16 +52,19 @@ LOG_MODULE_REGISTER(video_mt9m114, CONFIG_VIDEO_LOG_LEVEL);
 #define MT9M114_CAM_STAT_AE_INITIAL_WINDOW_YEND 0xC922
 
 /* System Manager registers */
-#define MT9M114_SYSMGR_NEXT_STATE 0xDC00
+#define MT9M114_SYSMGR_NEXT_STATE    0xDC00
+#define MT9M114_SYSMGR_CURRENT_STATE 0xDC01
 
 /* System States */
 #define MT9M114_SYS_STATE_ENTER_CONFIG_CHANGE 0x28
 #define MT9M114_SYS_STATE_START_STREAMING     0x34
 #define MT9M114_SYS_STATE_ENTER_SUSPEND       0x40
+#define MT9M114_SYS_STATE_ENTER_STANDBY       0x50
+#define MT9M114_SYS_STATE_STANDBY             0x52
 
 /* Camera output format */
-#define MT9M114_CAM_OUTPUT_FORMAT_FORMAT_YUV (0 << 8)
-#define MT9M114_CAM_OUTPUT_FORMAT_FORMAT_RGB (1 << 8)
+#define MT9M114_CAM_OUTPUT_FORMAT_FORMAT_YUV  (0 << 8)
+#define MT9M114_CAM_OUTPUT_FORMAT_FORMAT_RGB  BIT(8)
 #define MT9M114_CAM_OUTPUT_FORMAT_BAYER       (2 << 8)
 #define MT9M114_CAM_OUTPUT_FORMAT_FORMAT_Y10P (0 << 10)
 #define MT9M114_CAM_OUTPUT_FORMAT_FORMAT_GREY (3 << 10)
@@ -65,6 +76,7 @@ LOG_MODULE_REGISTER(video_mt9m114, CONFIG_VIDEO_LOG_LEVEL);
 
 struct mt9m114_config {
 	struct i2c_dt_spec i2c;
+	const struct gpio_dt_spec resetn_gpio;	/* Active low Reset */
 };
 
 struct mt9m114_data {
@@ -87,7 +99,7 @@ struct mt9m114_resolution_config {
 
 static struct mt9m114_reg mt9m114_init_config[] = {
 	{0x098E, 2, 0x1000},    /* LOGICAL_ADDRESS_ACCESS */
-	{0xC97E, 2, 0x01},      /* CAM_SYSCTL_PLL_ENABLE */
+	{0xC97E, 1, 0x01},      /* CAM_SYSCTL_PLL_ENABLE */
 	{0xC980, 2, 0x0120},    /* CAM_SYSCTL_PLL_DIVIDER_M_N = 288 */
 	{0xC982, 2, 0x0700},    /* CAM_SYSCTL_PLL_DIVIDER_P = 1792 */
 	{0xC984, 2, 0x8000},    /* CAM_PORT_OUTPUT_CONTROL = 32768 (No pixel clock slow down) */
@@ -124,41 +136,36 @@ static struct mt9m114_reg mt9m114_init_config[] = {
 #else
 
 static struct mt9m114_reg mt9m114_init_config[] = {
-	{0x098E, 2, 0x1000},    /* LOGICAL_ADDRESS_ACCESS */
-	{0xC97E, 1, 0x01},      /* CAM_SYSCTL_PLL_ENABLE */
-	{0xC980, 2, 0x0120},    /* CAM_SYSCTL_PLL_DIVIDER_M_N = 288 */
-	{0xC982, 2, 0x0700},    /* CAM_SYSCTL_PLL_DIVIDER_P = 1792 */
-	{0xC808, 4, 0x2DC6C00}, /* CAM_SENSOR_CFG_PIXCLK = 48 Mhz */
-	{0x316A, 2, 0x8270},    /* Auto txlo_row for hot pixel and linear full well optimization */
-	{0x316C, 2, 0x8270},    /* Auto txlo for hot pixel and linear full well optimization */
-	{0x3ED0, 2, 0x2305},    /* Eclipse setting, ecl range=1, ecl value=2, ivln=3 */
-	{0x3ED2, 2, 0x77CF},    /* TX_hi = 12 */
-	{0x316E, 2, 0x8202}, /* Auto ecl , threshold 2x, ecl=0 at high gain, ecl=2 for low gain */
-	{0x3180, 2, 0x87FF}, /* Enable delta dark */
-	{0x30D4, 2, 0x6080}, /* Disable column correction due to AE oscillation problem */
-	{0xA802, 2, 0x0008}, /* RESERVED_AE_TRACK_02 */
-	{0x3E14, 2, 0xFF39}, /* Enabling pixout clamping to VAA to solve column band issue */
-	{0xC80C, 2, 0x0001}, /* CAM_SENSOR_CFG_ROW_SPEED */
-	{0xC80E, 2, 0x00DB}, /* CAM_SENSOR_CFG_FINE_INTEG_TIME_MIN = 219 */
-	{0xC810, 2, 0x07C2}, /* CAM_SENSOR_CFG_FINE_INTEG_TIME_MAX = 1986 */
-	{0xC812, 2, 0x02FE}, /* CAM_SENSOR_CFG_FRAME_LENGTH_LINES = 766 */
-	{0xC814, 2, 0x0845}, /* CAM_SENSOR_CFG_LINE_LENGTH_PCK = 2117 */
-	{0xC816, 2, 0x0060}, /* CAM_SENSOR_CFG_FINE_CORRECTION = 96 */
-	{0xC826, 2, 0x0020}, /* CAM_SENSOR_CFG_REG_0_DATA = 32 */
-	{0xC834, 2, 0x0000}, /* CAM_SENSOR_CONTROL_READ_MODE */
-	{0xC854, 2, 0x0000}, /* CAM_CROP_WINDOW_XOFFSET */
-	{0xC856, 2, 0x0000}, /* CAM_CROP_WINDOW_YOFFSET */
-	{0xC85C, 1, 0x03},   /* CAM_CROP_CROPMODE */
-	{0xC878, 1, 0x00},   /* CAM_AET_AEMODE */
-	{0xC88C, 2, 0x1D9A}, /* CAM_AET_MAX_FRAME_RATE = 7578 */
-	{0xC88E, 2, 0x1D9A}, /* CAM_AET_MIN_FRAME_RATE = 7578 */
-	{0xC914, 2, 0x0000}, /* CAM_STAT_AWB_CLIP_WINDOW_XSTART */
-	{0xC916, 2, 0x0000}, /* CAM_STAT_AWB_CLIP_WINDOW_YSTART */
-	{0xC91C, 2, 0x0000}, /* CAM_STAT_AE_INITIAL_WINDOW_XSTART */
-	{0xC91E, 2, 0x0000}, /* CAM_STAT_AE_INITIAL_WINDOW_YSTART */
-	{0x001E, 2, 0x0777}, /* REG_PAD_SLEW */
-	{0xC86E, 2, 0x0038}, /* CAM_OUTPUT_FORMAT_YUV_CLIP for CSI */
-	{0xC984, 2, 0x8000}, /* CAM_PORT_OUTPUT_CONTROL, for MIPI CSI-2 interface : 0x8000 */
+	{0x098E, 2, 0x0000}, /* LOGICAL_ADDRESS_ACCESS */
+	{0xC97E, 1, 0x1},
+	{0xC980, 2, 0x0430},
+	{0xC982, 2, 0x0700},
+	{0xC984, 2, 0x8001},
+	{0xC988, 2, 0x0900},
+	{0xC98A, 2, 0x0605},
+	{0xC98C, 2, 0x0B01},
+	{0xC98E, 2, 0x040F},
+	{0xC990, 2, 0x0004},
+	{0xC992, 2, 0x0506},
+	{0xC808, 4, 0x016E3600},
+	{0xC80C, 2, 0x0001},
+	{0xC80E, 2, 0x00DB},
+	{0xC810, 2, 0x05B3},
+	{0xC812, 2, 0x03EE},
+	{0xC814, 2, 0x0636},
+	{0xC816, 2, 0x0060},
+	{0xC826, 2, 0x0020},
+	{0xC834, 2, 0x0000},
+	{0xC854, 2, 0x0000},
+	{0xC856, 2, 0x0000},
+	{0xC85C, 1, 0x03},
+	{0xC878, 1, 0x00},
+	{0xC88C, 2, 0x0F01},
+	{0xC88E, 2, 0x0F01},
+	{0xC914, 2, 0x0000},
+	{0xC916, 2, 0x0000},
+	{0xC91C, 2, 0x0000},
+	{0xC91E, 2, 0x0000},
 	{/* NULL terminated */}};
 
 #endif
@@ -195,26 +202,33 @@ static struct mt9m114_reg mt9m114_640_480[] = {
 	{MT9M114_CAM_STAT_AE_INITIAL_WINDOW_YEND, 2, 0x005F}, /* 95 */
 	{/* NULL terminated */}};
 
-static struct mt9m114_reg mt9m114_1280_720[] = {
+static struct mt9m114_reg mt9m114_1288_728[] = {
 	{MT9M114_CAM_SENSOR_CFG_Y_ADDR_START, 2, 0x007C},     /* 124 */
 	{MT9M114_CAM_SENSOR_CFG_X_ADDR_START, 2, 0x0004},     /* 4 */
 	{MT9M114_CAM_SENSOR_CFG_Y_ADDR_END, 2, 0x0353},       /* 851 */
 	{MT9M114_CAM_SENSOR_CFG_X_ADDR_END, 2, 0x050B},       /* 1291 */
-	{MT9M114_CAM_SENSOR_CFG_CPIPE_LAST_ROW, 2, 0x02D3},   /* 723 */
-	{MT9M114_CAM_CROP_WINDOW_WIDTH, 2, 0x0500},           /* 1280 */
+	{MT9M114_CAM_SENSOR_CFG_CPIPE_LAST_ROW, 2, 0x02D3},   /* 723 - RAW10 bypasses ISP */
+	{0xC810, 2, 0x05BD},   /* CAM_SENSOR_CFG_FINE_INTEG_TIME_MAX = 1469 */
+	{0xC812, 2, 0x03E8},   /* CAM_SENSOR_CFG_FRAME_LENGTH_LINES = 1000 */
+	{0xC814, 2, 0x0640},   /* CAM_SENSOR_CFG_LINE_LENGTH_PCK = 1600 */
+	{MT9M114_CAM_CROP_WINDOW_WIDTH, 2, 0x0500},   /* 1280 - crop/output */
 	{MT9M114_CAM_CROP_WINDOW_HEIGHT, 2, 0x02D0},          /* 720 */
 	{MT9M114_CAM_OUTPUT_WIDTH, 2, 0x0500},                /* 1280 */
 	{MT9M114_CAM_OUTPUT_HEIGHT, 2, 0x02D0},               /* 720 */
+	{0xC88C, 2, 0x1E00},   /* CAM_AET_MAX_FRAME_RATE = 7680 (30 fps) */
+	{0xC88E, 2, 0x1E00},   /* CAM_AET_MIN_FRAME_RATE = 7680 (30 fps) */
 	{MT9M114_CAM_STAT_AWB_CLIP_WINDOW_XEND, 2, 0x04FF},   /* 1279 */
 	{MT9M114_CAM_STAT_AWB_CLIP_WINDOW_YEND, 2, 0x02CF},   /* 719 */
 	{MT9M114_CAM_STAT_AE_INITIAL_WINDOW_XEND, 2, 0x00FF}, /* 255 */
 	{MT9M114_CAM_STAT_AE_INITIAL_WINDOW_YEND, 2, 0x008F}, /* 143 */
+	{0xE801, 1, 0x00},                                    /* AUTO_BINNING_MODE = off */
 	{/* NULL terminated */}};
 
 static struct mt9m114_resolution_config resolutionConfigs[] = {
 	{.width = 480, .height = 272, .params = mt9m114_480_272},
 	{.width = 640, .height = 480, .params = mt9m114_640_480},
-	{.width = 1280, .height = 720, .params = mt9m114_1280_720},
+	{.width = 1288, .height = 728, .params = mt9m114_1288_728},
+	{.width = 1280, .height = 720, .params = mt9m114_1288_728},
 };
 
 #define MT9M114_VIDEO_FORMAT_CAP(width, height, format)                                            \
@@ -232,6 +246,8 @@ static const struct video_format_cap fmts[] = {
 	MT9M114_VIDEO_FORMAT_CAP(640, 480, VIDEO_PIX_FMT_GREY),
 	MT9M114_VIDEO_FORMAT_CAP(1280, 720, VIDEO_PIX_FMT_RGB565),
 	MT9M114_VIDEO_FORMAT_CAP(1280, 720, VIDEO_PIX_FMT_YUYV),
+	MT9M114_VIDEO_FORMAT_CAP(1288, 728, VIDEO_PIX_FMT_Y10P),
+	MT9M114_VIDEO_FORMAT_CAP(1280, 720, VIDEO_PIX_FMT_GREY),
 	{0}};
 
 static inline int i2c_burst_read16_dt(const struct i2c_dt_spec *spec, uint16_t start_addr,
@@ -350,22 +366,105 @@ static int mt9m114_write_all(const struct device *dev, struct mt9m114_reg *reg)
 	return 0;
 }
 
-static int mt9m114_software_reset(const struct device *dev)
+static int mt9m114_reset(const struct device *dev)
 {
-	int ret = mt9m114_modify_reg(dev, MT9M114_RST_AND_MISC_CONTROL, 2, 0x01, 0x01);
+	const struct mt9m114_config *cfg = dev->config;
+	int ret;
 
-	if (ret) {
-		return ret;
+	if (cfg->resetn_gpio.port) {
+		ret = gpio_pin_configure_dt(&cfg->resetn_gpio, GPIO_OUTPUT_INACTIVE);
+		if (ret) {
+			LOG_ERR("GPIO configuration failed: %d", ret);
+			return ret;
+		}
+
+		ret = gpio_pin_set_dt(&cfg->resetn_gpio, 1);  /* assert reset (pin LOW) */
+		if (ret) {
+			LOG_ERR("Failed to assert reset GPIO: %d", ret);
+			return ret;
+		}
+		k_usleep(4);
+		ret = gpio_pin_set_dt(&cfg->resetn_gpio, 0);  /* release reset (pin HIGH) */
+		if (ret) {
+			LOG_ERR("Failed to release reset GPIO: %d", ret);
+			return ret;
+		}
+	} else {
+		LOG_DBG("No reset GPIO configured");
 	}
 
-	k_sleep(K_MSEC(1));
+	LOG_DBG("Waiting 100ms for sensor FW boot...");
+	k_msleep(100);
+	LOG_DBG("Attempting software reset via I2C at addr 0x%02x", cfg->i2c.addr);
 
-	ret = mt9m114_modify_reg(dev, MT9M114_RST_AND_MISC_CONTROL, 2, 0x01, 0x00);
+	ret = mt9m114_modify_reg(dev, MT9M114_RST_AND_MISC_CONTROL, 0x1, 0x01, 0x01);
 	if (ret) {
+		LOG_ERR("SW reset set failed, I2C err: %d", ret);
 		return ret;
 	}
+	LOG_DBG("SW reset set OK");
 
-	k_sleep(K_MSEC(45));
+	ret = mt9m114_modify_reg(dev, MT9M114_RST_AND_MISC_CONTROL, 0x1, 0x01, 0x00);
+	if (ret) {
+		LOG_ERR("SW reset clear failed, I2C err: %d", ret);
+		return ret;
+	}
+	LOG_DBG("SW reset clear OK");
+
+	return 0;
+}
+
+static int mt9m114_poll_state(const struct device *dev, uint32_t state)
+{
+	uint8_t val;
+	int err;
+
+	for (int i = 0; i < 200; i++) {
+		err = mt9m114_read_reg(dev, MT9M114_SYSMGR_CURRENT_STATE, 1, &val);
+		if (err) {
+			return err;
+		}
+
+		if (val == state) {
+			return 0;
+		}
+
+		k_sleep(K_MSEC(1));
+	}
+
+	LOG_ERR("Timeout waiting for state 0x%02x", state);
+
+	return -ETIMEDOUT;
+}
+
+static int mt9m114_poll_command(const struct device *dev, uint32_t command)
+{
+	uint16_t val;
+	int err;
+
+	/* Check that the FW is ready to accept a new command. */
+	for (int i = 0; i < 200; i++) {
+		err = mt9m114_read_reg(dev, MT9M114_COMMAND_REGISTER, 2, &val);
+		if (err) {
+			return err;
+		}
+
+		if (!(val & command)) {
+			break;
+		}
+
+		k_sleep(K_MSEC(1));
+	}
+
+	if (val & command) {
+		LOG_ERR("Command 0x%x completion timeout!\n", command);
+		return -ETIMEDOUT;
+	}
+
+	if (!(val & MT9M114_COMMAND_REGISTER_OK)) {
+		LOG_ERR("Command 0x%x failed!\n", command);
+		return -EIO;
+	}
 
 	return 0;
 }
@@ -425,10 +524,18 @@ static int mt9m114_set_output_format(const struct device *dev, int pixel_format)
 	uint16_t output_format;
 
 	if (pixel_format == VIDEO_PIX_FMT_YUYV) {
-		output_format = (MT9M114_CAM_OUTPUT_FORMAT_FORMAT_YUV | (1U << 1U));
+		if (IS_ENABLED(CONFIG_MT9M114_PARALLEL_INIT)) {
+			output_format = (MT9M114_CAM_OUTPUT_FORMAT_FORMAT_YUV | (1U << 1U));
+		} else {
+			output_format = MT9M114_CAM_OUTPUT_FORMAT_FORMAT_YUV;
+		}
 	} else if (pixel_format == VIDEO_PIX_FMT_RGB565) {
-		output_format = (MT9M114_CAM_OUTPUT_FORMAT_FORMAT_RGB | (1U << 1U));
-	} else if (pixel_format == VIDEO_PIX_FMT_Y10P) {
+		if (IS_ENABLED(CONFIG_MT9M114_PARALLEL_INIT)) {
+			output_format = (MT9M114_CAM_OUTPUT_FORMAT_FORMAT_RGB | (1U << 1U));
+		} else {
+			output_format = (MT9M114_CAM_OUTPUT_FORMAT_FORMAT_RGB);
+		}
+	}  else if (pixel_format == VIDEO_PIX_FMT_Y10P) {
 		output_format = (MT9M114_CAM_OUTPUT_FORMAT_FORMAT_Y10P |
 				MT9M114_CAM_OUTPUT_FORMAT_BAYER);
 	} else if (pixel_format == VIDEO_PIX_FMT_GREY) {
@@ -436,8 +543,13 @@ static int mt9m114_set_output_format(const struct device *dev, int pixel_format)
 				MT9M114_CAM_OUTPUT_FORMAT_BAYER);
 	}
 
+	LOG_DBG("Setting output format reg 0x%04x = 0x%04x (pixfmt 0x%08x)",
+		MT9M114_CAM_OUTPUT_FORMAT, output_format, pixel_format);
 	ret = mt9m114_write_reg(dev, MT9M114_CAM_OUTPUT_FORMAT, sizeof(output_format),
 				&output_format);
+	if (ret) {
+		LOG_ERR("Output format write failed, I2C err: %d", ret);
+	}
 
 	return ret;
 }
@@ -469,6 +581,16 @@ static int mt9m114_set_fmt(const struct device *dev, enum video_endpoint_id ep,
 	}
 
 	drv_data->fmt = *fmt;
+
+	LOG_DBG("set_fmt: pixfmt=0x%08x %ux%u", fmt->pixelformat, fmt->width, fmt->height);
+
+	/* Transition out of SUSPEND/any state before writing config registers */
+	LOG_DBG("Entering CONFIG_CHANGE before format write");
+	ret = mt9m114_set_state(dev, MT9M114_SYS_STATE_ENTER_CONFIG_CHANGE);
+	if (ret) {
+		LOG_ERR("Failed to enter config change state before fmt write");
+		return ret;
+	}
 
 	/* Set output pixel format */
 	ret = mt9m114_set_output_format(dev, fmt->pixelformat);
@@ -555,16 +677,27 @@ static DEVICE_API(video, mt9m114_driver_api) = {
 
 static int mt9m114_init(const struct device *dev)
 {
+	LOG_INF("MT9M114 initialization starting...");
+
 	struct video_format fmt;
 	uint16_t val;
 	int ret;
 
+	/* Reset */
+	LOG_INF("Resetting sensor...");
+	ret = mt9m114_reset(dev);
+	if (ret) {
+		LOG_ERR("Unable to reset chip");
+		return -ENODEV;
+	}
+
 	/* no power control, wait for camera ready */
 	k_sleep(K_MSEC(100));
 
+	LOG_DBG("Reading chip ID...");
 	ret = mt9m114_read_reg(dev, MT9M114_CHIP_ID, sizeof(val), &val);
 	if (ret) {
-		LOG_ERR("Unable to read chip ID");
+		LOG_ERR("Unable to read chip ID - I2C error");
 		return -ENODEV;
 	}
 
@@ -573,13 +706,34 @@ static int mt9m114_init(const struct device *dev)
 		return -ENODEV;
 	}
 
-	/* SW reset */
-	mt9m114_software_reset(dev);
+	LOG_DBG("Chip ID verified: 0x%04x", val);
+
+	ret = mt9m114_poll_command(dev, MT9M114_COMMAND_REGISTER_SET_STATE);
+	if (ret < 0) {
+		return ret;
+	}
+
+	if (IS_ENABLED(CONFIG_MT9M114_PARALLEL_INIT)) {
+		ret = mt9m114_set_state(dev, MT9M114_SYS_STATE_ENTER_STANDBY);
+		if (ret) {
+			return ret;
+		}
+	}
+
+	ret = mt9m114_poll_state(dev, MT9M114_SYS_STATE_STANDBY);
+	if (ret) {
+		return ret;
+	}
 
 	/* Init registers */
 	ret = mt9m114_write_all(dev, mt9m114_init_config);
 	if (ret) {
 		LOG_ERR("Unable to initialize mt9m114 config");
+		return ret;
+	}
+
+	ret = mt9m114_set_state(dev, MT9M114_SYS_STATE_ENTER_CONFIG_CHANGE);
+	if (ret) {
 		return ret;
 	}
 
@@ -595,8 +749,32 @@ static int mt9m114_init(const struct device *dev)
 		return -EIO;
 	}
 
-	/* Suspend any stream */
-	mt9m114_set_state(dev, MT9M114_SYS_STATE_ENTER_SUSPEND);
+	/* Put MT9M114 sensor lanes in LP11 mode. */
+	if (!IS_ENABLED(CONFIG_MT9M114_PARALLEL_INIT)) {
+		ret = mt9m114_read_reg(dev, MT9M114_MIPI_CONTROL_REGISTER, 2, &val);
+		if (ret) {
+			return ret;
+		}
+
+		val &= ~MT9M114_MIPI_CONTROL_REGISTER_CONT_CLK;
+
+		ret = mt9m114_write_reg(dev, MT9M114_MIPI_CONTROL_REGISTER, 2, &val);
+		if (ret) {
+			return ret;
+		}
+	}
+
+	/* Suspend any stream to put lanes in LP11 */
+	ret = mt9m114_set_state(dev, MT9M114_SYS_STATE_ENTER_SUSPEND);
+	if (ret) {
+		LOG_ERR("Failed to enter suspend state: %d", ret);
+		return ret;
+	}
+
+	/* Give time for SUSPEND state and LP11 to stabilize */
+	k_msleep(10);
+
+	LOG_INF("Sensor initialized, MIPI lanes in LP11");
 
 	return 0;
 }
@@ -605,6 +783,7 @@ static int mt9m114_init(const struct device *dev)
 
 static const struct mt9m114_config mt9m114_cfg_0 = {
 	.i2c = I2C_DT_SPEC_INST_GET(0),
+	.resetn_gpio = GPIO_DT_SPEC_INST_GET_OR(0, reset_gpios, {0}),
 };
 
 static struct mt9m114_data mt9m114_data_0;
