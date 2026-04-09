@@ -56,14 +56,14 @@ typedef void (*i2c_isr_cb_t)(const struct device *port);
 
 /* IC_CON Low count and high count default values */
 /* TODO verify values for high speed */
-#define I2C_STD_HCNT (CONFIG_I2C_DW_CLOCK_SPEED * 4)
-#define I2C_STD_LCNT (CONFIG_I2C_DW_CLOCK_SPEED * 5)
-#define I2C_FS_HCNT  ((CONFIG_I2C_DW_CLOCK_SPEED * 6) / 8)
-#define I2C_FS_LCNT  ((CONFIG_I2C_DW_CLOCK_SPEED * 7) / 8)
-#define I2C_FSP_HCNT ((CONFIG_I2C_DW_CLOCK_SPEED * 2) / 8)
-#define I2C_FSP_LCNT ((CONFIG_I2C_DW_CLOCK_SPEED * 2) / 8)
-#define I2C_HS_HCNT  ((CONFIG_I2C_DW_CLOCK_SPEED * 6) / 8)
-#define I2C_HS_LCNT  ((CONFIG_I2C_DW_CLOCK_SPEED * 7) / 8)
+#define I2C_STD_HCNT(clk_freq) ((clk_freq) * 4)
+#define I2C_STD_LCNT(clk_freq) ((clk_freq) * 5)
+#define I2C_FS_HCNT(clk_freq)  (((clk_freq) * 6) / 8)
+#define I2C_FS_LCNT(clk_freq)  (((clk_freq) * 7) / 8)
+#define I2C_FSP_HCNT(clk_freq) (((clk_freq) * 2) / 8)
+#define I2C_FSP_LCNT(clk_freq) (((clk_freq) * 2) / 8)
+#define I2C_HS_HCNT(clk_freq)  (((clk_freq) * 6) / 8)
+#define I2C_HS_LCNT(clk_freq)  (((clk_freq) * 7) / 8)
 
 #ifdef CONFIG_I2C_DW_IC_CLK_FREQ_OPTIMIZATION
 

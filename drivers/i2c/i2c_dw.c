@@ -853,6 +853,31 @@ static int i2c_dw_get_configuration(const struct device *dev, uint32_t *config)
 	return 0;
 }
 
+static uint32_t i2c_dw_get_clock_frequency(const struct device *dev)
+{
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
+	const struct i2c_dw_rom_config *const rom = dev->config;
+	uint32_t clock_freq = 0;
+	int ret = 0;
+
+	if (rom->clk_dev && rom->clk_id) {
+		ret = clock_control_get_rate(rom->clk_dev, rom->clk_id, &clock_freq);
+		if (ret != 0) {
+			LOG_ERR("Failed to get clock frequency: %d", ret);
+			return -EINVAL;
+		}
+		return (clock_freq / 1000000);
+	}
+
+	/* Use default clock speed if no clock control available */
+	return CONFIG_I2C_DW_CLOCK_SPEED;
+#else
+	/* Use default clock speed if no clock control available */
+	/* CONFIG_I2C_DW_CLOCK_SPEED is already in MHz */
+	return CONFIG_I2C_DW_CLOCK_SPEED;
+#endif
+}
+
 static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 {
 	struct i2c_dw_dev_config *const dw = dev->data;
@@ -862,28 +887,32 @@ static int i2c_dw_runtime_configure(const struct device *dev, uint32_t config)
 	uint32_t hcnt_val = 0U;
 	uint32_t rc = 0U;
 	uint32_t reg_base = get_regs(dev);
+	uint32_t clock_freq;
 
 	dw->app_config = config;
+
+	/* Get the actual clock frequency from clock control */
+	clock_freq = i2c_dw_get_clock_frequency(dev);
 
 	/* Make sure we have a supported speed for the DesignWare model */
 	/* and have setup the clock frequency and speed mode */
 	switch (I2C_SPEED_GET(dw->app_config)) {
 	case I2C_SPEED_STANDARD:
-		lcnt_val = I2C_STD_LCNT + rom->lcnt_offset;
-		hcnt_val = I2C_STD_HCNT + rom->hcnt_offset;
+		lcnt_val = I2C_STD_LCNT(clock_freq) + rom->lcnt_offset;
+		hcnt_val = I2C_STD_HCNT(clock_freq) + rom->hcnt_offset;
 		break;
 	case I2C_SPEED_FAST:
-		lcnt_val = I2C_FS_LCNT + rom->lcnt_offset;
-		hcnt_val = I2C_FS_HCNT + rom->hcnt_offset;
+		lcnt_val = I2C_FS_LCNT(clock_freq) + rom->lcnt_offset;
+		hcnt_val = I2C_FS_HCNT(clock_freq) + rom->hcnt_offset;
 		break;
 	case I2C_SPEED_FAST_PLUS:
-		lcnt_val = I2C_FSP_LCNT + rom->lcnt_offset;
-		hcnt_val = I2C_FSP_HCNT + rom->hcnt_offset;
+		lcnt_val = I2C_FSP_LCNT(clock_freq) + rom->lcnt_offset;
+		hcnt_val = I2C_FSP_HCNT(clock_freq) + rom->hcnt_offset;
 		break;
 	case I2C_SPEED_HIGH:
 		if (dw->support_hs_mode) {
-			lcnt_val = I2C_HS_LCNT + rom->lcnt_offset;
-			hcnt_val = I2C_HS_HCNT + rom->hcnt_offset;
+			lcnt_val = I2C_HS_LCNT(clock_freq) + rom->lcnt_offset;
+			hcnt_val = I2C_HS_HCNT(clock_freq) + rom->hcnt_offset;
 		} else {
 			rc = -EINVAL;
 		}
@@ -1247,7 +1276,6 @@ static int i2c_dw_initialize(const struct device *dev)
 
 static int i2c_dw_suspend(const struct device *dev)
 {
-
 	const struct i2c_dw_rom_config *const dev_cfg = dev->config;
 	struct i2c_dw_dev_config *const dw = dev->data;
 	uint32_t reg_base = get_regs(dev);
@@ -1278,7 +1306,6 @@ static int i2c_dw_suspend(const struct device *dev)
 		return ret;
 	}
 #endif
-
 	return 0;
 }
 
@@ -1456,4 +1483,3 @@ static int i2c_dw_pm_action(const struct device *dev, enum pm_device_action acti
 	I2C_DW_IRQ_CONFIG(n)
 
 DT_INST_FOREACH_STATUS_OKAY(I2C_DEVICE_INIT_DW)
-
