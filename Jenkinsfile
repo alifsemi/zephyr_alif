@@ -206,7 +206,7 @@ pipeline {
 
                         #mapfile -t all_alif_boards_cfgs < <(west boards | grep "alif" | grep -v "fpga")
                         all_alif_boards_cfgs=("alif_e7_dk/ae722f80f55d5xx/rtss_he" "alif_e7_dk/ae722f80f55d5xx/rtss_hp"
-                                "alif_e4_dk/ae402fa0e5597xx0/rtss_he"  "alif_e4_dk/ae402fa0e5597xx0/rtss_hp"
+                                "alif_e8_dk/ae402fa0e5597xx0/rtss_he"  "alif_e8_dk/ae402fa0e5597xx0/rtss_hp"
                                 "alif_e8_dk/ae822fa0e5597xx0/rtss_he"  "alif_e8_dk/ae822fa0e5597xx0/rtss_hp")
                         supported_compilers=("gcc")
                         test_apps=("samples/hello_world")
