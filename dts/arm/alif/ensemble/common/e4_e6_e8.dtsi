@@ -220,6 +220,14 @@
 		status = "disabled";
 	};
 
+	jpeg0: jpeg@49044000 {
+		compatible       = "verisilicon,hantro-vc9000e-jpeg";
+		reg              = <0x49044000 0x1000>;
+		interrupts       = <360 0>;
+		max-burst-length = <64>;
+		quality-factor   = <75>;
+		status           = "disabled";
+	};
 };
 
 &{/} {
