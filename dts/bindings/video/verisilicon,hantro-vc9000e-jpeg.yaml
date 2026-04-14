@@ -1,0 +1,35 @@
+# Copyright (c) 2026 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: VeriSilicon Hantro VC9000E JPEG Hardware Encoder
+
+compatible: "verisilicon,hantro-vc9000e-jpeg"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true
+
+  quality-factor:
+    type: int
+    default: 75
+    description: Default JPEG quality factor (1-100)
+
+  max-burst-length:
+    type: int
+    default: 64
+    description: Maximum AXI burst length for DMA transfers
+
+  axi-wr-outstanding:
+    type: int
+    default: 64
+    description: Maximum AXI write outstanding transactions
+
+  axi-rd-outstanding:
+    type: int
+    default: 64
+    description: Maximum AXI read outstanding transactions
