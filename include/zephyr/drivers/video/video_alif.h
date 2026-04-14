@@ -17,6 +17,7 @@ extern "C" {
 
 #define VIDEO_CID_ALIF_CSI_DPHY_FREQ         (VIDEO_CID_PRIVATE_BASE + 0)
 #define VIDEO_CID_ALIF_CSI_CURR_CAM          (VIDEO_CID_PRIVATE_BASE + 1)
+#define VIDEO_CID_JPEG_INPUT_BUFFER          (VIDEO_CID_JPEG_CLASS_BASE + 4)
 
 /* ISP aggregate parameter controls — value is a pointer to struct isp_params
  * (defined in isp_ctrl_params.h).  Set valid_mask to the ISP_PARAM_MASK_*
