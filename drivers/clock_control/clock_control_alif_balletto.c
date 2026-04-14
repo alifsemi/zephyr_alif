@@ -192,7 +192,7 @@ static uint32_t get_he_clock_freq(void)
 		}
 	}
 
-	const uint32_t es1_osc = (sys_read32(CGU_ESCLK_SEL) >> HE_PLL_DIV_POS) & HE_PLL_DIV_MASK;
+	const uint32_t es1_osc = (sys_read32(CGU_ESCLK_SEL) >> HE_OSC_DIV_POS) & HE_OSC_DIV_MASK;
 
 	switch (es1_osc) {
 	case 0:

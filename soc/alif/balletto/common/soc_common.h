@@ -39,7 +39,7 @@
 #define CGU_PLL_CLK_SEL_ES1                     BIT(20)
 #define HE_PLL_DIV_POS                          4
 #define HE_PLL_DIV_MASK                         0x3
-#define HE_OSC_DIV_POS                          4
+#define HE_OSC_DIV_POS                          12
 #define HE_OSC_DIV_MASK                         0x3
 
 /* ANA Register */
