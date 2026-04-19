@@ -10,6 +10,7 @@
 	sram1: sram@8000000 {
 		compatible = "zephyr,memory-region","mmio-sram";
 		zephyr,memory-region = "SRAM1";
+		zephyr,memory-attr = <DT_MEM_ARM_MPU_RAM>;
 	};
 
 	uart6: uart@4901e000 {

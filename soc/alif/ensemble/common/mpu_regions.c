@@ -79,6 +79,10 @@
 #define DEVICE_MRAM_SIZE	MRAM_STORAGE_PARTITION_SIZE
 #endif
 
+/*
+ * Note that in addition to the below regions, SRAM regions are
+ * configured via zephyr,memory-attr in DT.
+ */
 static const struct arm_mpu_region mpu_regions[] = {
 	/* Region 0: Executable MRAM */
 	MPU_REGION_ENTRY("FLASH_MRAM", FLASH_MRAM_BASE_ADDR,
@@ -94,30 +98,20 @@ static const struct arm_mpu_region mpu_regions[] = {
 	MPU_REGION_ENTRY("DTCM", DT_REG_ADDR(DT_NODELABEL(dtcm)),
 			 REGION_RAM_ATTR(DT_REG_ADDR(DT_NODELABEL(dtcm)),
 							DT_REG_SIZE(DT_NODELABEL(dtcm)))),
-#if DT_NODE_EXISTS(DT_NODELABEL(sram0))
 	/* Region 4 */
-	MPU_REGION_ENTRY("SRAM0", DT_REG_ADDR(DT_NODELABEL(sram0)),
-			 REGION_RAM_ATTR(DT_REG_ADDR(DT_NODELABEL(sram0)), DT_REG_SIZE(DT_NODELABEL(sram0)))),
-#endif
-#if DT_NODE_EXISTS(DT_NODELABEL(sram1))
-	/* Region 5 */
-	MPU_REGION_ENTRY("SRAM1", DT_REG_ADDR(DT_NODELABEL(sram1)),
-			 REGION_RAM_ATTR(DT_REG_ADDR(DT_NODELABEL(sram1)), DT_REG_SIZE(DT_NODELABEL(sram1)))),
-#endif
-	/* Region 6 */
 	MPU_REGION_ENTRY("PERIPHERALS", DT_REG_ADDR(DT_NODELABEL(host_peripheral)),
 			 REGION_DEVICE_ATTR(DT_REG_ADDR(DT_NODELABEL(host_peripheral)), DT_REG_SIZE(DT_NODELABEL(host_peripheral)))),
-	/* Region 7 */
+	/* Region 5 */
 	MPU_REGION_ENTRY("OSPI_CTRL", ALIF_ENSEMBLE_OSPI_REG,
 			 REGION_DEVICE_ATTR(ALIF_ENSEMBLE_OSPI_REG, ALIF_ENSEMBLE_OSPI_SIZE)),
 
  #ifdef CONFIG_SOC_SERIES_E1C
-	/* Region 8 */
+	/* Region 6 */
 	MPU_REGION_ENTRY("OSPI0_XIP", ALIF_ENSEMBLE_OSPI0_XIP_BASE,
 			 REGION_OSPI_FLASH_ATTR(ALIF_ENSEMBLE_OSPI0_XIP_BASE,
 							ALIF_ENSEMBLE_OSPI0_XIP_SIZE)),
 #else
-	/* Region 8 */
+	/* Region 6 */
 	MPU_REGION_ENTRY("OSPI1_XIP", ALIF_ENSEMBLE_OSPI1_XIP_BASE,
 			 REGION_OSPI_FLASH_ATTR(ALIF_ENSEMBLE_OSPI1_XIP_BASE,
 							ALIF_ENSEMBLE_OSPI1_XIP_SIZE)),

@@ -27,6 +27,7 @@
 		compatible = "zephyr,memory-region","mmio-sram";
 		reg = <0x02400000 DT_SIZE_K(4096)>;
 		zephyr,memory-region = "SRAM1";
+		zephyr,memory-attr = <DT_MEM_ARM_MPU_RAM>;
 	};
 
 	ethosu1: ethosu85@49042000 {

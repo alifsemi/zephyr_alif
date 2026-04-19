@@ -13,6 +13,7 @@
 #include <alif/common/alif_common.dtsi>
 #include <zephyr/dt-bindings/mipi_dsi/mipi_dsi.h>
 #include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
+#include <zephyr/dt-bindings/memory-attr/memory-attr-arm.h>
 
 &{/} {
 	/* Individual power domain devices - one per domain */
@@ -78,6 +79,7 @@
 	sram0: sram@2000000 {
 		compatible = "zephyr,memory-region","mmio-sram";
 		zephyr,memory-region = "SRAM0";
+		zephyr,memory-attr = <DT_MEM_ARM_MPU_RAM>;
 	};
 
 	ns: ns@20018000 {
