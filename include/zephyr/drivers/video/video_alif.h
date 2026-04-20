@@ -18,6 +18,13 @@ extern "C" {
 #define VIDEO_CID_ALIF_CSI_DPHY_FREQ         (VIDEO_CID_PRIVATE_BASE + 0)
 #define VIDEO_CID_ALIF_CSI_CURR_CAM          (VIDEO_CID_PRIVATE_BASE + 1)
 
+/* ISP aggregate parameter controls — value is a pointer to struct isp_params
+ * (defined in isp_ctrl_params.h).  Set valid_mask to the ISP_PARAM_MASK_*
+ * bits for the modules you want to read or write.
+ */
+#define VIDEO_CID_ALIF_ISP_SET               (VIDEO_CID_PRIVATE_BASE + 2)
+#define VIDEO_CID_ALIF_ISP_GET               (VIDEO_CID_PRIVATE_BASE + 3)
+
 /* Additional supported formats */
 #define VIDEO_PIX_FMT_RGB888_PLANAR_PRIVATE  (VIDEO_FOURCC('P', 'R', 'G', 'B'))
 #define VIDEO_PIX_FMT_BGGR10P                (VIDEO_FOURCC('p', 'B', 'A', 'A'))

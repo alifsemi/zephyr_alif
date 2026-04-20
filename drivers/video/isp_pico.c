@@ -782,10 +782,7 @@ static int isp_enqueue(const struct device *dev, enum video_endpoint_id ep,
 		       struct video_buffer *buf)
 {
 	struct isp_data *data = dev->data;
-	uint32_t to_read;
 	uint32_t tmp;
-
-	struct channel_parameters *channel = &data->init_cfg.channel;
 
 	if (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL) {
 		return -EINVAL;
@@ -799,7 +796,6 @@ static int isp_enqueue(const struct device *dev, enum video_endpoint_id ep,
 		return -ENOBUFS;
 	}
 
-	to_read = channel->output_fmt.pitch * channel->output_fmt.height;
 	buf->bytesused = 0;
 
 	k_fifo_put(&data->fifo_in, buf);
@@ -837,21 +833,29 @@ static int isp_dequeue(const struct device *dev, enum video_endpoint_id ep,
 static int isp_set_ctrl(const struct device *dev, unsigned int cid, void *value)
 {
 	const struct isp_config *config = dev->config;
-	int ret = -ENOTSUP;
+	struct isp_data *data = dev->data;
 
-	ret = video_set_ctrl(config->controller, cid, value);
-	if (ret) {
-		return ret;
+	switch (cid) {
+	case VIDEO_CID_ALIF_ISP_SET:
+		return isp_vsi_set_param(&data->init_cfg,
+					 (const struct isp_params *)value);
+	default:
+		return video_set_ctrl(config->controller, cid, value);
 	}
-
-	return 0;
 }
 
 static int isp_get_ctrl(const struct device *dev, unsigned int cid, void *value)
 {
 	const struct isp_config *config = dev->config;
+	struct isp_data *data = dev->data;
 
-	return video_get_ctrl(config->controller, cid, value);
+	switch (cid) {
+	case VIDEO_CID_ALIF_ISP_GET:
+		return isp_vsi_get_param(&data->init_cfg,
+					 (struct isp_params *)value);
+	default:
+		return video_get_ctrl(config->controller, cid, value);
+	}
 }
 
 #ifdef CONFIG_POLL

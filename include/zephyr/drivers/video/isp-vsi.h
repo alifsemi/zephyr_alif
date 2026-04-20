@@ -5,6 +5,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/video.h>
+#include <zephyr/drivers/video/isp_ctrl_params.h>
 
 #ifndef __ZEPHYR_INCLUDE_DRIVERS_ISP_VSI_H__
 #define __ZEPHYR_INCLUDE_DRIVERS_ISP_VSI_H__
@@ -104,6 +105,46 @@ int isp_vsi_enqueue(struct isp_config_params *init_cfg,
 		struct video_buffer *buf);
 int isp_vsi_dequeue(struct isp_config_params *init_cfg,
 		struct video_buffer *buf);
+
+/**
+ * @brief Set ISP module parameters on a live ISP port.
+ *
+ * Called by isp_pico.c in response to video_set_ctrl() with
+ * VIDEO_CID_ALIF_ISP_SET.  Must be called after isp_vsi_init().
+ * Only modules whose ISP_PARAM_MASK_* bit is set in params->valid_mask
+ * are applied; all others are ignored.
+ *
+ * @param init_cfg  Pointer to the config used during isp_vsi_init().
+ * @param params    Aggregate parameter struct with valid_mask set.
+ *
+ * @retval 0        Success.
+ * @retval -EINVAL  init_cfg or params is NULL.
+ * @retval -ENOTSUP Module not compiled in.
+ * @retval <0       ISP library error mapped to errno.
+ */
+int isp_vsi_set_param(struct isp_config_params *init_cfg,
+		      const struct isp_params *params);
+
+/**
+ * @brief Get ISP module parameters from a live ISP port.
+ *
+ * Called by isp_pico.c in response to video_get_ctrl() with
+ * VIDEO_CID_ALIF_ISP_GET.  Must be called after isp_vsi_init().
+ * Only modules whose ISP_PARAM_MASK_* bit is set in params->valid_mask
+ * are read back; all others are left untouched.
+ *
+ * @param init_cfg  Pointer to the config used during isp_vsi_init().
+ * @param params    Aggregate parameter struct with valid_mask set;
+ *                  filled in on return.
+ *
+ * @retval 0        Success.
+ * @retval -EINVAL  init_cfg or params is NULL.
+ * @retval -ENOTSUP Module not compiled in.
+ * @retval <0       ISP library error mapped to errno.
+ */
+int isp_vsi_get_param(struct isp_config_params *init_cfg,
+		      struct isp_params *params);
+
 
 #ifdef __cplusplus
 }
