@@ -9,3 +9,13 @@ config GPIO_DW
 	depends on DT_HAS_SNPS_DESIGNWARE_GPIO_ENABLED
 	help
 	  Enable driver for Designware GPIO
+
+config GPIO_DW_MULTICORE
+	bool "Multi-core support for DesignWare GPIO"
+	depends on GPIO_DW && SOC_FAMILY_ENSEMBLE && ALIF_HWSEM
+	help
+	  Enable multi-core safe access for DesignWare GPIO controllers
+	  shared between HE and HP cores on Alif Ensemble SoCs.
+	  Uses a hardware semaphore (hwsem0) to protect shared register
+	  access and tracks per-core pin ownership to prevent interrupt
+	  interference between cores.

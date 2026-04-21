@@ -37,6 +37,9 @@ struct gpio_dw_runtime {
 	struct gpio_driver_data common;
 	uint32_t base_addr;
 	sys_slist_t callbacks;
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	uint32_t owned_pins;
+#endif
 };
 
 #ifdef __cplusplus

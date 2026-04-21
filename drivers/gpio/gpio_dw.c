@@ -22,6 +22,38 @@
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/irq.h>
 
+#ifdef CONFIG_GPIO_DW_MULTICORE
+#include <zephyr/drivers/hwsem_ipm.h>
+
+#if defined(CONFIG_RTSS_HE)
+#define GPIO_DW_HWSEM_MASTER_ID 1
+#elif defined(CONFIG_RTSS_HP)
+#define GPIO_DW_HWSEM_MASTER_ID 2
+#else
+#error "GPIO_DW_MULTICORE requires CONFIG_RTSS_HE or CONFIG_RTSS_HP"
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(hwsem0), okay)
+static const struct device *const gpio_dw_hwsem = DEVICE_DT_GET(DT_NODELABEL(hwsem0));
+#else
+static const struct device *const gpio_dw_hwsem;
+#endif
+
+static inline void gpio_dw_lock(void)
+{
+	if (device_is_ready(gpio_dw_hwsem)) {
+		hwsem_lock(gpio_dw_hwsem, GPIO_DW_HWSEM_MASTER_ID);
+	}
+}
+
+static inline void gpio_dw_unlock(void)
+{
+	if (device_is_ready(gpio_dw_hwsem)) {
+		hwsem_unlock(gpio_dw_hwsem, GPIO_DW_HWSEM_MASTER_ID);
+	}
+}
+#endif /* CONFIG_GPIO_DW_MULTICORE */
+
 #ifdef CONFIG_IOAPIC
 #include <zephyr/drivers/interrupt_controller/ioapic.h>
 #endif
@@ -202,6 +234,10 @@ static int gpio_dw_pin_interrupt_configure(const struct device *port,
 		}
 	}
 
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	gpio_dw_lock();
+#endif
+
 	/* Clear interrupt enable */
 	dw_set_bit(base_addr, INTEN, pin, false);
 
@@ -232,7 +268,21 @@ static int gpio_dw_pin_interrupt_configure(const struct device *port,
 		/* Finally enabling interrupt */
 		dw_set_bit(base_addr, INTEN, pin, true);
 		dw_set_bit(base_addr, INTMASK, pin, false);
+
+#ifdef CONFIG_GPIO_DW_MULTICORE
+		context->owned_pins |= BIT(pin);
+		irq_enable(config->irq_num + pin);
+#endif
+	} else {
+#ifdef CONFIG_GPIO_DW_MULTICORE
+		context->owned_pins &= ~BIT(pin);
+		irq_disable(config->irq_num + pin);
+#endif
 	}
+
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	gpio_dw_unlock();
+#endif
 
 	return 0;
 }
@@ -390,6 +440,54 @@ static inline int gpio_dw_manage_callback(const struct device *port,
 }
 
 #if DT_ANY_INST_HAS_PROP_STATUS_OKAY(interrupts)
+#ifdef CONFIG_GPIO_DW_MULTICORE
+
+struct gpio_dw_isr_param {
+	const struct device *dev;
+	uint32_t pin;
+};
+
+/* Per-pin ISR: used when each pin has its own NVIC line */
+static void gpio_dw_isr_pin(const void *arg)
+{
+	const struct gpio_dw_isr_param *param = arg;
+	const struct device *port = param->dev;
+	struct gpio_dw_runtime *context = port->data;
+	uint32_t base_addr = dw_base_to_block_base(context->base_addr);
+	uint32_t pin_bit = BIT(param->pin);
+
+	if (!(pin_bit & context->owned_pins)) {
+		return;
+	}
+
+	/* PORTA_EOI is write-1-to-clear; harmless if already cleared */
+	dw_write(base_addr, PORTA_EOI, pin_bit);
+
+	gpio_fire_callbacks(&context->callbacks, port, pin_bit);
+}
+
+#ifdef CONFIG_ENSEMBLE_GEN2
+/* Shared ISR: used when all pins share a single NVIC line (gpio16/17 on E4/E8) */
+static void gpio_dw_isr_shared(const struct device *port)
+{
+	struct gpio_dw_runtime *context = port->data;
+	uint32_t base_addr = dw_base_to_block_base(context->base_addr);
+	uint32_t int_status;
+
+	int_status = dw_read(base_addr, INTSTATUS);
+	int_status &= context->owned_pins;
+	if (!int_status) {
+		return;
+	}
+
+	dw_write(base_addr, PORTA_EOI, int_status);
+
+	gpio_fire_callbacks(&context->callbacks, port, int_status);
+}
+#endif /* CONFIG_ENSEMBLE_GEN2 */
+
+#else
+
 static void gpio_dw_isr(const struct device *port)
 {
 	struct gpio_dw_runtime *context = port->data;
@@ -402,6 +500,8 @@ static void gpio_dw_isr(const struct device *port)
 
 	gpio_fire_callbacks(&context->callbacks, port, int_status);
 }
+
+#endif
 #endif /* DT_ANY_INST_HAS_PROP_STATUS_OKAY(interrupts) */
 
 static DEVICE_API(gpio, api_funcs) = {
@@ -429,10 +529,12 @@ static int gpio_dw_initialize(const struct device *port)
 		/* interrupts in sync with system clock */
 		dw_set_bit(base_addr, INT_CLOCK_SYNC, LS_SYNC_POS, 1);
 
+#ifndef CONFIG_GPIO_DW_MULTICORE
 		/* mask and disable interrupts */
 		dw_write(base_addr, INTMASK, ~(0));
 		dw_write(base_addr, INTEN, 0);
 		dw_write(base_addr, PORTA_EOI, ~(0));
+#endif
 
 		config->config_func(port);
 	}
@@ -450,13 +552,47 @@ static int gpio_dw_initialize(const struct device *port)
 #define INST_IRQ_FLAGS(n) \
 	COND_CODE_1(DT_INST_IRQ_HAS_CELL(n, flags), (DT_INST_IRQ(n, flags)), (0))
 
+#ifdef CONFIG_GPIO_DW_MULTICORE
+/*
+ * Multi-core IRQ setup: per-pin ISR params when each pin has its own IRQ,
+ * shared ISR when all pins share a single IRQ line.
+ */
+#define GPIO_CFG_IRQ_PIN(idx, n)                                                                   \
+	IRQ_CONNECT(DT_INST_IRQN_BY_IDX(n, idx), DT_INST_IRQ_BY_IDX(n, idx, priority),             \
+		    gpio_dw_isr_pin, &gpio_isr_params_##n[idx], INST_IRQ_FLAGS(n));
+
+#define GPIO_CFG_IRQ_SHARED(idx, n)                                                                \
+	IRQ_CONNECT(DT_INST_IRQN_BY_IDX(n, idx), DT_INST_IRQ_BY_IDX(n, idx, priority),             \
+		    gpio_dw_isr_shared, DEVICE_DT_INST_GET(n), INST_IRQ_FLAGS(n));
+
+#define GPIO_ISR_PARAM_ENTRY(idx, n) \
+	{ .dev = DEVICE_DT_INST_GET(n), .pin = idx }
+
+/* Select per-pin or shared based on whether ngpios == num_irqs */
+#define GPIO_CFG_IRQ(idx, n)                                              \
+	COND_CODE_1(UTIL_BOOL(DT_INST_IRQ_HAS_IDX(n, 1)),            \
+		(GPIO_CFG_IRQ_PIN(idx, n)),                            \
+		(GPIO_CFG_IRQ_SHARED(idx, n)))
+
+#else
 #define GPIO_CFG_IRQ(idx, n)									\
 		IRQ_CONNECT(DT_INST_IRQN_BY_IDX(n, idx),					\
 			    DT_INST_IRQ_BY_IDX(n, idx, priority), gpio_dw_isr,			\
 			    DEVICE_DT_INST_GET(n), INST_IRQ_FLAGS(n));				\
 		irq_enable(DT_INST_IRQN_BY_IDX(n, idx));					\
 
+#endif
+
 #define GPIO_DW_INIT(n)										\
+	IF_ENABLED(CONFIG_GPIO_DW_MULTICORE, (						\
+		COND_CODE_1(UTIL_BOOL(DT_INST_IRQ_HAS_IDX(n, 1)),			\
+			(static const struct gpio_dw_isr_param				\
+				gpio_isr_params_##n[] = {				\
+				LISTIFY(DT_NUM_IRQS(DT_DRV_INST(n)),			\
+					GPIO_ISR_PARAM_ENTRY, (,), n)			\
+			};),								\
+			(/* single-IRQ: no per-pin params */))				\
+	))										\
 	static void gpio_config_##n##_irq(const struct device *port)				\
 	{											\
 		ARG_UNUSED(port);			                                        \
