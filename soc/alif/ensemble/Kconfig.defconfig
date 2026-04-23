@@ -14,5 +14,8 @@ config SDHC_DESCRIPTOR_SECTION
 	string "Alif Non Secure Section Name for SDHC Descriptor"
 	default ".alif_ns"
 
+config SDHC_DWC_DMA_ADDR_TRANSLATE
+	default y
+
 config I2C_DW_IC_CLK_FREQ_OPTIMIZATION
 	default y if I2C_DW

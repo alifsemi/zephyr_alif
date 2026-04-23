@@ -48,4 +48,13 @@ config SDHC_DWC_ADMA_MAX_DESC
 	help
 	  SDHC DWC ADMA Maximum Descriptor count.
 
+config SDHC_DWC_DMA_ADDR_TRANSLATE
+	bool "Enable CPU-to-bus DMA address translation"
+	help
+	  Enable this on platforms where CPU-local memory addresses differ
+	  from the bus addresses seen by the DMA engine. When enabled the
+	  driver calls a SoC-provided translation function before
+	  programming DMA descriptor and buffer addresses. Leave disabled
+	  on platforms where CPU and DMA share the same address map.
+
 endif # SDHC_DWC

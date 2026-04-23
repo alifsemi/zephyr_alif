@@ -20,8 +20,16 @@
 
 #include "sdhc_dwc.h"
 
+#ifdef CONFIG_SDHC_DWC_DMA_ADDR_TRANSLATE
+#if defined(CONFIG_SOC_FAMILY_ENSEMBLE) || defined(CONFIG_SOC_FAMILY_BALLETTO)
+#include "soc_memory_map.h"
+#define SDHC_DMA_ADDR(p) local_to_global(p)
+#else
 #define SDHC_DMA_ADDR(p) ((mem_addr_t)(p))
-
+#endif
+#else
+#define SDHC_DMA_ADDR(p) ((mem_addr_t)(p))
+#endif
 
 LOG_MODULE_REGISTER(sdhc_dwc, CONFIG_SDHC_LOG_LEVEL);
 
