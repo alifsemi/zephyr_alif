@@ -1043,8 +1043,10 @@
 				 <PIN_P5_0__SD_D0_A>,
 				 <PIN_P5_1__SD_D1_A>,
 				 <PIN_P5_2__SD_D2_A>,
-				 <PIN_P5_3__SD_D3_A>;
+				 <PIN_P5_3__SD_D3_A>,
+				 <PIN_P14_1__LFXO_OUT_B>;
 			read-enable = <0x1>;
+			drive-strength = <8>;
 		};
 	};
 

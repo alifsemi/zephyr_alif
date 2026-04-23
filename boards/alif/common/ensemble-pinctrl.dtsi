@@ -1098,7 +1098,8 @@
 				 <PIN_P5_3__SD_D3_A>,
 				 <PIN_P3_3__GPIO>;
 			read-enable = <0x1>;
-			drive-strength = <8>;
+			drive-strength = <12>;
+			driver-state-control = <1>;
 		};
 	};
 
