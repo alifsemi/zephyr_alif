@@ -19,7 +19,6 @@ struct scmi_message;
 struct scmi_channel;
 
 /**
- * @typedef scmi_channel_cb
  *
  * @brief Callback function for message replies
  *

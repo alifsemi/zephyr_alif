@@ -283,11 +283,12 @@ struct spi_cs_control {
  * @param delay_ The @p delay field to set in the @p spi_cs_control
  * @return a pointer to the @p spi_cs_control structure
  */
-#define SPI_CS_CONTROL_INIT_INST(inst, delay_)		\
-	SPI_CS_CONTROL_INIT(DT_DRV_INST(inst), delay_)
+#define SPI_CS_CONTROL_INIT_INST(inst)			\
+	SPI_CS_CONTROL_INIT(DT_DRV_INST(inst))
+
+/** @} */
 
 /**
- * @typedef spi_operation_t
  * Opaque type to hold the SPI operation flags.
  */
 #if defined(CONFIG_SPI_EXTENDED_MODES)
@@ -640,8 +641,8 @@ static inline void spi_transceive_stats(const struct device *dev, int error,
 	SPI_DEVICE_DT_DEFINE(DT_DRV_INST(inst), __VA_ARGS__)
 
 /**
- * @typedef spi_api_io
- * @brief Callback API for I/O
+ * @brief Callback API for I/O.
+ *
  * See spi_transceive() for argument descriptions
  */
 typedef int (*spi_api_io)(const struct device *dev,
@@ -659,8 +660,8 @@ typedef int (*spi_api_io)(const struct device *dev,
 typedef void (*spi_callback_t)(const struct device *dev, int result, void *data);
 
 /**
- * @typedef spi_api_io
- * @brief Callback API for asynchronous I/O
+ * @brief Callback API for asynchronous I/O.
+ *
  * See spi_transceive_signal() for argument descriptions
  */
 typedef int (*spi_api_io_async)(const struct device *dev,
@@ -673,7 +674,6 @@ typedef int (*spi_api_io_async)(const struct device *dev,
 #if defined(CONFIG_SPI_RTIO) || defined(DOXYGEN)
 
 /**
- * @typedef spi_api_iodev_submit
  * @brief Callback API for submitting work to a SPI device with RTIO
  */
 typedef void (*spi_api_iodev_submit)(const struct device *dev,
@@ -681,7 +681,6 @@ typedef void (*spi_api_iodev_submit)(const struct device *dev,
 #endif /* CONFIG_SPI_RTIO */
 
 /**
- * @typedef spi_api_release
  * @brief Callback API for unlocking SPI device.
  * See spi_release() for argument descriptions
  */

@@ -374,7 +374,6 @@ enum sensor_attribute {
 };
 
 /**
- * @typedef sensor_trigger_handler_t
  * @brief Callback API upon firing of a trigger
  *
  * @param dev Pointer to the sensor device
@@ -1139,7 +1138,6 @@ static inline int sensor_read_async_mempool(struct rtio_iodev *iodev, struct rti
 }
 
 /**
- * @typedef sensor_processing_callback_t
  * @brief Callback function used with the helper processing function.
  *
  * @see sensor_processing_with_callback

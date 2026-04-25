@@ -63,6 +63,33 @@ typedef uint8_t regulator_error_flags_t;
 
 /** @} */
 
+/**
+ * @brief Regulator event types
+ */
+enum regulator_event_type {
+	/** @brief Regulator voltage is detected */
+	REGULATOR_VOLTAGE_DETECTED,
+	/** @brief Regulator voltage is removed */
+	REGULATOR_VOLTAGE_REMOVED,
+};
+
+/** @brief Regulator event structure */
+struct regulator_event {
+	/** @brief Event type */
+	enum regulator_event_type type;
+};
+
+/**
+ * @brief Regulator callback function signature
+ *
+ * @param dev Regulator device instance
+ * @param evt Regulator event
+ * @param user_data User data
+ */
+typedef void (*regulator_callback_t)(const struct device *dev,
+				     const struct regulator_event *const evt,
+				     const void *const user_data);
+
 /** @cond INTERNAL_HIDDEN */
 
 typedef int (*regulator_dvs_state_set_t)(const struct device *dev,

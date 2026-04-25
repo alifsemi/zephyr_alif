@@ -22,7 +22,6 @@ struct nxp_flexio_child_res {
 };
 
 /**
- * @typedef nxp_flexio_child_isr_t
  * @brief Callback API to inform API user that FlexIO triggered interrupt
  *
  * This callback is called from IRQ context.

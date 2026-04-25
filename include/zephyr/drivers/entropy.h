@@ -37,7 +37,12 @@ extern "C" {
 #define ENTROPY_BUSYWAIT  BIT(0)
 
 /**
- * @typedef entropy_get_entropy_t
+ * @def_driverbackendgroup{Entropy,entropy_interface}
+ * @ingroup entropy_interface
+ * @{
+ */
+
+/**
  * @brief Callback API to get entropy.
  *
  * @note This call has to be thread safe to satisfy requirements
@@ -49,7 +54,6 @@ typedef int (*entropy_get_entropy_t)(const struct device *dev,
 				     uint8_t *buffer,
 				     uint16_t length);
 /**
- * @typedef entropy_get_entropy_isr_t
  * @brief Callback API to get entropy from an ISR.
  *
  * See entropy_get_entropy_isr() for argument description
