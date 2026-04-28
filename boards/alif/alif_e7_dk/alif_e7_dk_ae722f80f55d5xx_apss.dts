@@ -17,9 +17,10 @@
 	#size-cells = <1>;
 
 	chosen {
+		zephyr,flash = &mram0;
 		zephyr,sram = &sram0;
-		zephyr,console = &uart4;
-		zephyr,shell-uart = &uart4;
+		zephyr,console = &uart2;
+		zephyr,shell-uart = &uart2;
 	};
 
 	cpus {
@@ -47,6 +48,12 @@
 				     <GIC_PPI 10 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
 			label = "arch_timer";
 			status = "okay";
+		};
+
+		mram0: mram@80100000 {
+			compatible = "zephyr,memory-region";
+			reg = <0x80100000 DT_SIZE_K(4608)>;
+			zephyr,memory-region = "MRAM";
 		};
 
 		sram0: sram@2000000 {
@@ -184,7 +191,7 @@
 			pinctrl-0 = <&pinctrl_uart2>;
 			pinctrl-names = "default";
 			fifo-size = <32>;
-			status = "disabled";
+			status = "okay";
 		};
 
 		uart3: uart@4901b000 {
@@ -210,7 +217,7 @@
 			fifo-size = <32>;
 			pinctrl-0 = <&pinctrl_uart4>;
 			pinctrl-names = "default";
-			status = "okay";
+			status = "disabled";
 		};
 
 		uart5: uart@4901d000 {
