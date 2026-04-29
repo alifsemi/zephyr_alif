@@ -1,9 +1,14 @@
 /*
- * Copyright (c) 2025 Alif Semiconductor.
+ * Copyright (c) 2026 Alif Semiconductor.
  * SPDX-License-Identifier: Apache-2.0
  */
 
 ns: &ns {
+	status = "okay";
+};
+
+/* GPIO3 is needed for SDHC card-detect */
+&gpio3 {
 	status = "okay";
 };
 
@@ -15,4 +20,3 @@ sdhc: &sdhc {
 		disk-name = "SD";
 	};
 };
-

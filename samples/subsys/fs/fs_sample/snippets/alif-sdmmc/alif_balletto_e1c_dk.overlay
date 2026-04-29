@@ -7,6 +7,16 @@ ns: &ns {
 	status = "okay";
 };
 
+/* GPIO6 is needed for SDHC card-detect */
+&gpio6 {
+	status = "okay";
+};
+
+/* GPIO7 is needed for SDHC reset */
+&gpio7 {
+	status = "okay";
+};
+
 sdhc: &sdhc {
 	status = "okay";
 
@@ -15,4 +25,3 @@ sdhc: &sdhc {
 		disk-name = "SD";
 	};
 };
-
