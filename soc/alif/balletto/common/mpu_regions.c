@@ -7,22 +7,36 @@
 #include <zephyr/sys/slist.h>
 #include <zephyr/arch/arm/mpu/arm_mpu.h>
 
+#define OSPI0_NODE			DT_NODELABEL(ospi0)
+#define OSPI_FLASH_NODE			DT_NODELABEL(ospi_flash)
+#define OSPI_RAM_NODE			DT_NODELABEL(ospi_ram)
+
 #define ALIF_HOST_OSPI_REG		0x83000000
 #define ALIF_HOST_OSPI_SIZE		KB(16)
 
 #define ALIF_HOST_PERIPHERAL_BASE	0x1A000000
 #define ALIF_HOST_PERIPHERAL_SIZE	MB(16)
 
-#define ALIF_HOST_OSPI0_XIP_BASE	0xA0000000
-#define ALIF_HOST_OSPI0_XIP_SIZE	MB(512)
+#define ALIF_HOST_OSPI0_XIP_BASE	DT_PROP_BY_IDX(OSPI0_NODE, xip_base_address, 0)
+#define ALIF_HOST_OSPI0_XIP_SIZE	DT_PROP_BY_IDX(OSPI0_NODE, xip_base_address, 1)
 
-#define REGION_OSPI_FLASH_ATTR(base, size) \
+#define REGION_OSPI_XIP_ATTR(index, base, size) \
 {\
-	.rbar = RO_Msk | NON_SHAREABLE_Msk, \
-	/* Cache-ability */ \
-	.mair_idx = MPU_MAIR_INDEX_SRAM_NOCACHE, \
+	.rbar = FULL_ACCESS_Msk | NON_SHAREABLE_Msk, \
+	.mair_idx = index, \
 	.r_limit = REGION_LIMIT_ADDR(base, size),  \
 }
+
+#if DT_NODE_HAS_STATUS(OSPI_RAM_NODE, okay)
+#define OSPI0_XIP_REGION_NAME			"OSPI0_RAM_XIP"
+#define OSPI0_XIP_MAIR_INDEX			MPU_MAIR_INDEX_DEVICE
+#elif DT_NODE_HAS_STATUS(OSPI_FLASH_NODE, okay)
+#define OSPI0_XIP_REGION_NAME			"OSPI0_FLASH_XIP"
+#define OSPI0_XIP_MAIR_INDEX			MPU_MAIR_INDEX_FLASH
+#else
+#define OSPI0_XIP_REGION_NAME			"OSPI0_XIP"
+#define OSPI0_XIP_MAIR_INDEX			MPU_MAIR_INDEX_SRAM
+#endif
 
 #define MRAM_SECTOR_SIZE		DT_PROP(DT_NODELABEL(mram_storage), erase_block_size)
 
@@ -102,9 +116,10 @@ static const struct arm_mpu_region mpu_regions[] = {
 			 REGION_DEVICE_ATTR(ALIF_HOST_PERIPHERAL_BASE,
 							ALIF_HOST_PERIPHERAL_SIZE)),
 	/* Region 6 */
-	MPU_REGION_ENTRY("OSPI0_XIP", ALIF_HOST_OSPI0_XIP_BASE,
-			 REGION_OSPI_FLASH_ATTR(ALIF_HOST_OSPI0_XIP_BASE,
-							ALIF_HOST_OSPI0_XIP_SIZE)),
+	MPU_REGION_ENTRY(OSPI0_XIP_REGION_NAME, ALIF_HOST_OSPI0_XIP_BASE,
+			 REGION_OSPI_XIP_ATTR(OSPI0_XIP_MAIR_INDEX,
+					      ALIF_HOST_OSPI0_XIP_BASE,
+					      ALIF_HOST_OSPI0_XIP_SIZE)),
 };
 
 const struct arm_mpu_config mpu_config = {
