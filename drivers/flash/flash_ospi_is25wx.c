@@ -199,6 +199,26 @@ static int set_write_enable(const struct device *dev, int dfs)
 	return ret;
 }
 
+/*
+ * Octal DDR alignment requirements (from ISSI IS25WX datasheet):
+ *
+ * "When accessing cell array (Read/Program), minimum transferred data
+ * size is 2-bytes in DDR mode, so the LSB of starting address must be
+ * always '0'."
+ *
+ * "Octal DDR operation requires bus transition in even number, therefore
+ * for program operation, the following restriction apply:
+ *  - If there is a need to program from odd starting address, keep the
+ *    even input address and the input data shall start with 'FFh'.
+ *  - If there is a need to program with odd ending address, simply
+ *    provide an extra data with 'FFh' in the last falling edge of clock."
+ *
+ * Implementation (applies to both read and write paths):
+ *  - Prefix handler: rounds start address down to even, pads leading
+ *    byte(s) with 0xFF (erase value, no-op for flash programming).
+ *  - Suffix handler: pads trailing odd byte with 0xFF to complete the
+ *    2-byte transfer.
+ */
 static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void *buffer,
 				size_t length)
 {
@@ -225,11 +245,80 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 
 	LOG_DBG("read address %u length to read %d", (uint32_t) address, length);
 
+	data_ptr = (uint8_t *) buffer;
+
+	/* Handle prefix bytes if start address is not block-aligned.
+	 * Read one full block from the aligned-down address into a temp
+	 * buffer, then copy only the bytes after the offset to the caller.
+	 */
+	size_t addr_offset = address & (f_param->write_block_size - 1);
+
+	if (addr_offset != 0 && length > 0) {
+		uint8_t temp_buf[4] = {0};
+		size_t prefix = f_param->write_block_size - addr_offset;
+
+		if (prefix > length) {
+			prefix = length;
+		}
+
+		uint32_t aligned_addr = address & ~(f_param->write_block_size - 1);
+
+		dev_data->trans_conf.wait_cycles = 16;
+		dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_32_BITS;
+		dev_data->trans_conf.frame_size = dev_cfg->rw_dfs;
+
+		ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle,
+						     &dev_data->trans_conf);
+		if (ret != 0) {
+			ret = err_map_alif_hal_to_zephyr(ret);
+			goto out;
+		}
+
+		ret = set_cs_pin(dev_data->ospi_handle, SLAVE_ACTIVATE);
+		if (ret != 0) {
+			goto out;
+		}
+
+		cmd[0] = CMD_READ_DATA;
+		cmd[1] = aligned_addr;
+		k_event_clear(&dev_data->event_f,
+			      OSPI_EVENT_TRANSFER_COMPLETE |
+			      OSPI_EVENT_DATA_LOST);
+
+		ret = alif_hal_ospi_transfer(dev_data->ospi_handle,
+					     cmd, temp_buf, 1);
+		if (ret != 0) {
+			ret = err_map_alif_hal_to_zephyr(ret);
+			set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+			goto out;
+		}
+
+		event = k_event_wait(&dev_data->event_f,
+				     OSPI_EVENT_TRANSFER_COMPLETE |
+				     OSPI_EVENT_DATA_LOST,
+				     false, K_FOREVER);
+		if (!(event & OSPI_EVENT_TRANSFER_COMPLETE)) {
+			LOG_ERR("F-Read: Incomplete Event [%d]", event);
+			set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+			ret = -EIO;
+			goto out;
+		}
+
+		ret = set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+		if (ret != 0) {
+			goto out;
+		}
+
+		memcpy(data_ptr, temp_buf + addr_offset, prefix);
+
+		address += prefix;
+		data_ptr += prefix;
+		length -= prefix;
+	}
+
 	/* number of block count */
 	size_t aligned_len = length & ~(f_param->write_block_size - 1);
 	size_t remaining = length - aligned_len;
-
-	data_ptr = (uint8_t *) buffer;
 
 	dev_data->trans_conf.wait_cycles = 16;
 	dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_32_BITS;
@@ -239,8 +328,7 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 	ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle, &dev_data->trans_conf);
 	if (ret != 0) {
 		ret = err_map_alif_hal_to_zephyr(ret);
-		k_sem_give(&dev_data->sem);
-		return ret;
+		goto out;
 	}
 
 	size_t blocks = aligned_len / f_param->write_block_size;
@@ -266,6 +354,7 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 		ret = alif_hal_ospi_transfer(dev_data->ospi_handle, cmd, data_ptr, data_cnt);
 		if (ret != 0) {
 			ret = err_map_alif_hal_to_zephyr(ret);
+			set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
 			break;
 		}
 
@@ -303,36 +392,51 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 		dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_32_BITS;
 		dev_data->trans_conf.frame_size = dev_cfg->rw_dfs;
 
-		ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle, &dev_data->trans_conf);
-		if (ret == 0) {
-			ret = set_cs_pin(dev_data->ospi_handle, SLAVE_ACTIVATE);
+		ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle,
+						     &dev_data->trans_conf);
+		if (ret != 0) {
+			ret = err_map_alif_hal_to_zephyr(ret);
+			goto out;
 		}
-		if (ret == 0) {
-			cmd[0] = CMD_READ_DATA;
-			cmd[1] = address;
-			k_event_clear(&dev_data->event_f,
-					  OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST);
 
-			ret = alif_hal_ospi_transfer(dev_data->ospi_handle, cmd, temp_buf, 1);
+		ret = set_cs_pin(dev_data->ospi_handle, SLAVE_ACTIVATE);
+		if (ret != 0) {
+			goto out;
 		}
-		if (ret == 0) {
-			event = k_event_wait(&dev_data->event_f,
-						OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST,
-						false, K_FOREVER);
 
-			if (!(event & OSPI_EVENT_TRANSFER_COMPLETE)) {
-				LOG_ERR("F-Read: Incomplete Event [%d]", event);
-				set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
-				ret = -EIO;
-			}
+		cmd[0] = CMD_READ_DATA;
+		cmd[1] = address;
+		k_event_clear(&dev_data->event_f,
+			      OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST);
+
+		ret = alif_hal_ospi_transfer(dev_data->ospi_handle, cmd, temp_buf, 1);
+		if (ret != 0) {
+			ret = err_map_alif_hal_to_zephyr(ret);
+			set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+			goto out;
 		}
-		if (ret == 0) {
-			ret = set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+
+		event = k_event_wait(&dev_data->event_f,
+				     OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST,
+				     false, K_FOREVER);
+		if (!(event & OSPI_EVENT_TRANSFER_COMPLETE)) {
+			LOG_ERR("F-Read: Incomplete Event [%d]", event);
+			set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+			ret = -EIO;
+			goto out;
 		}
-		if (ret == 0) {
-			memcpy(data_ptr, temp_buf, remaining);
+
+		ret = set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+		if (ret != 0) {
+			goto out;
 		}
+
+		memcpy(data_ptr, temp_buf, remaining);
 	}
+
+out:
+	/* Force De-Select */
+	set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
 
 	k_sem_give(&dev_data->sem);
 	return ret;
