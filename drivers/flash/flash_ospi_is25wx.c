@@ -463,22 +463,143 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		return -EINVAL;
 	}
 
-	/*In DDR Mode bytes and length should be in multiple of write_block_size */
-	if (length % f_param->write_block_size
-		|| !(IS_ALIGNED(buffer, f_param->write_block_size))) {
-		return -EINVAL;
-	}
-
 	ret = k_sem_take(&dev_data->sem, K_MSEC(MAX_SEM_TIMEOUT));
 	if (ret != 0) {
 		return ret;
 	}
 
-	/* number of block count */
-	cnt = length / f_param->write_block_size;
 	data_ptr = (uint8_t *) buffer;
 
-	while (cnt) {
+	/* Handle prefix bytes if start address is not word-aligned.
+	 * Write one full block at the aligned-down address, placing user
+	 * data at the correct byte offset within the word.  Padding with
+	 * erase_value (0xFF) is a no-op for flash programming.
+	 */
+	size_t addr_offset = address & (f_param->write_block_size - 1);
+
+	if (addr_offset != 0 && length > 0) {
+		uint8_t temp_buf[4];
+		size_t prefix = f_param->write_block_size - addr_offset;
+
+		if (prefix > length) {
+			prefix = length;
+		}
+
+		memset(temp_buf, f_param->erase_value, sizeof(temp_buf));
+		memcpy(temp_buf + addr_offset, data_ptr, prefix);
+
+		uint32_t aligned_addr = address & ~(f_param->write_block_size - 1);
+
+		dev_data->trans_conf.wait_cycles = 0;
+		dev_data->trans_conf.addr_len = 0;
+
+		ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle,
+						     &dev_data->trans_conf);
+		if (ret != 0) {
+			ret = err_map_alif_hal_to_zephyr(ret);
+			goto out;
+		}
+
+		ret = set_write_enable(dev, OSPI_DFS_BITS_16);
+		if (ret != 0) {
+			goto out;
+		}
+
+		dev_data->cmd_buf[0] = CMD_PAGE_PROGRAM;
+		dev_data->cmd_buf[1] = aligned_addr;
+
+		switch (dev_cfg->rw_dfs) {
+		case OSPI_DFS_BITS_8:
+			dev_data->cmd_buf[2] = temp_buf[0];
+			break;
+		case OSPI_DFS_BITS_16: {
+			uint16_t v;
+
+			memcpy(&v, temp_buf, sizeof(v));
+			dev_data->cmd_buf[2] = v;
+			break;
+		}
+		case OSPI_DFS_BITS_32: {
+			uint32_t v;
+
+			memcpy(&v, temp_buf, sizeof(v));
+			dev_data->cmd_buf[2] = v;
+			break;
+		}
+		}
+
+		dev_data->trans_conf.wait_cycles = 0;
+		dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_32_BITS;
+		dev_data->trans_conf.frame_size = dev_cfg->rw_dfs;
+
+		ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle,
+						     &dev_data->trans_conf);
+		if (ret != 0) {
+			ret = err_map_alif_hal_to_zephyr(ret);
+			goto out;
+		}
+
+		ret = set_cs_pin(dev_data->ospi_handle, SLAVE_ACTIVATE);
+		if (ret != 0) {
+			goto out;
+		}
+
+		k_event_clear(&dev_data->event_f,
+			      OSPI_EVENT_TRANSFER_COMPLETE |
+			      OSPI_EVENT_DATA_LOST);
+
+		ret = alif_hal_ospi_send(dev_data->ospi_handle,
+					 dev_data->cmd_buf, 3);
+		if (ret != 0) {
+			ret = err_map_alif_hal_to_zephyr(ret);
+			set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+			goto out;
+		}
+
+		event = k_event_wait(&dev_data->event_f,
+				     OSPI_EVENT_TRANSFER_COMPLETE |
+				     OSPI_EVENT_DATA_LOST,
+				     false, K_FOREVER);
+		if (!(event & OSPI_EVENT_TRANSFER_COMPLETE)) {
+			LOG_ERR("F-Write: Incomplete Event [%d]", event);
+			set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+			ret = -EIO;
+			goto out;
+		}
+
+		ret = set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+		if (ret != 0) {
+			goto out;
+		}
+
+		/* Wait for flash to complete programming */
+		do {
+			status = read_status_reg(dev, CMD_READ_FLAG_STATUS,
+						 &val);
+			if (status != 0) {
+				ret = status;
+				goto out;
+			}
+			if ((val & FLAG_STATUS_ERROR) != 0U) {
+				LOG_ERR("F-Write: Read Flash status [%d]",
+					 val);
+				ret = -EIO;
+				goto out;
+			}
+		} while ((val & FLAG_STATUS_BUSY) == 0);
+
+		address += prefix;
+		data_ptr += prefix;
+		length -= prefix;
+	}
+
+	/* number of block count for the now-aligned middle portion */
+	size_t aligned_len = length & ~(f_param->write_block_size - 1);
+	size_t remaining = length - aligned_len;
+
+	cnt = aligned_len / f_param->write_block_size;
+
+	while (ret == 0 && cnt) {
 		dev_data->trans_conf.wait_cycles = 0;
 		dev_data->trans_conf.addr_len = 0;
 
@@ -510,14 +631,20 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 			case OSPI_DFS_BITS_8:
 				dev_data->cmd_buf[index++] = data_ptr[data_i];
 				break;
-			case OSPI_DFS_BITS_16:
-				dev_data->cmd_buf[index++] =
-					*(uint16_t *) (data_ptr + (data_i * sizeof(uint16_t)));
+			case OSPI_DFS_BITS_16: {
+				uint16_t v;
+
+				memcpy(&v, data_ptr + (data_i * sizeof(uint16_t)), sizeof(v));
+				dev_data->cmd_buf[index++] = v;
 				break;
-			case OSPI_DFS_BITS_32:
-				dev_data->cmd_buf[index++] =
-					*(uint32_t *) (data_ptr + (data_i * sizeof(uint32_t)));
+			}
+			case OSPI_DFS_BITS_32: {
+				uint32_t v;
+
+				memcpy(&v, data_ptr + (data_i * sizeof(uint32_t)), sizeof(v));
+				dev_data->cmd_buf[index++] = v;
 				break;
+			}
 			}
 			data_i++;
 		}
@@ -543,6 +670,7 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		ret = alif_hal_ospi_send(dev_data->ospi_handle, dev_data->cmd_buf, data_cnt + 2);
 		if (ret != 0) {
 			ret = err_map_alif_hal_to_zephyr(ret);
+			set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
 			break;
 		}
 
@@ -571,16 +699,12 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		do {
 			status = read_status_reg(dev, CMD_READ_FLAG_STATUS, &val);
 			if (status != 0) {
+				ret = status;
 				break;
 			}
 
 			if ((val & FLAG_STATUS_ERROR) != 0U) {
-
 				LOG_ERR("F-Write: Read Flash status [%d]", val);
-				ret = set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
-				if (ret != 0) {
-					break;
-				}
 				ret = -EIO;
 				break;
 			}
@@ -591,6 +715,115 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		}
 	}
 
+	/* Handle remaining odd bytes: pad with erase_value and write one
+	 * full block. Writing erase_value (0xFF) to flash is a no-op since
+	 * flash programming can only turn bits 1->0.
+	 */
+	if (ret == 0 && remaining > 0) {
+		uint8_t temp_buf[4];
+
+		memset(temp_buf, f_param->erase_value, sizeof(temp_buf));
+		memcpy(temp_buf, data_ptr + (aligned_len), remaining);
+
+		dev_data->trans_conf.wait_cycles = 0;
+		dev_data->trans_conf.addr_len = 0;
+
+		ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle,
+						     &dev_data->trans_conf);
+		if (ret != 0) {
+			ret = err_map_alif_hal_to_zephyr(ret);
+			goto out;
+		}
+
+		ret = set_write_enable(dev, OSPI_DFS_BITS_16);
+		if (ret != 0) {
+			goto out;
+		}
+
+		dev_data->cmd_buf[0] = CMD_PAGE_PROGRAM;
+		dev_data->cmd_buf[1] = address;
+
+		/* Pack one word from temp_buf */
+		switch (dev_cfg->rw_dfs) {
+		case OSPI_DFS_BITS_8:
+			dev_data->cmd_buf[2] = temp_buf[0];
+			break;
+		case OSPI_DFS_BITS_16: {
+			uint16_t v;
+
+			memcpy(&v, temp_buf, sizeof(v));
+			dev_data->cmd_buf[2] = v;
+			break;
+		}
+		case OSPI_DFS_BITS_32: {
+			uint32_t v;
+
+			memcpy(&v, temp_buf, sizeof(v));
+			dev_data->cmd_buf[2] = v;
+			break;
+		}
+		}
+
+		dev_data->trans_conf.wait_cycles = 0;
+		dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_32_BITS;
+		dev_data->trans_conf.frame_size = dev_cfg->rw_dfs;
+
+		ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle,
+						     &dev_data->trans_conf);
+		if (ret != 0) {
+			ret = err_map_alif_hal_to_zephyr(ret);
+			goto out;
+		}
+
+		ret = set_cs_pin(dev_data->ospi_handle, SLAVE_ACTIVATE);
+		if (ret != 0) {
+			goto out;
+		}
+
+		k_event_clear(&dev_data->event_f,
+			      OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST);
+
+		/* cmd(1) + addr(1) + data(1) = 3 words */
+		ret = alif_hal_ospi_send(dev_data->ospi_handle,
+					 dev_data->cmd_buf, 3);
+		if (ret != 0) {
+			ret = err_map_alif_hal_to_zephyr(ret);
+			set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+			goto out;
+		}
+
+		event = k_event_wait(&dev_data->event_f,
+				     OSPI_EVENT_TRANSFER_COMPLETE |
+				     OSPI_EVENT_DATA_LOST,
+				     false, K_FOREVER);
+		if (!(event & OSPI_EVENT_TRANSFER_COMPLETE)) {
+			LOG_ERR("F-Write: Incomplete Event [%d]", event);
+			set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+			ret = -EIO;
+			goto out;
+		}
+
+		ret = set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+		if (ret != 0) {
+			goto out;
+		}
+
+		/* Wait for flash to complete programming */
+		do {
+			status = read_status_reg(dev, CMD_READ_FLAG_STATUS, &val);
+			if (status != 0) {
+				ret = status;
+				goto out;
+			}
+			if ((val & FLAG_STATUS_ERROR) != 0U) {
+				LOG_ERR("F-Write: Read Flash status [%d]", val);
+				ret = -EIO;
+				goto out;
+			}
+		} while ((val & FLAG_STATUS_BUSY) == 0);
+	}
+
+out:
 	/* Force De-Select */
 	set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
 
