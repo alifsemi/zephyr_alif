@@ -395,15 +395,6 @@ static int dma_pl330_start_dma_ch(const struct device *dev,
 
 	k_spin_unlock(&dev_data->lock, key);
 
-	count = 0U;
-	do {
-		data = sys_read32(reg_base + DMAC_PL330_DBGCMD);
-		if (++count > DMA_TIMEOUT_US) {
-			return -ETIMEDOUT;
-		}
-		k_busy_wait(1);
-	} while ((data & DATA_MASK) != 0);
-
 	return 0;
 }
 
