@@ -79,7 +79,7 @@ struct dma_alif_evtrtr_config {
  */
 struct dma_alif_evtrtr_data {
 	DEVICE_MMIO_RAM;		/* Mapped MMIO region */
-	struct k_mutex lock;		/* Mutex for thread-safe access */
+	struct k_spinlock lock;		/* Spinlock for ISR-safe access */
 
 	/* Callback mapping for channel translation (physical to encoded) */
 	struct {
@@ -199,6 +199,7 @@ static int dma_alif_evtrtr_configure(const struct device *dev, uint32_t encoded_
 	struct dma_alif_evtrtr_data *data = dev->data;
 	uint32_t channel, periph, dma_group;
 	bool enable_handshake;
+	k_spinlock_key_t key;
 	int ret;
 
 	if (!config) {
@@ -206,7 +207,7 @@ static int dma_alif_evtrtr_configure(const struct device *dev, uint32_t encoded_
 		return -EINVAL;
 	}
 
-	k_mutex_lock(&data->lock, K_FOREVER);
+	key = k_spin_lock(&data->lock);
 
 	/*
 	 * Decode parameters:
@@ -287,7 +288,7 @@ static int dma_alif_evtrtr_configure(const struct device *dev, uint32_t encoded_
 	LOG_DBG("Event router and DMA configured successfully");
 
 unlock:
-	k_mutex_unlock(&data->lock);
+	k_spin_unlock(&data->lock, key);
 	return ret;
 }
 
@@ -297,13 +298,10 @@ unlock:
 static int dma_alif_evtrtr_start(const struct device *dev, uint32_t encoded_channel)
 {
 	const struct dma_alif_evtrtr_config *cfg = dev->config;
-	struct dma_alif_evtrtr_data *data = dev->data;
 	uint32_t channel = ALIF_DMA_DECODE_CHANNEL(encoded_channel);
 	int ret;
 
-	k_mutex_lock(&data->lock, K_FOREVER);
 	ret = dma_start(cfg->dma_dev, channel);
-	k_mutex_unlock(&data->lock);
 
 	if (ret < 0) {
 		LOG_ERR("DMA start failed: %d", ret);
@@ -320,9 +318,10 @@ static int dma_alif_evtrtr_stop(const struct device *dev, uint32_t encoded_chann
 	const struct dma_alif_evtrtr_config *cfg = dev->config;
 	struct dma_alif_evtrtr_data *data = dev->data;
 	uint32_t channel = ALIF_DMA_DECODE_CHANNEL(encoded_channel);
+	k_spinlock_key_t key;
 	int ret;
 
-	k_mutex_lock(&data->lock, K_FOREVER);
+	key = k_spin_lock(&data->lock);
 	ret = dma_stop(cfg->dma_dev, channel);
 
 	/* Clear callback mapping only if dma_stop() succeeded */
@@ -333,7 +332,7 @@ static int dma_alif_evtrtr_stop(const struct device *dev, uint32_t encoded_chann
 		LOG_DBG("Cleared callback mapping for phys_ch=%u", channel);
 	}
 
-	k_mutex_unlock(&data->lock);
+	k_spin_unlock(&data->lock, key);
 
 	if (ret < 0) {
 		LOG_ERR("DMA stop failed: %d", ret);
@@ -349,13 +348,10 @@ static int dma_alif_evtrtr_reload(const struct device *dev, uint32_t encoded_cha
 			       uint32_t src, uint32_t dst, size_t size)
 {
 	const struct dma_alif_evtrtr_config *cfg = dev->config;
-	struct dma_alif_evtrtr_data *data = dev->data;
 	uint32_t channel = ALIF_DMA_DECODE_CHANNEL(encoded_channel);
 	int ret;
 
-	k_mutex_lock(&data->lock, K_FOREVER);
 	ret = dma_reload(cfg->dma_dev, channel, src, dst, size);
-	k_mutex_unlock(&data->lock);
 
 	if (ret < 0) {
 		LOG_ERR("DMA reload failed: %d", ret);
@@ -371,13 +367,10 @@ static int dma_alif_evtrtr_get_status(const struct device *dev, uint32_t encoded
 				   struct dma_status *stat)
 {
 	const struct dma_alif_evtrtr_config *cfg = dev->config;
-	struct dma_alif_evtrtr_data *data = dev->data;
 	uint32_t channel = ALIF_DMA_DECODE_CHANNEL(encoded_channel);
 	int ret;
 
-	k_mutex_lock(&data->lock, K_FOREVER);
 	ret = dma_get_status(cfg->dma_dev, channel, stat);
-	k_mutex_unlock(&data->lock);
 
 	return ret;
 }
@@ -418,7 +411,8 @@ int alif_dma_evtrtr_configure_channel(const struct device *dev,
 	cfg = dev->config;
 	data = dev->data;
 	reg_base = DEVICE_MMIO_GET(dev);
-	k_mutex_lock(&data->lock, K_FOREVER);
+
+	k_spinlock_key_t key = k_spin_lock(&data->lock);
 
 	/* Validate parameters */
 	if (channel >= cfg->num_channels) {
@@ -447,7 +441,7 @@ int alif_dma_evtrtr_configure_channel(const struct device *dev,
 	}
 
 unlock:
-	k_mutex_unlock(&data->lock);
+	k_spin_unlock(&data->lock, key);
 	return ret;
 }
 
@@ -473,7 +467,6 @@ static const struct dma_driver_api dma_alif_evtrtr_api = {
 static int dma_alif_evtrtr_init(const struct device *dev)
 {
 	const struct dma_alif_evtrtr_config *cfg = dev->config;
-	struct dma_alif_evtrtr_data *data = dev->data;
 	uintptr_t reg_base;
 	uint32_t i;
 
@@ -486,9 +479,6 @@ static int dma_alif_evtrtr_init(const struct device *dev)
 	/* Map MMIO region (for MMU support on Cortex-A cores) */
 	DEVICE_MMIO_MAP(dev, K_MEM_CACHE_NONE);
 	reg_base = DEVICE_MMIO_GET(dev);
-
-	/* Initialize mutex */
-	k_mutex_init(&data->lock);
 
 	/* Clear all event router channels */
 	for (i = 0; i < cfg->num_channels; i++) {
