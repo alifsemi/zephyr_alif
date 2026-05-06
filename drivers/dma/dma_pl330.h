@@ -216,6 +216,7 @@ struct dma_pl330_dev_data {
 	int event_irq[DMA_MAX_EVENTS];
 	uint8_t num_periph_req;
 	uint8_t axi_data_width;
+	struct k_spinlock lock;
 };
 
 #endif

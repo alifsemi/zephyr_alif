@@ -362,19 +362,21 @@ static int dma_pl330_start_dma_ch(const struct device *dev,
 	uint32_t count = 0U;
 	uint32_t data;
 	uint32_t inten;
-	unsigned int irq_key;
+	k_spinlock_key_t key;
 	uint32_t irq = dev_data->event_irq[ch];
 
 	channel_cfg = &dev_data->channels[ch];
+
+	key = k_spin_lock(&dev_data->lock);
+
 	do {
 		data = sys_read32(reg_base + DMAC_PL330_DBGSTATUS);
 		if (++count > DMA_TIMEOUT_US) {
+			k_spin_unlock(&dev_data->lock, key);
 			return -ETIMEDOUT;
 		}
 		k_busy_wait(1);
 	} while ((data & DATA_MASK) != 0);
-
-	irq_key = irq_lock();
 
 	sys_write32(((ch << DMA_INTSR1_SHIFT) +
 		    (DMA_INTSR0 << DMA_INTSR0_SHIFT) +
@@ -391,7 +393,7 @@ static int dma_pl330_start_dma_ch(const struct device *dev,
 
 	sys_write32(0x0, reg_base + DMAC_PL330_DBGCMD);
 
-	irq_unlock(irq_key);
+	k_spin_unlock(&dev_data->lock, key);
 
 	count = 0U;
 	do {
