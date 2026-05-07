@@ -290,6 +290,7 @@ static int i2s_dw_trigger(const struct device *dev, enum i2s_dir dir,
 		stream->queue_drop(stream);
 		stream->state = I2S_STATE_READY;
 		irq_unlock(key);
+		pm_device_busy_clear(dev);
 		break;
 
 	case I2S_TRIGGER_DROP:
@@ -300,6 +301,7 @@ static int i2s_dw_trigger(const struct device *dev, enum i2s_dir dir,
 		stream->stream_disable(stream, dev);
 		stream->queue_drop(stream);
 		stream->state = I2S_STATE_READY;
+		pm_device_busy_clear(dev);
 		break;
 
 	case I2S_TRIGGER_PREPARE:
@@ -924,6 +926,14 @@ static int i2s_resume(const struct device *dev)
 #endif
 
 	if (i2s->clk_dev) {
+		/* Reconfigure I2S clock sources */
+		ret = clock_control_configure(i2s->clk_dev,
+				i2s->clkid, NULL);
+		if (ret != 0 && ret != -ENOSYS && ret != -ENOTSUP) {
+			LOG_ERR("Unable to configure clock: err:%d", ret);
+			return ret;
+		}
+
 		ret = clock_control_on(i2s->clk_dev, i2s->clkid);
 		if (ret != 0 && ret != -EALREADY) {
 			LOG_ERR("Unable to turn on clock: err:%d", ret);
