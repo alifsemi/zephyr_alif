@@ -18,7 +18,7 @@ LOG_MODULE_REGISTER(ISP, CONFIG_VIDEO_LOG_LEVEL);
 #include <soc_memory_map.h>
 #include <zephyr/cache.h>
 
-#define WORKQ_STACK_SIZE 1024
+#define WORKQ_STACK_SIZE 4096
 #define WORKQ_PRIORITY   7
 K_KERNEL_STACK_DEFINE(isp_cb_workq, WORKQ_STACK_SIZE);
 
