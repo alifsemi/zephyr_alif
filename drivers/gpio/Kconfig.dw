@@ -13,6 +13,7 @@ config GPIO_DW
 config GPIO_DW_MULTICORE
 	bool "Multi-core support for DesignWare GPIO"
 	depends on GPIO_DW && SOC_FAMILY_ENSEMBLE && ALIF_HWSEM
+	select PINCTRL
 	help
 	  Enable multi-core safe access for DesignWare GPIO controllers
 	  shared between HE and HP cores on Alif Ensemble SoCs.

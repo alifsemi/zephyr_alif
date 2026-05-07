@@ -7,6 +7,7 @@
 
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/pinctrl.h>
+#include <zephyr/drivers/pinctrl/pinctrl_alif.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/arch/cpu.h>
 
@@ -42,14 +43,6 @@
  * bit 7 denotes driver type
  * bits 8:31 are unused
  */
-#define PIN_FUNC_SHIFT 3
-#if defined(CONFIG_ENSEMBLE_GEN2)
-/* bits 3:10 [PPPPPPPP] denote port values */
-#define PIN_NUM_MASK 0xFF
-#else
-#define PIN_NUM_MASK 0x7F
-#endif
-#define PIN_NUM_CLR_MASK 0x3F8
 
 #define PORT_P15             120
 #define LPGPIO_PORT          PORT_P15
@@ -64,10 +57,11 @@
 				(0))
 #endif
 
-#define GET_PINMUX_PORT(value) ((value >> PIN_FUNC_SHIFT) & PIN_NUM_MASK)
+#define GET_PINMUX_PORT(value) \
+	((value >> ALIF_PINMUX_FUNC_SHIFT) & ALIF_PINMUX_PIN_MASK)
 
 #define PINMUX_ADDR(value) (PINCTRL_BASE + \
-		(((value >> PIN_FUNC_SHIFT) & PIN_NUM_MASK) * 4))
+		(((value >> ALIF_PINMUX_FUNC_SHIFT) & ALIF_PINMUX_PIN_MASK) * 4))
 
 #define LPGPIO_PINMUX_ADDR(value) (LPGPIO_PINCTRL_BASE + \
 		((value & LPGPIO_PIN_NUM_MASK) * 4))
@@ -90,7 +84,7 @@ int pinctrl_configure_pin(const pinctrl_soc_pin_t *pin)
 		pinctrl_addr = (mem_addr_t)PINMUX_ADDR(pinmux_value);
 
 		/* clear only the port value, other fields are set already */
-		pinctrl_data = (pinmux_value & (~PIN_NUM_CLR_MASK));
+		pinctrl_data = (pinmux_value & (~ALIF_PINMUX_CLR_MASK));
 	}
 
 	/* set the pinmux and pin-pad value. */

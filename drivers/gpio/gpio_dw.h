@@ -30,6 +30,9 @@ struct gpio_dw_config {
 #ifdef CONFIG_PINCTRL
 	const struct pinctrl_dev_config *pcfg;
 #endif
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	bool shared_irq;
+#endif
 };
 
 struct gpio_dw_runtime {

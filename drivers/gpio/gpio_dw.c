@@ -8,6 +8,9 @@
 
 #include <errno.h>
 
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(gpio_dw, CONFIG_GPIO_LOG_LEVEL);
+
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/dt-bindings/gpio/snps-designware-gpio.h>
@@ -24,6 +27,7 @@
 
 #ifdef CONFIG_GPIO_DW_MULTICORE
 #include <zephyr/drivers/hwsem_ipm.h>
+#include <zephyr/drivers/pinctrl/pinctrl_alif.h>
 
 #if defined(CONFIG_RTSS_HE)
 #define GPIO_DW_HWSEM_MASTER_ID 1
@@ -36,31 +40,26 @@
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(hwsem0), okay)
 static const struct device *const gpio_dw_hwsem = DEVICE_DT_GET(DT_NODELABEL(hwsem0));
 #else
-static const struct device *const gpio_dw_hwsem;
+#error "GPIO_DW_MULTICORE requires hwsem0 node to be enabled"
 #endif
 
 static inline void gpio_dw_lock(void)
 {
-	if (device_is_ready(gpio_dw_hwsem)) {
-		hwsem_lock(gpio_dw_hwsem, GPIO_DW_HWSEM_MASTER_ID);
-	}
+	int ret = hwsem_lock(gpio_dw_hwsem, GPIO_DW_HWSEM_MASTER_ID);
+
+	__ASSERT(ret == 0, "hwsem_lock failed: %d", ret);
+	ARG_UNUSED(ret);
 }
 
 static inline void gpio_dw_unlock(void)
 {
-	if (device_is_ready(gpio_dw_hwsem)) {
-		hwsem_unlock(gpio_dw_hwsem, GPIO_DW_HWSEM_MASTER_ID);
-	}
+	hwsem_unlock(gpio_dw_hwsem, GPIO_DW_HWSEM_MASTER_ID);
 }
 #endif /* CONFIG_GPIO_DW_MULTICORE */
 
 #ifdef CONFIG_IOAPIC
 #include <zephyr/drivers/interrupt_controller/ioapic.h>
 #endif
-
-static int gpio_dw_port_set_bits_raw(const struct device *port, uint32_t mask);
-static int gpio_dw_port_clear_bits_raw(const struct device *port,
-				       uint32_t mask);
 
 /*
  * ARC architecture configure IP through IO auxiliary registers.
@@ -221,22 +220,28 @@ static int gpio_dw_pin_interrupt_configure(const struct device *port,
 		return -ENOTSUP;
 	}
 
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	gpio_dw_lock();
+#endif
+
 	if (mode != GPIO_INT_MODE_DISABLED) {
 		/* Check if GPIO port supports interrupts */
 		if (!dw_interrupt_support(config)) {
+#ifdef CONFIG_GPIO_DW_MULTICORE
+			gpio_dw_unlock();
+#endif
 			return -ENOTSUP;
 		}
 
 		/* Interrupt to be enabled but pin is not set to input */
 		dir_reg = dw_read(base_addr, dir_port) & BIT(pin);
 		if (dir_reg != 0U) {
+#ifdef CONFIG_GPIO_DW_MULTICORE
+			gpio_dw_unlock();
+#endif
 			return -EINVAL;
 		}
 	}
-
-#ifdef CONFIG_GPIO_DW_MULTICORE
-	gpio_dw_lock();
-#endif
 
 	/* Clear interrupt enable */
 	dw_set_bit(base_addr, INTEN, pin, false);
@@ -251,6 +256,9 @@ static int gpio_dw_pin_interrupt_configure(const struct device *port,
 			/* enable interrupt for both edge. */
 			dw_set_bit(base_addr, INT_BOTHEDGE, pin, 1);
 		} else {
+			/* Clear both-edge mode if previously set */
+			dw_set_bit(base_addr, INT_BOTHEDGE, pin, 0);
+
 			/* level (0) or edge (1) */
 			dw_set_bit(base_addr, INTTYPE_LEVEL, pin,
 				   (mode == GPIO_INT_MODE_EDGE));
@@ -271,12 +279,22 @@ static int gpio_dw_pin_interrupt_configure(const struct device *port,
 
 #ifdef CONFIG_GPIO_DW_MULTICORE
 		context->owned_pins |= BIT(pin);
-		irq_enable(config->irq_num + pin);
+		if (config->shared_irq) {
+			irq_enable(config->irq_num);
+		} else {
+			irq_enable(config->irq_num + pin);
+		}
 #endif
 	} else {
 #ifdef CONFIG_GPIO_DW_MULTICORE
 		context->owned_pins &= ~BIT(pin);
-		irq_disable(config->irq_num + pin);
+		if (config->shared_irq) {
+			if (context->owned_pins == 0) {
+				irq_disable(config->irq_num);
+			}
+		} else {
+			irq_disable(config->irq_num + pin);
+		}
 #endif
 	}
 
@@ -295,6 +313,7 @@ static inline void dw_pin_config(const struct device *port,
 	uint32_t base_addr = dw_base_to_block_base(context->base_addr);
 	uint32_t port_base_addr = context->base_addr;
 	uint32_t dir_port = dw_get_dir_port(port_base_addr);
+	uint32_t data_port = dw_get_data_port(port_base_addr);
 	bool pin_is_output, need_debounce;
 
 	/* Set init value then direction */
@@ -304,9 +323,9 @@ static inline void dw_pin_config(const struct device *port,
 
 	if (pin_is_output) {
 		if ((flags & GPIO_OUTPUT_INIT_HIGH) != 0U) {
-			gpio_dw_port_set_bits_raw(port, BIT(pin));
+			dw_set_bit(base_addr, data_port, pin, true);
 		} else if ((flags & GPIO_OUTPUT_INIT_LOW) != 0U) {
-			gpio_dw_port_clear_bits_raw(port, BIT(pin));
+			dw_set_bit(base_addr, data_port, pin, false);
 		}
 	}
 
@@ -351,7 +370,60 @@ static inline int gpio_dw_config(const struct device *port,
 		return -ENOTSUP;
 	}
 
+#if defined(CONFIG_PINCTRL) && defined(CONFIG_GPIO_DW_MULTICORE)
+	/*
+	 * Apply pinctrl per-pin rather than bank-wide. Search the GPIO's
+	 * pinctrl state for the entry matching this pin and apply only that
+	 * one, so other pins in the bank (which may be muxed for alt-functions
+	 * by another core) are not disturbed.
+	 */
+	if (config->pcfg != NULL) {
+		const struct pinctrl_state *state;
+
+		if (pinctrl_lookup_state(config->pcfg, PINCTRL_STATE_DEFAULT, &state) == 0) {
+			/* Find the lowest absolute pin in the state to use as base */
+			uint32_t base_pin = UINT32_MAX;
+
+			for (uint8_t i = 0; i < state->pin_cnt; i++) {
+				uint32_t pmux_val =
+					*(const uint32_t *)&state->pins[i];
+				uint32_t p = ALIF_PINMUX_GET_PIN(pmux_val);
+
+				if (p < base_pin) {
+					base_pin = p;
+				}
+			}
+
+			bool found = false;
+
+			for (uint8_t i = 0; i < state->pin_cnt; i++) {
+				uint32_t pmux = *(const uint32_t *)&state->pins[i];
+
+				if ((ALIF_PINMUX_GET_PIN(pmux) - base_pin) == pin) {
+					pinctrl_configure_pins(&state->pins[i], 1,
+							       PINCTRL_REG_NONE);
+					found = true;
+					break;
+				}
+			}
+
+			if (!found) {
+				LOG_WRN("pin %u not in pinctrl state, mux not applied",
+					pin);
+			}
+		}
+	}
+#endif
+
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	gpio_dw_lock();
+#endif
+
 	dw_pin_config(port, pin, flags);
+
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	gpio_dw_unlock();
+#endif
 
 	return 0;
 }
@@ -377,9 +449,15 @@ static int gpio_dw_port_set_masked_raw(const struct device *port,
 	uint32_t data_port = dw_get_data_port(port_base_addr);
 	uint32_t pins;
 
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	gpio_dw_lock();
+#endif
 	pins = dw_read(base_addr, data_port);
 	pins = (pins & ~mask) | (mask & value);
 	dw_write(base_addr, data_port, pins);
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	gpio_dw_unlock();
+#endif
 
 	return 0;
 }
@@ -392,9 +470,15 @@ static int gpio_dw_port_set_bits_raw(const struct device *port, uint32_t mask)
 	uint32_t data_port = dw_get_data_port(port_base_addr);
 	uint32_t pins;
 
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	gpio_dw_lock();
+#endif
 	pins = dw_read(base_addr, data_port);
 	pins |= mask;
 	dw_write(base_addr, data_port, pins);
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	gpio_dw_unlock();
+#endif
 
 	return 0;
 }
@@ -408,9 +492,15 @@ static int gpio_dw_port_clear_bits_raw(const struct device *port,
 	uint32_t data_port = dw_get_data_port(port_base_addr);
 	uint32_t pins;
 
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	gpio_dw_lock();
+#endif
 	pins = dw_read(base_addr, data_port);
 	pins &= ~mask;
 	dw_write(base_addr, data_port, pins);
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	gpio_dw_unlock();
+#endif
 
 	return 0;
 }
@@ -423,9 +513,15 @@ static int gpio_dw_port_toggle_bits(const struct device *port, uint32_t mask)
 	uint32_t data_port = dw_get_data_port(port_base_addr);
 	uint32_t pins;
 
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	gpio_dw_lock();
+#endif
 	pins = dw_read(base_addr, data_port);
 	pins ^= mask;
 	dw_write(base_addr, data_port, pins);
+#ifdef CONFIG_GPIO_DW_MULTICORE
+	gpio_dw_unlock();
+#endif
 
 	return 0;
 }
@@ -540,9 +636,18 @@ static int gpio_dw_initialize(const struct device *port)
 	}
 
 #if defined(CONFIG_PINCTRL)
+#ifndef CONFIG_GPIO_DW_MULTICORE
+	/*
+	 * In multi-core mode, skip bank-wide pinctrl at init.
+	 * The GPIO pinctrl group muxes ALL pins in the bank to GPIO function,
+	 * which would clobber pins already muxed for alt-functions (Ethernet,
+	 * SPI, etc.) by the other core. Each subsystem driver applies its own
+	 * per-pin pinctrl, and gpio_pin_configure() only sets direction.
+	 */
 	if (config->pcfg != NULL) {
 		err = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
 	}
+#endif
 #endif
 
 	return err;
@@ -561,18 +666,24 @@ static int gpio_dw_initialize(const struct device *port)
 	IRQ_CONNECT(DT_INST_IRQN_BY_IDX(n, idx), DT_INST_IRQ_BY_IDX(n, idx, priority),             \
 		    gpio_dw_isr_pin, &gpio_isr_params_##n[idx], INST_IRQ_FLAGS(n));
 
+#ifdef CONFIG_ENSEMBLE_GEN2
 #define GPIO_CFG_IRQ_SHARED(idx, n)                                                                \
 	IRQ_CONNECT(DT_INST_IRQN_BY_IDX(n, idx), DT_INST_IRQ_BY_IDX(n, idx, priority),             \
 		    gpio_dw_isr_shared, DEVICE_DT_INST_GET(n), INST_IRQ_FLAGS(n));
+#endif
 
 #define GPIO_ISR_PARAM_ENTRY(idx, n) \
 	{ .dev = DEVICE_DT_INST_GET(n), .pin = idx }
 
 /* Select per-pin or shared based on whether ngpios == num_irqs */
+#ifdef CONFIG_ENSEMBLE_GEN2
 #define GPIO_CFG_IRQ(idx, n)                                              \
 	COND_CODE_1(UTIL_BOOL(DT_INST_IRQ_HAS_IDX(n, 1)),            \
 		(GPIO_CFG_IRQ_PIN(idx, n)),                            \
 		(GPIO_CFG_IRQ_SHARED(idx, n)))
+#else
+#define GPIO_CFG_IRQ(idx, n)  GPIO_CFG_IRQ_PIN(idx, n)
+#endif
 
 #else
 #define GPIO_CFG_IRQ(idx, n)									\
@@ -611,6 +722,8 @@ static int gpio_dw_initialize(const struct device *port)
 		.config_func = gpio_config_##n##_irq,						\
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(n, pinctrl_0),					\
 		(.pcfg = PINCTRL_DT_DEV_CONFIG_GET(DT_DRV_INST(n)),))				\
+		IF_ENABLED(CONFIG_GPIO_DW_MULTICORE, (						\
+		.shared_irq = !UTIL_BOOL(DT_INST_IRQ_HAS_IDX(n, 1)),))			\
 	};											\
 												\
 	static struct gpio_dw_runtime gpio_##n##_runtime = {					\
