@@ -17,6 +17,8 @@ extern "C" {
 
 #define VIDEO_CID_ALIF_CSI_DPHY_FREQ         (VIDEO_CID_PRIVATE_BASE + 0)
 #define VIDEO_CID_ALIF_CSI_CURR_CAM          (VIDEO_CID_PRIVATE_BASE + 1)
+#define VIDEO_CID_ALIF_CPI_AXI_PORT_EN       (VIDEO_CID_PRIVATE_BASE + 2)
+#define VIDEO_CID_ALIF_CPI_ISP_PORT_EN       (VIDEO_CID_PRIVATE_BASE + 3)
 
 /* Additional supported formats */
 #define VIDEO_PIX_FMT_RGB888_PLANAR_PRIVATE  (VIDEO_FOURCC('P', 'R', 'G', 'B'))

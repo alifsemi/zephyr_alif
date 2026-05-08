@@ -372,10 +372,18 @@ static void alif_cam_work_helper(const struct device *dev)
 		vbuf = k_fifo_peek_head(&data->fifo_in);
 		if (vbuf == NULL) {
 			LOG_DBG("No more Empty buffers in the IN-FIFO."
-					"Stopping Video Capture. If Re-queued, restart stream.");
+				"Stopping Video Capture. If Re-queued, restart stream.");
 			data->curr_vid_buf = 0;
 			data->is_streaming = false;
-			video_stream_stop(config->endpoint_dev);
+			/*
+			 * In dual endpoint mode (ISP present), the ISP owns the upstream
+			 * pipeline lifecycle. CPI acts as a passthrough, and stopping
+			 * endpoint_dev here would interfere with ISP's buffer management.
+			 * ISP will handle upstream flow control via its own buffer queue.
+			 */
+			if (!config->isp_ep) {
+				video_stream_stop(config->endpoint_dev);
+			}
 			signal_status = VIDEO_BUF_DONE;
 			goto done;
 		}
@@ -505,11 +513,6 @@ static int alif_cam_stream_start(const struct device *dev)
 		return -EBUSY;
 	}
 
-	if (sys_read32(regs + CAM_CTRL) & CAM_CTRL_BUSY) {
-		LOG_ERR("Can't start stream. Already Capturing!");
-		return -EBUSY;
-	}
-
 	if (((IS_ENABLED(CONFIG_VIDEO_ALIF_CAM_EXTENDED)) && config->axi_bus_ep) ||
 	    (!IS_ENABLED(CONFIG_VIDEO_ALIF_CAM_EXTENDED))) {
 		/* Update the Video-buffer address to CPI-Controller. */
@@ -531,12 +534,21 @@ static int alif_cam_stream_start(const struct device *dev)
 	/* Start the MIPI CSI-2 IP in case the MIPI CSI is available. */
 	ret = video_stream_start(config->endpoint_dev);
 	if (ret) {
-		LOG_ERR("Failed to start streaming of Video pipeline!");
-		return -EIO;
+		if (ret != -EBUSY) {
+			LOG_WRN("Video pipeline endpoint is busy; refusing to start capture");
+		} else {
+			LOG_ERR("Failed to start streaming of Video pipeline! ret=%d", ret);
+			return ret;
+		}
 	}
 
 	hw_cam_start_video_capture(dev);
 	LOG_DBG("Stream started");
+
+	LOG_DBG("CAM_CFG: 0x%08x | AXI_PORT_EN: %d | ISP_PORT_EN: %d",
+		sys_read32(regs + CAM_CFG),
+		!!(sys_read32(regs + CAM_CFG) & CAM_CFG_AXI_PORT_EN),
+		!!(sys_read32(regs + CAM_CFG) & CAM_CFG_ISP_PORT_EN));
 
 	data->is_streaming = true;
 
@@ -723,14 +735,80 @@ static int alif_cam_dequeue(const struct device *dev, enum video_endpoint_id ep,
 static int alif_cam_set_ctrl(const struct device *dev, unsigned int cid, void *value)
 {
 	const struct video_cam_config *config = dev->config;
-	int ret = -ENOTSUP;
+	uintptr_t regs = DEVICE_MMIO_GET(dev);
+	uint32_t enable;
+	int ret = 0;
 
-	ret = video_set_ctrl(config->endpoint_dev, cid, value);
-	if (ret) {
-		return -ENOTSUP;
+	switch (cid) {
+	case VIDEO_CID_ALIF_CPI_AXI_PORT_EN:
+		if (!IS_ENABLED(CONFIG_VIDEO_ALIF_CAM_EXTENDED)) {
+			LOG_ERR("CPI AXI port control not supported");
+			ret = -ENOTSUP;
+			break;
+		}
+		if (!value) {
+			LOG_ERR("Invalid NULL value for AXI port control");
+			ret = -EINVAL;
+			break;
+		}
+		enable = *(uint32_t *)value;
+		if (enable > 1) {
+			LOG_ERR("Invalid value %u for AXI port enable (0 or 1 expected)",
+				enable);
+			ret = -EINVAL;
+			break;
+		}
+		if (enable) {
+			sys_set_bits(regs + CAM_CFG, CAM_CFG_AXI_PORT_EN);
+			LOG_INF("CPI AXI port enabled (CPI->Memory)");
+		} else {
+			sys_clear_bits(regs + CAM_CFG, CAM_CFG_AXI_PORT_EN);
+			LOG_INF("CPI AXI port disabled");
+		}
+		break;
+
+	case VIDEO_CID_ALIF_CPI_ISP_PORT_EN:
+		if (!IS_ENABLED(CONFIG_VIDEO_ALIF_CAM_EXTENDED)) {
+			LOG_ERR("CPI ISP port control not supported");
+			ret = -ENOTSUP;
+			break;
+		}
+		if (!config->isp_ep) {
+			LOG_ERR("CPI ISP endpoint not configured in device tree");
+			ret = -EINVAL;
+			break;
+		}
+		if (!value) {
+			LOG_ERR("Invalid NULL value for ISP port control");
+			ret = -EINVAL;
+			break;
+		}
+		enable = *(uint32_t *)value;
+		if (enable > 1) {
+			LOG_ERR("Invalid value %u for ISP port enable (0 or 1 expected)",
+				enable);
+			ret = -EINVAL;
+			break;
+		}
+		if (enable) {
+			sys_set_bits(regs + CAM_CFG, CAM_CFG_ISP_PORT_EN);
+			LOG_INF("CPI ISP port enabled (CPI->ISP)");
+		} else {
+			sys_clear_bits(regs + CAM_CFG, CAM_CFG_ISP_PORT_EN);
+			LOG_INF("CPI ISP port disabled");
+		}
+		break;
+
+	default:
+		/* Pass through to endpoint device */
+		ret = video_set_ctrl(config->endpoint_dev, cid, value);
+		if (ret) {
+			ret = -ENOTSUP;
+		}
+		break;
 	}
 
-	return 0;
+	return ret;
 }
 
 static int alif_cam_get_ctrl(const struct device *dev, unsigned int cid, void *value)
