@@ -888,6 +888,28 @@ static DEVICE_API(video, isp_driver_api) = {
 #endif /* CONFIG_POLL */
 };
 
+int z_impl_isp_vsi_register_ae_status_callback(const struct device *dev,
+		isp_ae_status_cb ae_status_cb, void *user_data)
+{
+	struct isp_data *data = dev->data;
+
+	data->init_cfg.ae_status_cb = ae_status_cb;
+	data->init_cfg.ae_status_user_data = user_data;
+
+	return 0;
+}
+
+#ifdef CONFIG_USERSPACE
+#include <zephyr/internal/syscall_handler.h>
+static int z_vrfy_isp_vsi_register_ae_status_callback(const struct device *dev,
+		isp_ae_status_cb ae_status_cb, void *user_data)
+{
+	K_OOPS(K_SYSCALL_SPECIFIC_DRIVER(dev, K_OBJ_DRIVER_VIDEO, &isp_driver_api));
+	return z_impl_isp_vsi_register_ae_status_callback(dev, ae_status_cb, user_data);
+}
+#include <zephyr/syscalls/register_ae_status_callback_mrsh.c>
+#endif /* CONFIG_USERSPACE */
+
 static int isp_configure(const struct device *dev)
 {
 	const struct isp_config *config = dev->config;

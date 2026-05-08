@@ -89,9 +89,23 @@ struct channel_parameters {
 	uint8_t channel_idx;
 };
 
+/**
+ * @brief Callback invoked each frame end with the current AE stability status.
+ *
+ * Called from interrupt bottom-half context (workqueue).
+ *
+ * @param dev        ISP device that generated the event.
+ * @param ae_stable  1 if AE has converged, 0 otherwise.
+ * @param user_data  Opaque pointer supplied at registration time.
+ */
+typedef void (*isp_ae_status_cb)(const struct device *dev, uint8_t ae_stable,
+				  void *user_data);
+
 struct isp_config_params {
 	struct port_parameters port;
 	struct channel_parameters channel;
+	isp_ae_status_cb ae_status_cb;
+	void *ae_status_user_data;
 };
 
 int isp_vsi_init(struct isp_config_params *init_cfg);
@@ -145,6 +159,11 @@ int isp_vsi_set_param(struct isp_config_params *init_cfg,
 int isp_vsi_get_param(struct isp_config_params *init_cfg,
 		      struct isp_params *params);
 
+
+__syscall int isp_vsi_register_ae_status_callback(const struct device *dev,
+		isp_ae_status_cb ae_status_cb, void *user_data);
+
+#include <zephyr/syscalls/isp-vsi.h>
 
 #ifdef __cplusplus
 }
