@@ -11,6 +11,7 @@
 #include <zephyr/cache.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/pinctrl.h>
+#include <zephyr/drivers/regulator.h>
 #include <zephyr/drivers/sdhc.h>
 #include <zephyr/irq.h>
 #include <zephyr/kernel.h>
@@ -42,7 +43,10 @@ struct sdhc_dwc_config {
 	uint32_t power_delay_ms;
 	uint8_t bus_width;
 	bool no_1_8_v;
-	struct gpio_dt_spec reset_gpio;
+#ifdef CONFIG_REGULATOR
+	const struct device *vmmc;
+	const struct device *vqmmc;
+#endif
 	struct gpio_dt_spec cd_gpio;
 };
 
@@ -145,15 +149,30 @@ static bool sdhc_dwc_enable_clock(struct dwc_sdhc_regs *regs)
 	return true;
 }
 
-static int sdhc_dwc_set_voltage(struct dwc_sdhc_regs *regs, enum sd_voltage voltage)
+static int sdhc_dwc_set_voltage(const struct device *dev,
+					enum sd_voltage voltage)
 {
+	const struct sdhc_dwc_config *config = dev->config;
+	struct dwc_sdhc_regs *regs = config->regs;
 	uint32_t timeout = DWC_SDHC_1P8V_TIMEOUT_US;
+	int __maybe_unused ret;
 
 	/* Power off */
 	regs->DWC_SDHC_PWR_CTRL_R &= ~DWC_SDHC_PC_BUS_PWR_VDD1_Msk;
 
 	switch (voltage) {
 	case SD_VOL_3_3_V:
+#ifdef CONFIG_REGULATOR
+		if (config->vqmmc && device_is_ready(config->vqmmc)) {
+			ret = regulator_set_voltage(config->vqmmc, 3300000, 3300000);
+			if (ret) {
+				LOG_ERR("Failed to set VQMMC to 3.3V");
+				return ret;
+			}
+			k_msleep(5);
+		}
+#endif
+
 		regs->DWC_SDHC_PWR_CTRL_R = DWC_SDHC_PC_BUS_VSEL_3V3_Msk;
 		regs->DWC_SDHC_HOST_CTRL2_R &= ~DWC_SDHC_HOST_CTRL2_SIGNALING_EN_Msk;
 		regs->DWC_SDHC_PWR_CTRL_R |= DWC_SDHC_PC_BUS_PWR_VDD1_Msk;
@@ -166,6 +185,17 @@ static int sdhc_dwc_set_voltage(struct dwc_sdhc_regs *regs, enum sd_voltage volt
 		break;
 
 	case SD_VOL_1_8_V:
+#ifdef CONFIG_REGULATOR
+		if (config->vqmmc && device_is_ready(config->vqmmc)) {
+			ret = regulator_set_voltage(config->vqmmc, 1800000, 1800000);
+			if (ret) {
+				LOG_ERR("Failed to set VQMMC to 1.8V");
+				return ret;
+			}
+			k_msleep(5);
+		}
+#endif
+
 		regs->DWC_SDHC_PWR_CTRL_R = DWC_SDHC_PC_BUS_VSEL_1V8_Msk;
 		regs->DWC_SDHC_HOST_CTRL2_R |= DWC_SDHC_HOST_CTRL2_SIGNALING_EN_Msk;
 		k_busy_wait(DWC_SDHC_1P8V_TIMEOUT_US);
@@ -739,6 +769,7 @@ static int sdhc_dwc_set_io(const struct device *dev, struct sdhc_io *ios)
 	const struct sdhc_dwc_config *config = dev->config;
 	struct sdhc_dwc_data *data = dev->data;
 	struct dwc_sdhc_regs *regs = config->regs;
+	int ret;
 
 	if (ios->bus_width != data->ios.bus_width) {
 		uint8_t hc1 = regs->DWC_SDHC_HOST_CTRL1_R;
@@ -765,18 +796,45 @@ static int sdhc_dwc_set_io(const struct device *dev, struct sdhc_io *ios)
 	if (ios->power_mode != data->ios.power_mode) {
 		if (ios->power_mode == SDHC_POWER_OFF) {
 			sdhc_dwc_set_power(regs, SDHC_POWER_OFF);
-		} else {
+		}
+#ifdef CONFIG_REGULATOR
+		if (config->vmmc) {
+			if (ios->power_mode == SDHC_POWER_OFF) {
+				ret = regulator_disable(config->vmmc);
+			} else {
+				ret = regulator_enable(config->vmmc);
+			}
+			if (ret) {
+				LOG_ERR("vmmc regulator %s failed: %d",
+					ios->power_mode == SDHC_POWER_OFF ?
+					"disable" : "enable", ret);
+				return ret;
+			}
+		}
+		if (config->vqmmc) {
+			if (ios->power_mode == SDHC_POWER_OFF) {
+				ret = regulator_disable(config->vqmmc);
+			} else {
+				ret = regulator_enable(config->vqmmc);
+			}
+			if (ret) {
+				LOG_ERR("vqmmc regulator %s failed: %d",
+					ios->power_mode == SDHC_POWER_OFF ?
+					"disable" : "enable", ret);
+				return ret;
+			}
+		}
+#endif
+		if (ios->power_mode != SDHC_POWER_OFF) {
 			sdhc_dwc_set_power(regs, SDHC_POWER_ON);
 			sdhc_dwc_enable_clock(regs);
 		}
 	}
 
 	if (ios->signal_voltage != data->ios.signal_voltage) {
-		int ret;
-
 		regs->DWC_SDHC_CLK_CTRL_R &= ~DWC_SDHC_CLK_EN_Msk;
 
-		ret = sdhc_dwc_set_voltage(regs, ios->signal_voltage);
+		ret = sdhc_dwc_set_voltage(dev, ios->signal_voltage);
 		if (ret) {
 			return ret;
 		}
@@ -791,7 +849,7 @@ static int sdhc_dwc_set_io(const struct device *dev, struct sdhc_io *ios)
 			return 0;
 		}
 
-		int ret = sdhc_dwc_clock_set(regs, ios->clock);
+		ret = sdhc_dwc_clock_set(regs, ios->clock);
 
 		if (ret) {
 			LOG_ERR("Failed to set clock to %u Hz", ios->clock);
@@ -982,7 +1040,7 @@ static int sdhc_dwc_set_def_config(const struct device *dev)
 	/* Set default configuration */
 
 	/* Set bus voltage to 3.3V and enable power */
-	ret = sdhc_dwc_set_voltage(regs, SD_VOL_3_3_V);
+	ret = sdhc_dwc_set_voltage(dev, SD_VOL_3_3_V);
 	if (ret != 0) {
 		return ret;
 	}
@@ -1037,12 +1095,44 @@ static int sdhc_dwc_init(const struct device *dev)
 	k_sem_init(&data->lock, 1, 1);
 	k_event_init(&data->irq_event);
 
-	int ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+	int ret;
 
+#ifdef CONFIG_REGULATOR
+	/* Step 1: Card power supply */
+	if (config->vmmc != NULL) {
+		if (!device_is_ready(config->vmmc)) {
+			LOG_ERR("vmmc regulator not ready");
+			return -ENODEV;
+		}
+
+		ret = regulator_enable(config->vmmc);
+		if (ret) {
+			LOG_ERR("Failed to enable vmmc regulator: %d", ret);
+			return ret;
+		}
+	}
+
+	if (config->vqmmc != NULL) {
+		if (!device_is_ready(config->vqmmc)) {
+			LOG_ERR("vqmmc regulator not ready");
+			return -ENODEV;
+		}
+
+		ret = regulator_enable(config->vqmmc);
+		if (ret) {
+			LOG_ERR("Failed to enable vqmmc regulator: %d", ret);
+			return ret;
+		}
+	}
+#endif
+
+	/* Step 2: Configure pinmux */
+	ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
 	if (ret < 0) {
 		return ret;
 	}
 
+	/* Step 3: Configure card-detect GPIO */
 	if (config->cd_gpio.port) {
 		if (!gpio_is_ready_dt(&config->cd_gpio)) {
 			LOG_ERR("cd-gpios not ready");
@@ -1055,25 +1145,6 @@ static int sdhc_dwc_init(const struct device *dev)
 		}
 	} else {
 		LOG_DBG("cd-gpios not available, using PSTATE register for card detect");
-	}
-
-	if (config->reset_gpio.port) {
-		if (!gpio_is_ready_dt(&config->reset_gpio)) {
-			LOG_ERR("reset-gpio not ready");
-			return -ENODEV;
-		}
-
-		ret = gpio_pin_configure_dt(&config->reset_gpio, GPIO_OUTPUT_LOW);
-		if (ret < 0) {
-			return ret;
-		}
-		k_msleep(100);
-
-		/* Power on / de-assert reset */
-		gpio_pin_set_dt(&config->reset_gpio, 1);
-		k_msleep(100);
-		gpio_pin_set_dt(&config->reset_gpio, 0);
-		k_msleep(100);
 	}
 
 	/* Software reset all */
@@ -1185,6 +1256,27 @@ static void sdhc_dwc_wakeup_isr(const struct device *dev)
 	}
 }
 
+/*
+ * Helper: resolve a GPIO spec only when the property exists AND the
+ * referenced GPIO controller is enabled (status "okay").  Otherwise
+ * produce a zero-initialised spec so that the runtime code can fall
+ * back to PSTATE-based card detection.
+ */
+#define SDHC_DWC_GPIO_GET_IF_OKAY(n, prop)                                         \
+	COND_CODE_1(DT_NODE_HAS_STATUS(                                                \
+			DT_GPIO_CTLR(DT_DRV_INST(n), prop), okay),                            \
+		(GPIO_DT_SPEC_INST_GET(n, prop)), ({0}))
+
+#define SDHC_DWC_GPIO_OR_ZERO(n, prop)                                             \
+	COND_CODE_1(DT_INST_NODE_HAS_PROP(n, prop),                                   \
+		(SDHC_DWC_GPIO_GET_IF_OKAY(n, prop)), ({0}))
+
+
+#define SDHC_DWC_REGULATOR_GET_OR_NULL(node_id, prop) \
+	COND_CODE_1(DT_NODE_HAS_PROP(node_id, prop), \
+		(DEVICE_DT_GET(DT_PHANDLE(node_id, prop))), \
+		(NULL))
+
 #define SDHC_DWC_INIT(n)                                                           \
 	PINCTRL_DT_INST_DEFINE(n);                                                     \
                                                                                    \
@@ -1214,8 +1306,8 @@ static void sdhc_dwc_wakeup_isr(const struct device *dev)
 		))                                                                         \
 	};                               \
                                                                                    \
-	static const struct sdhc_dwc_config sdhc_dwc_config_##n = {                   \
-		.regs = (struct dwc_sdhc_regs *)DT_INST_REG_ADDR(n),               \
+	static const struct sdhc_dwc_config sdhc_dwc_config_##n = {                    \
+		.regs = (struct dwc_sdhc_regs *)DT_INST_REG_ADDR(n),                       \
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),                                 \
 		.irq_config_func = sdhc_dwc_irq_config_func_##n,                           \
 		.max_bus_freq = DT_INST_PROP_OR(n, max_bus_freq, 50000000),                \
@@ -1223,8 +1315,11 @@ static void sdhc_dwc_wakeup_isr(const struct device *dev)
 		.power_delay_ms = DT_INST_PROP_OR(n, power_delay_ms, 500),                 \
 		.bus_width = DT_INST_PROP_OR(n, bus_width, 4),                             \
 		.no_1_8_v = DT_INST_PROP_OR(n, no_1_8_v, false),                           \
-		.reset_gpio = GPIO_DT_SPEC_INST_GET_OR(n, reset_gpios, {0}),               \
-		.cd_gpio = GPIO_DT_SPEC_INST_GET_OR(n, cd_gpios, {0}),                     \
+		IF_ENABLED(CONFIG_REGULATOR, (                                            \
+			.vmmc = SDHC_DWC_REGULATOR_GET_OR_NULL(DT_DRV_INST(n), vmmc_supply),   \
+			.vqmmc = SDHC_DWC_REGULATOR_GET_OR_NULL(DT_DRV_INST(n), vqmmc_supply),\
+		))                                                                         \
+		.cd_gpio = SDHC_DWC_GPIO_OR_ZERO(n, cd_gpios),                             \
 	};                                                                             \
                                                                                    \
 	DEVICE_DT_INST_DEFINE(n, sdhc_dwc_init, NULL, &sdhc_dwc_data_##n,             \

@@ -43,6 +43,13 @@ properties:
       even if the controller hardware is capable of it.
   reset-gpios:
     type: phandle-array
-    description: |
-      Hardware reset pin for the SD card slot.
-      Active-high to trigger a card reset.
+    deprecated: true
+    description: Deprecated. Use regulator-controlled power instead.
+  vmmc-supply:
+    type: phandle
+    description:
+      Regulator supplying power to the SD card.
+  vqmmc-supply:
+    type: phandle
+    description:
+      Regulator supplying I/O signaling voltage to the SD card.
