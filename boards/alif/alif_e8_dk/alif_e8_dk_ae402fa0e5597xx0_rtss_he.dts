@@ -8,6 +8,7 @@
 #include <alif/ensemble/e4/ae402fa0e5597xx0.dtsi>
 #include <alif/ensemble/common/ensemble_rtss_he.dtsi>
 #include "../common/ensemble-e4-e6-e8-pinctrl.dtsi"
+#include "../common/alif-sd-vsel.dtsi"
 
 / {
 	compatible = "arm,alif-e8-dk-ae402fa0e5597xx0-rtss-he";
