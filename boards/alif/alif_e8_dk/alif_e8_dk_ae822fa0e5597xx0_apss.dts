@@ -10,6 +10,7 @@
 #include <zephyr/dt-bindings/interrupt-controller/arm-gic.h>
 #include <zephyr/dt-bindings/pinctrl/ensemble-pinctrl.h>
 #include <zephyr/dt-bindings/clock/alif_ensemble_clocks.h>
+#include "../common/alif-sd-vsel.dtsi"
 
 / {
 	compatible = "arm,alif-e8-dk-ae822fa0e5597xx0-apss";
