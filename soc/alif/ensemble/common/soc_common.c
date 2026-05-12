@@ -362,9 +362,6 @@ static int soc_init(void)
 #endif
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(usb), okay)
-	/* Enable phy pwr mask and Enable the phy Isolation. */
-	sys_clear_bits(VBAT_PWR_CTRL, BIT(16) | BIT(17));
-
 	/* USB power on reset clear */
 	sys_clear_bits(CLKCTRL_PER_MST_USB_CTRL2, BIT(8));
 #endif
