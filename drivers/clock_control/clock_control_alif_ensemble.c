@@ -352,6 +352,11 @@ static int alif_clock_control_on(const struct device *dev,
 #if defined(CONFIG_ENSEMBLE_GEN2)
 	case ALIF_PDM_76M8_CLK:
 	case ALIF_LPPDM_76M8_CLK:
+	case ALIF_I2S0_76M8_CLK:
+	case ALIF_I2S1_76M8_CLK:
+	case ALIF_I2S2_76M8_CLK:
+	case ALIF_I2S3_76M8_CLK:
+	case ALIF_LPI2S_76M8_CLK:
 		ret = alif_get_module_base(dev, ALIF_CGU_MODULE,
 					&cgu_module_base);
 		if (ret) {
