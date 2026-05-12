@@ -220,7 +220,14 @@ static int jpeg_hantro_vc9000e_set_format(const struct device *dev,
 
 	switch (fmt->pixelformat) {
 	case VIDEO_PIX_FMT_NV12:
+		 /* Disable chroma swap (CbCr) in semiplanar input format*/
+		jpeg_modify_reg(dev, JPEG_SWREG45_OFFSET,
+				JPEG_CHROMA_SWAP_MASK, ~JPEG_CHROMA_SWAP);
+		break;
 	case VIDEO_PIX_FMT_NV21:
+		/* Enable chroma swap (CrCb) in semiplanar input format*/
+		jpeg_modify_reg(dev, JPEG_SWREG45_OFFSET,
+				JPEG_CHROMA_SWAP_MASK, JPEG_CHROMA_SWAP);
 		break;
 	default:
 		LOG_ERR("Unsupported pixel format: 0x%x", fmt->pixelformat);
