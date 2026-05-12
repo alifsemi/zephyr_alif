@@ -25,6 +25,7 @@ extern "C" {
 #define JPEG_SWREG18_OFFSET     0x048
 #define JPEG_SWREG20_OFFSET     0x050
 #define JPEG_SWREG38_OFFSET     0x098
+#define JPEG_SWREG45_OFFSET     0x0B4
 #define JPEG_SWREG80_OFFSET     0x140
 #define JPEG_SWREG81_OFFSET     0x144
 #define JPEG_SWREG82_OFFSET     0x148
@@ -115,6 +116,11 @@ extern "C" {
 #define JPEG_XFILL_MASK                 (0x3UL << JPEG_XFILL_POS)
 #define JPEG_XFILL_FIELD_WIDTH          2
 #define JPEG_XFILL_FIELD_MASK           0x3
+
+/* SWREG45 - Chroma Swap CbCr to CrCb */
+#define JPEG_CHROMA_SWAP_POS            27
+#define JPEG_CHROMA_SWAP_MASK           (0x1UL << JPEG_CHROMA_SWAP_POS)
+#define JPEG_CHROMA_SWAP                (0x1UL << JPEG_CHROMA_SWAP_POS)
 
 /* SWREG81 - AXI Burst Length */
 #define JPEG_MAX_BURST_POS              24
