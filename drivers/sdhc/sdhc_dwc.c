@@ -555,11 +555,20 @@ static int sdhc_dwc_send_cmd(const struct device *dev, struct sdhc_dwc_data *dat
 	       regs->DWC_SDHC_PSTATE_REG, !ret);
 
 	if (ret) {
-		LOG_ERR("CMD: 0x%04x ARG: 0x%08x XFER: 0x%04x RSP01: 0x%08x "
-			"PSTATE: 0x%08x, cc:%d",
-			cmd_reg, cmd->arg, regs->DWC_SDHC_XFER_MODE_R, regs->DWC_SDHC_RESP01_R,
-			regs->DWC_SDHC_PSTATE_REG, !ret);
-
+		/* Suppress error log for SDIO commands (CMD52/CMD53) as the
+		 * device may be sleeping and retries would flood the log.
+		 */
+		if (cmd->opcode == SDIO_RW_DIRECT || cmd->opcode == SDIO_RW_EXTENDED) {
+			LOG_DBG("CMD: 0x%04x ARG: 0x%08x XFER: 0x%04x RSP01: 0x%08x "
+				"PSTATE: 0x%08x, cc:%d",
+				cmd_reg, cmd->arg, regs->DWC_SDHC_XFER_MODE_R,
+				regs->DWC_SDHC_RESP01_R, regs->DWC_SDHC_PSTATE_REG, !ret);
+		} else {
+			LOG_ERR("CMD: 0x%04x ARG: 0x%08x XFER: 0x%04x RSP01: 0x%08x "
+				"PSTATE: 0x%08x, cc:%d",
+				cmd_reg, cmd->arg, regs->DWC_SDHC_XFER_MODE_R,
+				regs->DWC_SDHC_RESP01_R, regs->DWC_SDHC_PSTATE_REG, !ret);
+		}
 		sdhc_dwc_hw_reset(dev, DWC_SDHC_SW_RST_CMD_Msk);
 		return ret;
 	}
