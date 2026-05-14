@@ -141,9 +141,9 @@
 	ALIF_CLK_CFG(CLKCTL_PER_SLV, OSPI_CTRL, 0U, 1U, 0U, 0U, 0U)
 
 /* I2C clocks */
-#define ALIF_I2C0_CLK               \
+#define ALIF_I2C0_GATED_CLK               \
 	ALIF_CLK_CFG(CLKCTL_PER_SLV, I2C0_CTRL, 0U, 1U, 0U, 0U, 0U)
-#define ALIF_I2C1_CLK               \
+#define ALIF_I2C1_GATED_CLK               \
 	ALIF_CLK_CFG(CLKCTL_PER_SLV, I2C1_CTRL, 0U, 1U, 0U, 0U, 0U)
 
 /* GPIO Debounce clocks */
