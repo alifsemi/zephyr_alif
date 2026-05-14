@@ -129,8 +129,8 @@ static uint32_t alif_get_input_clock(uint32_t clock_name)
 	case ALIF_UART3_SYST_PCLK:
 	case ALIF_UART4_SYST_PCLK:
 	case ALIF_UART5_SYST_PCLK:
-	case ALIF_I2C0_PCLK:
-	case ALIF_I2C1_PCLK:
+	case ALIF_I2C0_GATED_CLK:
+	case ALIF_I2C1_GATED_CLK:
 		return ALIF_CLOCK_SYST_PCLK_FREQ;
 	case ALIF_UART0_38M4_CLK:
 	case ALIF_UART1_38M4_CLK:
