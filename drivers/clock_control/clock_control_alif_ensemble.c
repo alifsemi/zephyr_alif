@@ -181,6 +181,7 @@ static uint32_t alif_get_input_clock(uint32_t clock_name)
 	case ALIF_I3C_CLK:
 		return ALIF_CLOCK_SYST_PCLK_FREQ;
 	case ALIF_LPI3C_CLK:
+	case ALIF_LPI2C1_CLK:
 		return ALIF_CLOCK_160M_CLK_FREQ;
 	case ALIF_LPSPI_CLK:
 		return ALIF_CLOCK_SYST_CORE_FREQ;
