@@ -1315,7 +1315,8 @@
 		status = "okay";
 
 		aipm_run_default: run-profile-default {
-			aipm-power-domains = <(ALIF_PD_SSE700_AON_MASK | ALIF_PD_SYST_MASK)>;
+			aipm-power-domains = <(ALIF_PD_SSE700_AON_MASK | ALIF_PD_SYST_MASK |
+					       ALIF_PD_DBSS_MASK)>;
 			dcdc-voltage    = <825>;
 			dcdc-mode       = "pwm";
 			aon-clk-src     = "lfxo";
