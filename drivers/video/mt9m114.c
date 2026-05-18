@@ -99,7 +99,7 @@ struct mt9m114_resolution_config {
 
 static struct mt9m114_reg mt9m114_init_config[] = {
 	{0x098E, 2, 0x1000},    /* LOGICAL_ADDRESS_ACCESS */
-	{0xC97E, 1, 0x01},      /* CAM_SYSCTL_PLL_ENABLE */
+	{0xC97E, 2, 0x01},      /* CAM_SYSCTL_PLL_ENABLE */
 	{0xC980, 2, 0x0120},    /* CAM_SYSCTL_PLL_DIVIDER_M_N = 288 */
 	{0xC982, 2, 0x0700},    /* CAM_SYSCTL_PLL_DIVIDER_P = 1792 */
 	{0xC984, 2, 0x8000},    /* CAM_PORT_OUTPUT_CONTROL = 32768 (No pixel clock slow down) */
@@ -202,6 +202,7 @@ static struct mt9m114_reg mt9m114_640_480[] = {
 	{MT9M114_CAM_STAT_AE_INITIAL_WINDOW_YEND, 2, 0x005F}, /* 95 */
 	{/* NULL terminated */}};
 
+#if (!IS_ENABLED(CONFIG_MT9M114_PARALLEL_INIT))
 static struct mt9m114_reg mt9m114_1288_728[] = {
 	{MT9M114_CAM_SENSOR_CFG_Y_ADDR_START, 2, 0x007C},     /* 124 */
 	{MT9M114_CAM_SENSOR_CFG_X_ADDR_START, 2, 0x0004},     /* 4 */
@@ -223,12 +224,15 @@ static struct mt9m114_reg mt9m114_1288_728[] = {
 	{MT9M114_CAM_STAT_AE_INITIAL_WINDOW_YEND, 2, 0x008F}, /* 143 */
 	{0xE801, 1, 0x00},                                    /* AUTO_BINNING_MODE = off */
 	{/* NULL terminated */}};
+#endif /* (!IS_ENABLED(CONFIG_MT9M114_PARALLEL_INIT)) */
 
 static struct mt9m114_resolution_config resolutionConfigs[] = {
 	{.width = 480, .height = 272, .params = mt9m114_480_272},
 	{.width = 640, .height = 480, .params = mt9m114_640_480},
+#if (!IS_ENABLED(CONFIG_MT9M114_PARALLEL_INIT))
 	{.width = 1288, .height = 728, .params = mt9m114_1288_728},
 	{.width = 1280, .height = 720, .params = mt9m114_1288_728},
+#endif /* (!IS_ENABLED(CONFIG_MT9M114_PARALLEL_INIT)) */
 };
 
 #define MT9M114_VIDEO_FORMAT_CAP(width, height, format)                                            \
@@ -244,10 +248,12 @@ static const struct video_format_cap fmts[] = {
 	MT9M114_VIDEO_FORMAT_CAP(640, 480, VIDEO_PIX_FMT_YUYV),
 	MT9M114_VIDEO_FORMAT_CAP(640, 480, VIDEO_PIX_FMT_Y10P),
 	MT9M114_VIDEO_FORMAT_CAP(640, 480, VIDEO_PIX_FMT_GREY),
+#if (!IS_ENABLED(CONFIG_MT9M114_PARALLEL_INIT))
 	MT9M114_VIDEO_FORMAT_CAP(1280, 720, VIDEO_PIX_FMT_RGB565),
 	MT9M114_VIDEO_FORMAT_CAP(1280, 720, VIDEO_PIX_FMT_YUYV),
 	MT9M114_VIDEO_FORMAT_CAP(1288, 728, VIDEO_PIX_FMT_Y10P),
 	MT9M114_VIDEO_FORMAT_CAP(1280, 720, VIDEO_PIX_FMT_GREY),
+#endif /* (!IS_ENABLED(CONFIG_MT9M114_PARALLEL_INIT)) */
 	{0}};
 
 static inline int i2c_burst_read16_dt(const struct i2c_dt_spec *spec, uint16_t start_addr,
@@ -585,12 +591,14 @@ static int mt9m114_set_fmt(const struct device *dev, enum video_endpoint_id ep,
 	LOG_DBG("set_fmt: pixfmt=0x%08x %ux%u", fmt->pixelformat, fmt->width, fmt->height);
 
 	/* Transition out of SUSPEND/any state before writing config registers */
+#if (!IS_ENABLED(CONFIG_MT9M114_PARALLEL_INIT))
 	LOG_DBG("Entering CONFIG_CHANGE before format write");
 	ret = mt9m114_set_state(dev, MT9M114_SYS_STATE_ENTER_CONFIG_CHANGE);
 	if (ret) {
 		LOG_ERR("Failed to enter config change state before fmt write");
 		return ret;
 	}
+#endif
 
 	/* Set output pixel format */
 	ret = mt9m114_set_output_format(dev, fmt->pixelformat);
