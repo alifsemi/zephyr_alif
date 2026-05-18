@@ -6,11 +6,13 @@
 #include <zephyr/init.h>
 #include <zephyr/arch/cpu.h>
 #include <soc_common.h>
+#include <zephyr/dt-bindings/dma/alif_dma_event_router.h>
+#if IS_ENABLED(CONFIG_PM)
 #include <zephyr/pm/pm.h>
 #include <zephyr/pm/policy.h>
-#include <zephyr/dt-bindings/dma/alif_dma_event_router.h>
 #include <se_service.h>
 #include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
+#endif
 
 #if CONFIG_ENSEMBLE_GEN2 /* ENSEMBLE_GEN2 SoC */
 /* GPIO: enable debounce clock / divisor. */
@@ -66,6 +68,8 @@ static inline void enable_gpio_debounce_clock(void)
 }
 #endif /* CONFIG_ENSEMBLE_GEN2 */
 
+#if IS_ENABLED(CONFIG_PM)
+
 /*
  * Lock deeper power states during early boot to prevent premature sleep
  *
@@ -106,7 +110,6 @@ SYS_INIT(soc_pm_unlock_boot_states, APPLICATION, 0);
  * Single SoC PM notifier for save/restore of SoC-level peripheral
  * configuration registers across deep power states (SOFT_OFF, SUSPEND_TO_RAM).
  */
-#if IS_ENABLED(CONFIG_PM)
 
 #if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay)
 /* Saved HE_DMA_SEL value (LP-SPI mux) — restored before dma2 driver resumes */
