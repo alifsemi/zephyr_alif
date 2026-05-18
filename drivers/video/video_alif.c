@@ -15,6 +15,7 @@
 #include <zephyr/drivers/video/video_alif.h>
 #include <soc_memory_map.h>
 #include <zephyr/cache.h>
+#include <zephyr/pm/device.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(CPI, CONFIG_VIDEO_LOG_LEVEL);
@@ -215,14 +216,30 @@ static inline void hw_disable_interrupts(uintptr_t regs, uint32_t intr_mask)
 	sys_clear_bits(regs + CAM_INTR_ENA, intr_mask);
 }
 
+/**
+ * @brief Apply CPI soft reset sequence per HWRM Section 17 step 3a-3c
+ *
+ * Performs the three-step soft reset sequence:
+ * a. CAM_CTRL = 0       — prepare for soft reset
+ * b. CAM_CTRL = 0x100   — activate soft reset (SW_RESET)
+ * c. CAM_CTRL = 0       — stop soft reset
+ *
+ * @param regs CPI register base address
+ */
+static inline void hw_cam_soft_reset(uintptr_t regs)
+{
+	sys_write32(0, regs + CAM_CTRL);
+	sys_write32(CAM_CTRL_SW_RESET, regs + CAM_CTRL);
+	sys_write32(0, regs + CAM_CTRL);
+}
+
 static inline void hw_cam_start_video_capture(const struct device *dev)
 {
 	const struct video_cam_config *config = dev->config;
 	uintptr_t regs = DEVICE_MMIO_GET(dev);
 
-	/* Reset the CPI-Controller IP. */
-	sys_write32(CAM_CTRL_SW_RESET, regs + CAM_CTRL);
-	sys_write32(0, regs + CAM_CTRL);
+	/* Apply soft reset before starting capture */
+	hw_cam_soft_reset(regs);
 
 	/* Start video capture. */
 	if (config->capture_mode == CPI_CAPTURE_MODE_SNAPSHOT) {
@@ -398,8 +415,10 @@ done:
 		}
 #endif /* defined(CONFIG_POLL) */
 	} else {
-		/* Restart video capture. */
-		hw_cam_start_video_capture(dev);
+		/* Restart video capture only if still streaming. */
+		if (data->is_streaming) {
+			hw_cam_start_video_capture(dev);
+		}
 	}
 }
 
@@ -580,6 +599,10 @@ static int alif_cam_stream_stop(const struct device *dev)
 	for (int i = 0; (i < 20) && (sys_read32(regs + CAM_CTRL) & mask) == mask; i++) {
 		k_msleep(1);
 	}
+
+	/* Apply soft reset to clear BUSY flag and leave CPI in clean state */
+	hw_cam_soft_reset(regs);
+
 	LOG_DBG("Stream stopped");
 
 	data->is_streaming = false;
@@ -636,6 +659,9 @@ static int alif_cam_flush(const struct device *dev, enum video_endpoint_id ep, b
 		for (int i = 0; (i < 20) && (sys_read32(regs + CAM_CTRL) & mask) == mask; i++) {
 			k_msleep(1);
 		}
+
+		/* Apply soft reset to clear BUSY flag and leave CPI in clean state */
+		hw_cam_soft_reset(regs);
 
 		while ((vbuf = k_fifo_get(&data->fifo_in, K_NO_WAIT))) {
 			k_fifo_put(&data->fifo_out, vbuf);
@@ -1058,9 +1084,139 @@ static int alif_video_cam_init(const struct device *dev)
 	}
 
 	data->is_streaming = false;
+	data->was_streaming = false;
 
 	return 0;
 }
+
+#if defined(CONFIG_PM_DEVICE)
+
+/**
+ * @brief CPI/CAM suspend handler
+ *
+ * Stops video capture and saves state for resume.
+ *
+ * @param dev CPI device struct
+ * @return 0 if successful, negative errno otherwise
+ */
+static int alif_cam_suspend(const struct device *dev)
+{
+	const struct video_cam_config *config = dev->config;
+	struct video_cam_data *data = dev->data;
+	int ret;
+
+	/* Save streaming state before suspend */
+	data->was_streaming = data->is_streaming;
+
+	/* Stop streaming if active */
+	if (data->is_streaming) {
+		ret = alif_cam_stream_stop(dev);
+		if (ret) {
+			LOG_ERR("Failed to stop CPI stream during suspend: %d", ret);
+			return ret;
+		}
+	}
+
+#ifdef CONFIG_PINCTRL
+	/* Apply sleep pin configuration if available */
+	if (config->pcfg != NULL) {
+		ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_SLEEP);
+		if (ret < 0 && ret != -ENOENT) {
+			LOG_ERR("Failed to apply sleep pinctrl state: %d", ret);
+			return ret;
+		}
+	}
+#endif
+
+	/* Disable CPI clock (re-enabled on resume) */
+	clock_control_off(config->clk_dev, config->cid);
+
+	LOG_DBG("PM: Suspended %s", dev->name);
+
+	return 0;
+}
+
+/**
+ * @brief CPI/CAM resume handler
+ *
+ * Restores CPI state and restarts streaming if it was active before suspend.
+ *
+ * @param dev CPI device struct
+ * @return 0 if successful, negative errno otherwise
+ */
+static int alif_cam_resume(const struct device *dev)
+{
+	const struct video_cam_config *config = dev->config;
+	struct video_cam_data *data = dev->data;
+	int ret;
+
+	/* Re-enable CPI clock lost during deep sleep (STOP mode) */
+	ret = alif_cam_enable_clocks(dev);
+	if (ret) {
+		LOG_ERR("Failed to enable CPI clock on resume: %d", ret);
+		return ret;
+	}
+
+#ifdef CONFIG_PINCTRL
+	/* Apply default pin configuration */
+	if (config->pcfg != NULL) {
+		ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+		if (ret < 0 && ret != -ENOENT) {
+			LOG_ERR("Failed to apply default pinctrl state: %d", ret);
+			return ret;
+		}
+	}
+#endif
+
+	/* Re-setup the CPI controller hardware config */
+	ret = alif_video_cam_setup(dev);
+	if (ret) {
+		LOG_ERR("Failed to re-setup CPI controller on resume: %d", ret);
+		return ret;
+	}
+
+	/* Restore streaming state if it was active before suspend */
+	if (data->was_streaming) {
+		ret = alif_cam_stream_start(dev);
+		if (ret) {
+			LOG_ERR("Failed to restart CPI stream on resume: %d", ret);
+			return ret;
+		}
+	}
+
+	LOG_DBG("PM: Resumed %s", dev->name);
+
+	return 0;
+}
+
+/**
+ * @brief CPI/CAM PM device action handler
+ *
+ * Handles power management state transitions for the CPI device.
+ *
+ * @param dev CPI device struct
+ * @param action PM device action
+ * @return 0 if successful, negative errno otherwise
+ */
+static int alif_cam_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		return alif_cam_resume(dev);
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		return alif_cam_suspend(dev);
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Power domain handling is automatic via PM framework */
+		return 0;
+
+	default:
+		return -ENOTSUP;
+	}
+}
+#endif /* CONFIG_PM_DEVICE */
 
 #define CAM_GET_CLK(i)                                                         \
 	IF_ENABLED(DT_INST_NODE_HAS_PROP(i, clocks),                           \
@@ -1112,7 +1268,9 @@ static int alif_video_cam_init(const struct device *dev)
 	};                                                                                         \
                                                                                                    \
 	static struct video_cam_data data_##i;                                                     \
-	DEVICE_DT_INST_DEFINE(i, &alif_video_cam_init, NULL, &data_##i, &config_##i,               \
+	PM_DEVICE_DT_INST_DEFINE(i, alif_cam_pm_action);                                           \
+	DEVICE_DT_INST_DEFINE(i, &alif_video_cam_init, PM_DEVICE_DT_INST_GET(i),                   \
+			      &data_##i, &config_##i,                                              \
 			      POST_KERNEL, CONFIG_VIDEO_ALIF_CAM_INIT_PRIORITY, &cam_driver_api);  \
                                                                                                    \
 	static void cam_config_func_##i(const struct device *dev)                                  \
