@@ -64,12 +64,18 @@ struct stream {
 /* Device run time data */
 struct i2s_dw_data {
 	uint32_t irq_mask_cache;
-	enum i2s_dir dir;
 	struct stream rx;
 	struct stream tx;
 };
 
 #define MODULO_INC(val, max) { val = (++val < max) ? val : 0; }
+
+static int i2s_dw_start_stream(struct stream *stream, const struct device *dev);
+static int i2s_dw_stop_stream(struct stream *stream, const struct device *dev);
+static int i2s_dw_drop_stream(struct stream *stream, const struct device *dev);
+static int i2s_dw_prepare_stream(struct stream *stream);
+static void tx_stream_disable(struct stream *stream, const struct device *dev);
+static void rx_stream_disable(struct stream *stream, const struct device *dev);
 
 static int32_t i2s_configure_clocksource(bool enable,
 					const struct i2s_dw_cfg *i2s,
@@ -163,15 +169,85 @@ static void i2s_enable_controller(const struct device *dev)
 	i2s_clock_enable(i2s);
 }
 
+static struct stream *i2s_dw_get_stream(struct i2s_dw_data *dev_data,
+					enum i2s_dir dir)
+{
+	switch (dir) {
+	case I2S_DIR_RX:
+		return &dev_data->rx;
+	case I2S_DIR_TX:
+		return &dev_data->tx;
+	default:
+		return NULL;
+	}
+}
+
+static bool i2s_dw_stream_active(const struct stream *stream)
+{
+	return stream->state == I2S_STATE_RUNNING ||
+	       stream->state == I2S_STATE_STOPPING;
+}
+
+static bool i2s_dw_any_stream_active(const struct i2s_dw_data *dev_data)
+{
+	return i2s_dw_stream_active(&dev_data->tx) ||
+	       i2s_dw_stream_active(&dev_data->rx);
+}
+
+static void i2s_dw_update_pm_state(const struct device *dev)
+{
+	const struct i2s_dw_data *const dev_data = dev->data;
+
+	if (i2s_dw_any_stream_active(dev_data)) {
+		pm_device_busy_set(dev);
+	} else {
+		pm_device_busy_clear(dev);
+	}
+}
+
+static void i2s_dw_disable_controller_if_idle(const struct device *dev)
+{
+	const struct i2s_dw_data *const dev_data = dev->data;
+	const struct i2s_dw_cfg *i2s = dev->config;
+
+	if (i2s_dw_any_stream_active(dev_data)) {
+		return;
+	}
+
+	/* Disable I2S */
+	i2s_global_disable(i2s);
+	i2s_clock_disable(i2s);
+}
+
+static bool i2s_dw_hw_cfg_matches(const struct i2s_config *lhs,
+				  const struct i2s_config *rhs)
+{
+	return lhs->word_size == rhs->word_size &&
+	       lhs->channels == rhs->channels &&
+	       lhs->format == rhs->format &&
+	       lhs->options == rhs->options &&
+	       lhs->frame_clk_freq == rhs->frame_clk_freq;
+}
+
+static const struct i2s_config *i2s_dw_config_get(const struct device *dev,
+						  enum i2s_dir dir)
+{
+	struct i2s_dw_data *const dev_data = dev->data;
+	struct stream *stream = i2s_dw_get_stream(dev_data, dir);
+
+	if (stream == NULL || stream->state == I2S_STATE_NOT_READY) {
+		return NULL;
+	}
+
+	return &stream->cfg;
+}
+
 static int i2s_dw_configure(const struct device *dev, enum i2s_dir dir,
 			       const struct i2s_config *i2s_cfg)
 {
 	const struct i2s_dw_cfg *i2s = dev->config;
 	struct i2s_dw_data *const dev_data = dev->data;
-
 	struct stream *stream;
-
-	dev_data->dir = dir;
 
 	switch (dir) {
 	case I2S_DIR_RX:
@@ -224,8 +300,88 @@ static int i2s_dw_trigger(const struct device *dev, enum i2s_dir dir,
 {
 	struct i2s_dw_data *const dev_data = dev->data;
 	struct stream *stream;
-	unsigned int key;
 	int ret;
+
+	if (dir == I2S_DIR_BOTH) {
+		switch (cmd) {
+		case I2S_TRIGGER_START:
+			if (dev_data->tx.state != I2S_STATE_READY ||
+			    dev_data->rx.state != I2S_STATE_READY) {
+				LOG_ERR("START trigger: both streams must be READY");
+				return -EIO;
+			}
+
+			if (!i2s_dw_hw_cfg_matches(&dev_data->tx.cfg,
+						   &dev_data->rx.cfg)) {
+				LOG_ERR("TX and RX configurations must match for full duplex");
+				return -EINVAL;
+			}
+
+			ret = i2s_dw_start_stream(&dev_data->tx, dev);
+			if (ret < 0) {
+				return ret;
+			}
+
+			ret = i2s_dw_start_stream(&dev_data->rx, dev);
+			if (ret < 0) {
+				tx_stream_disable(&dev_data->tx, dev);
+				dev_data->tx.queue_drop(&dev_data->tx);
+				dev_data->tx.state = I2S_STATE_READY;
+				i2s_dw_update_pm_state(dev);
+				return ret;
+			}
+
+			i2s_dw_update_pm_state(dev);
+			return 0;
+
+		case I2S_TRIGGER_STOP:
+		case I2S_TRIGGER_DRAIN:
+			ret = i2s_dw_stop_stream(&dev_data->tx, dev);
+			if (ret < 0) {
+				return ret;
+			}
+
+			ret = i2s_dw_stop_stream(&dev_data->rx, dev);
+			if (ret < 0) {
+				return ret;
+			}
+
+			i2s_dw_update_pm_state(dev);
+			return 0;
+
+		case I2S_TRIGGER_DROP:
+			ret = i2s_dw_drop_stream(&dev_data->tx, dev);
+			if (ret < 0) {
+				return ret;
+			}
+
+			ret = i2s_dw_drop_stream(&dev_data->rx, dev);
+			if (ret < 0) {
+				return ret;
+			}
+
+			i2s_dw_update_pm_state(dev);
+			return 0;
+
+		case I2S_TRIGGER_PREPARE:
+			ret = i2s_dw_prepare_stream(&dev_data->tx);
+			if (ret < 0) {
+				return ret;
+			}
+
+			ret = i2s_dw_prepare_stream(&dev_data->rx);
+			if (ret < 0) {
+				return ret;
+			}
+
+			i2s_dw_update_pm_state(dev);
+			return 0;
+
+		default:
+			LOG_ERR("Unsupported trigger command");
+			return -EINVAL;
+		}
+	}
 
 	switch (dir) {
 	case I2S_DIR_RX:
@@ -234,81 +390,53 @@ static int i2s_dw_trigger(const struct device *dev, enum i2s_dir dir,
 	case I2S_DIR_TX:
 		stream = &dev_data->tx;
 		break;
-	case I2S_DIR_BOTH:
-		return -ENOSYS;
 	default:
 		LOG_ERR("Either RX or TX direction must be selected");
 		return -EINVAL;
 	}
 
+	if (stream == &dev_data->tx &&
+	    i2s_dw_stream_active(&dev_data->rx) &&
+	    !i2s_dw_hw_cfg_matches(&dev_data->tx.cfg, &dev_data->rx.cfg)) {
+		LOG_ERR("TX and RX configurations must match for full duplex");
+		return -EINVAL;
+	}
+
+	if (stream == &dev_data->rx &&
+	    i2s_dw_stream_active(&dev_data->tx) &&
+	    !i2s_dw_hw_cfg_matches(&dev_data->rx.cfg, &dev_data->tx.cfg)) {
+		LOG_ERR("TX and RX configurations must match for full duplex");
+		return -EINVAL;
+	}
+
 	switch (cmd) {
 	case I2S_TRIGGER_START:
-		if (stream->state != I2S_STATE_READY) {
-			LOG_ERR("START trigger: invalid state %d",
-				    stream->state);
-			return -EIO;
-		}
-
-		__ASSERT_NO_MSG(stream->mem_block == NULL);
-
-		ret = stream->stream_start(stream, dev);
+		ret = i2s_dw_start_stream(stream, dev);
 		if (ret < 0) {
-			LOG_ERR("START trigger failed %d", ret);
 			return ret;
 		}
-
-		pm_device_busy_set(dev);
-
-		stream->state = I2S_STATE_RUNNING;
-		stream->last_block = false;
 		break;
 
 	case I2S_TRIGGER_STOP:
-		key = irq_lock();
-		if (stream->state != I2S_STATE_RUNNING) {
-			irq_unlock(key);
-			LOG_ERR("STOP trigger: invalid state");
-			return -EIO;
-		}
-		irq_unlock(key);
-		stream->stream_disable(stream, dev);
-		stream->queue_drop(stream);
-		stream->state = I2S_STATE_READY;
-		stream->last_block = true;
-
-		pm_device_busy_clear(dev);
-		break;
-
 	case I2S_TRIGGER_DRAIN:
-		key = irq_lock();
-		if (stream->state != I2S_STATE_RUNNING) {
-			irq_unlock(key);
-			LOG_ERR("DRAIN trigger: invalid state");
-			return -EIO;
+		ret = i2s_dw_stop_stream(stream, dev);
+		if (ret < 0) {
+			return ret;
 		}
-		stream->stream_disable(stream, dev);
-		stream->queue_drop(stream);
-		stream->state = I2S_STATE_READY;
-		irq_unlock(key);
 		break;
 
 	case I2S_TRIGGER_DROP:
-		if (stream->state == I2S_STATE_NOT_READY) {
-			LOG_ERR("DROP trigger: invalid state");
-			return -EIO;
+		ret = i2s_dw_drop_stream(stream, dev);
+		if (ret < 0) {
+			return ret;
 		}
-		stream->stream_disable(stream, dev);
-		stream->queue_drop(stream);
-		stream->state = I2S_STATE_READY;
 		break;
 
-	case I2S_TRIGGER_PREPARE:
-		if (stream->state != I2S_STATE_ERROR) {
-			LOG_ERR("PREPARE trigger: invalid state");
-			return -EIO;
+	case I2S_TRIGGER_PREPARE: /* recover from ERROR state */
+		ret = i2s_dw_prepare_stream(stream);
+		if (ret < 0) {
+			return ret;
 		}
-		stream->state = I2S_STATE_READY;
-		stream->queue_drop(stream);
 		break;
 
 	default:
@@ -316,6 +444,7 @@ static int i2s_dw_trigger(const struct device *dev, enum i2s_dir dir,
 		return -EINVAL;
 	}
 
+	i2s_dw_update_pm_state(dev);
 	return 0;
 }
 
@@ -346,6 +475,70 @@ static int i2s_dw_read(const struct device *dev, void **mem_block,
 	return 0;
 }
 
+static int i2s_dw_start_stream(struct stream *stream, const struct device *dev)
+{
+	int ret;
+
+	if (stream->state != I2S_STATE_READY) {
+		LOG_ERR("START trigger: invalid state %d", stream->state);
+		return -EIO;
+	}
+
+	__ASSERT_NO_MSG(stream->mem_block == NULL);
+
+	ret = stream->stream_start(stream, dev);
+	if (ret < 0) {
+		LOG_ERR("START trigger failed %d", ret);
+		return ret;
+	}
+
+	stream->state = I2S_STATE_RUNNING;
+	stream->last_block = false;
+	return 0;
+}
+
+static int i2s_dw_stop_stream(struct stream *stream, const struct device *dev)
+{
+	if (stream->state != I2S_STATE_RUNNING) {
+		LOG_ERR("STOP trigger: invalid state");
+		return -EIO;
+	}
+
+	stream->stream_disable(stream, dev);
+	stream->queue_drop(stream);
+	stream->state = I2S_STATE_READY;
+	stream->last_block = true;
+
+	return 0;
+}
+
+static int i2s_dw_drop_stream(struct stream *stream, const struct device *dev)
+{
+	if (stream->state == I2S_STATE_NOT_READY) {
+		LOG_ERR("DROP trigger: invalid state");
+		return -EIO;
+	}
+
+	stream->stream_disable(stream, dev);
+	stream->queue_drop(stream);
+	stream->state = I2S_STATE_READY;
+
+	return 0;
+}
+
+static int i2s_dw_prepare_stream(struct stream *stream)
+{
+	if (stream->state != I2S_STATE_ERROR) {
+		LOG_ERR("PREPARE trigger: invalid state");
+		return -EIO;
+	}
+
+	stream->state = I2S_STATE_READY;
+	stream->queue_drop(stream);
+
+	return 0;
+}
+
 static int i2s_dw_write(const struct device *dev, void *mem_block,
 			   size_t size)
 {
@@ -372,6 +565,7 @@ static int i2s_dw_write(const struct device *dev, void *mem_block,
 
 static const struct i2s_driver_api i2s_dw_driver_api = {
 	.configure = i2s_dw_configure,
+	.config_get = i2s_dw_config_get,
 	.read = i2s_dw_read,
 	.write = i2s_dw_write,
 	.trigger = i2s_dw_trigger,
@@ -628,13 +822,13 @@ static void i2s_dw_isr(const struct device *dev)
 	/* Get the Current Interrupt Status*/
 	int_status = i2s->paddr->ISR;
 
-	if ((dev_data->dir == I2S_DIR_TX) &&
-	    (_FLD2VAL(I2S_ISR_TXFE, int_status))) {
+	if (_FLD2VAL(I2S_ISR_TXFE, int_status) &&
+	    i2s_dw_stream_active(&dev_data->tx)) {
 		/* Handle Tx Interrupt */
 		i2s_tx_irq_handler(dev);
 	}
-	if ((dev_data->dir == I2S_DIR_RX) &&
-	    (_FLD2VAL(I2S_ISR_RXDA, int_status))) {
+	if (_FLD2VAL(I2S_ISR_RXDA, int_status) &&
+	    i2s_dw_stream_active(&dev_data->rx)) {
 		/* Handle Rx Interrupt */
 		i2s_rx_irq_handler(dev);
 	}
@@ -730,8 +924,6 @@ static int rx_stream_start(struct stream *stream, const struct device *dev)
 	/* Enable Master Clock */
 	i2s_configure_clock(i2s);
 	i2s_clock_enable(i2s);
-	/* Disable Tx Channel */
-	i2s_tx_channel_disable(i2s);
 
 	/* Clear Overrun interrupt if any */
 	i2s_clear_rx_overrun(i2s);
@@ -774,9 +966,6 @@ static int tx_stream_start(struct stream *stream, const struct device *dev)
 	i2s_configure_clock(i2s);
 	i2s_clock_enable(i2s);
 
-	/* Disable Rx Channel */
-	i2s_rx_channel_disable(i2s);
-
 	/* Clear Overrun interrupt if any */
 	i2s_clear_tx_overrun(i2s);
 
@@ -808,8 +997,8 @@ static void rx_stream_disable(struct stream *stream, const struct device *dev)
 
 	/* Disable Rx Interrupt */
 	i2s_disable_rx_interrupt(i2s);
-	/* Disable Master Clock */
-	i2s_clock_disable(i2s);
+	i2s_dw_disable_controller_if_idle(dev);
+	i2s_dw_update_pm_state(dev);
 }
 
 static void tx_stream_disable(struct stream *stream, const struct device *dev)
@@ -827,9 +1016,8 @@ static void tx_stream_disable(struct stream *stream, const struct device *dev)
 
 	/* Disable Tx Interrupt */
 	i2s_disable_tx_interrupt(i2s);
-
-	/* Disable Master Clock */
-	i2s_clock_disable(i2s);
+	i2s_dw_disable_controller_if_idle(dev);
+	i2s_dw_update_pm_state(dev);
 }
 
 static void rx_queue_drop(struct stream *stream)
