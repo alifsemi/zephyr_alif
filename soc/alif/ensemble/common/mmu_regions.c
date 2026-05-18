@@ -27,11 +27,6 @@ static const struct arm_mmu_region mmu_regions[] = {
 		DT_REG_SIZE_BY_IDX(DT_INST(0, arm_gic), 1),
 		MT_STRONGLY_ORDERED | MPERM_R | MPERM_W),
 
-	MMU_REGION_FLAT_ENTRY("UART",
-		DT_REG_ADDR(DT_INST(0, ns16550)),
-		DT_REG_SIZE(DT_INST(0, ns16550)),
-		MT_DEVICE | MATTR_SHARED | MPERM_R | MPERM_W),
-
 	/* CLKCTL_PER_MST & CLKCTL_PER_SLV regions */
 	MMU_REGION_FLAT_ENTRY("CLKCTL",
 		0x4902F000,
