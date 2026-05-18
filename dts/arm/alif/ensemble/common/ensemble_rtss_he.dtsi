@@ -246,14 +246,15 @@
 		status = "okay";
 
 		aipm_run_default: run-profile-default {
-			aipm-power-domains = <(ALIF_PD_SSE700_AON_MASK | ALIF_PD_SYST_MASK)>;
+			aipm-power-domains = <(ALIF_PD_SSE700_AON_MASK | ALIF_PD_SYST_MASK |
+					       ALIF_PD_DBSS_MASK)>;
 			dcdc-voltage    = <825>;
 			dcdc-mode       = "pwm";
 			aon-clk-src     = "lfxo";
 			clk-src         = "pll";
 			cpu-clk-freq    = <ALIF_CLOCK_FREQ_160MHZ>;
 			scaled-clk-freq = <ALIF_SCALED_FREQ_RC_ACTIVE_76_8_MHZ>;
-			memory-blocks   = <ALIF_MRAM_MASK>;
+			memory-blocks   = <(ALIF_MRAM_MASK | ALIF_SRAM0_MASK | ALIF_SRAM1_MASK)>;
 			ip-clock-gating = <0>;
 			phy-pwr-gating  = <0>;
 			vdd-ioflex      = <ALIF_IOFLEX_LEVEL_1V8>;
