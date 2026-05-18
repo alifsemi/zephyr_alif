@@ -1,0 +1,16 @@
+# Copyright (c) 2026 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+description: ISSI IS66/67WVH64M8EALL/BLL HyperRAM on ALIF OSPI bus
+
+compatible: "issi,wvh64m8eall"
+
+include: base.yaml
+
+properties:
+  size:
+    type: int
+    required: true
+    description: |
+      The RAM size in bytes.
