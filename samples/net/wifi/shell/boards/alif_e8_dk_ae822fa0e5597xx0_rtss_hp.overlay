@@ -4,7 +4,7 @@
  */
 
 ns: &ns {
-	reg = <0x20024000 DT_SIZE_K(96)>;
+	reg = <0x20028000 DT_SIZE_K(96)>;
 	status = "okay";
 };
 
