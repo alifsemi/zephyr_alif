@@ -167,6 +167,7 @@ typedef struct udc_dwc3_ep {
 	udc_dwc3_trb_t  ep_trb[NO_OF_TRB_PER_EP + 1] ATTR_ALIGN(32);
 	uint32_t    ep_status;
 	uint8_t     ep_index;
+	uint8_t     ep_type;
 	uint32_t    ep_transfer_status;
 	uint8_t     ep_dir;
 	uint32_t    ep_maxpacket;
@@ -177,6 +178,8 @@ typedef struct udc_dwc3_ep {
 	uint8_t     phy_ep;
 	uint32_t    bytes_txed;
 	uint32_t    unaligned_txed;
+	uint8_t     ep_interval;
+	uint32_t    interval_uframe;
 } udc_dwc3_ep_t;
 
 /* USB setup packet structure */
@@ -244,6 +247,7 @@ typedef struct udc_dwc3_driver {
 	uint8_t              fladj;
 	uint32_t             event_type;
 	uint32_t             actual_length;
+	uint32_t             micro_frame_number;
 } udc_dwc3_driver_t;
 
 void dwc3_reset_cb(udc_dwc3_driver_t *drv);
