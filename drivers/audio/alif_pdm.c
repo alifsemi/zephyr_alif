@@ -261,6 +261,19 @@ static int dmic_alif_pdm_trigger(const struct device *dev, enum dmic_trigger cmd
 	case DMIC_TRIGGER_STOP:
 		disable_interrupt(dev);
 		pdata->record_data = 0;
+
+		/* Free in-progress buffer to prevent slab leak */
+		if (pdata->data_buffer != NULL) {
+			k_mem_slab_free(pdata->mem_slab, pdata->data_buffer);
+			pdata->data_buffer = NULL;
+		}
+
+		/* Drain queued buffers that the app hasn't read */
+		void *buf;
+
+		while (k_msgq_get(&pdata->buf_queue, &buf, K_NO_WAIT) == 0) {
+			k_mem_slab_free(pdata->mem_slab, buf);
+		}
 		break;
 
 	case DMIC_TRIGGER_START:
@@ -487,7 +500,15 @@ static void alif_pdm_warning_isr(const struct device *dev)
 		}
 		whole = data_bytes - bytes_available;
 
-		k_msgq_put(&pdmdata->buf_queue, &pdmdata->data_buffer, K_NO_WAIT);
+		if (k_msgq_put(&pdmdata->buf_queue, &pdmdata->data_buffer, K_NO_WAIT) != 0) {
+			/* Queue full: drop oldest block to make room */
+			void *oldest = NULL;
+
+			if (k_msgq_get(&pdmdata->buf_queue, &oldest, K_NO_WAIT) == 0) {
+				k_mem_slab_free(pdmdata->mem_slab, oldest);
+				k_msgq_put(&pdmdata->buf_queue, &pdmdata->data_buffer, K_NO_WAIT);
+			}
+		}
 
 		pdmdata->data_buffer = get_slab(pdmdata);
 
