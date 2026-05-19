@@ -235,6 +235,18 @@
 		};
 	};
 
+	pinctrl_adc0_sleep:pinctrl_adc0_sleep {
+		group0 {
+			pinmux = <PIN_P0_0__GPIO>,
+			<PIN_P0_1__GPIO>,
+			<PIN_P0_2__GPIO>,
+			<PIN_P0_3__GPIO>,
+			<PIN_P0_4__GPIO>,
+			<PIN_P0_5__GPIO>;
+			read-enable = <0x1>;
+		};
+	};
+
 	pinctrl_adc1:pinctrl_adc1 {
 		group0 {
 			pinmux = <PIN_P0_6__ANA_S6>,
@@ -243,6 +255,18 @@
 			<PIN_P2_5__ANA_S13>,
 			<PIN_P2_6__ANA_S14>,
 			<PIN_P2_7__ANA_S15>;
+			read-enable = <0x1>;
+		};
+	};
+
+	pinctrl_adc1_sleep:pinctrl_adc1_sleep {
+		group0 {
+			pinmux = <PIN_P0_6__GPIO>,
+			<PIN_P0_7__GPIO>,
+			<PIN_P2_4__GPIO>,
+			<PIN_P2_5__GPIO>,
+			<PIN_P2_6__GPIO>,
+			<PIN_P2_7__GPIO>;
 			read-enable = <0x1>;
 		};
 	};

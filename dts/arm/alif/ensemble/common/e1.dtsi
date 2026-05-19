@@ -337,6 +337,7 @@
 	uart2: uart@4901a000 {
 		compatible = "ns16550";
 		reg = <0x4901a000 0x100>;
+		/* Use 38.4MHz clock for better low-power compatibility */
 		clocks = <&clockctrl ALIF_UART2_SYST_PCLK>;
 		interrupts = <126 ALIF_DEFAULT_IRQ_PRIORITY>;
 		power-domains = <&pd_syst>;
@@ -1322,8 +1323,9 @@
 		adc_conversion_mode	= "SINGLE_SHOT_CONVERSION";
 		/* pga_enable; */       /* This property is valid in differential mode only */
 		pga_gain		= "ADC_PGA_GAIN_0_DB";
-		pinctrl-0		= < &pinctrl_adc0 >;
-		pinctrl-names		= "default";
+		pinctrl-0		= <&pinctrl_adc0>;
+		pinctrl-1		= <&pinctrl_adc0_sleep>;
+		pinctrl-names		= "default", "sleep";
 		interrupts		= <151 0>,
 					  <154 0>,
 					  <157 0>,
@@ -1360,8 +1362,9 @@
 		adc_conversion_mode	= "SINGLE_SHOT_CONVERSION";
 		/* pga_enable; */       /* This property is valid in differential mode only */
 		pga_gain		= "ADC_PGA_GAIN_0_DB";
-		pinctrl-0		= < &pinctrl_adc1 >;
-		pinctrl-names		= "default";
+		pinctrl-0		= <&pinctrl_adc1>;
+		pinctrl-1		= <&pinctrl_adc1_sleep>;
+		pinctrl-names		= "default", "sleep";
 		interrupts		= <152 0>,
 					  <155 0>,
 					  <158 0>,
@@ -1398,8 +1401,9 @@
 		adc_conversion_mode	= "SINGLE_SHOT_CONVERSION";
 		/* pga_enable; */       /* This property is valid in differential mode only */
 		pga_gain		= "ADC_PGA_GAIN_0_DB";
-		pinctrl-0		= < &pinctrl_adc2 >;
-		pinctrl-names		= "default";
+		pinctrl-0		= <&pinctrl_adc2>;
+		pinctrl-1		= <&pinctrl_adc2_sleep>;
+		pinctrl-names		= "default", "sleep";
 		interrupts		= <153 0>,
 					  <156 0>,
 					  <159 0>,
@@ -1436,8 +1440,9 @@
 		adc_conversion_mode	= "SINGLE_SHOT_CONVERSION";
 		/* pga_enable; */       /* This property is valid in differential mode only */
 		pga_gain		= "ADC_PGA_GAIN_0_DB";
-		pinctrl-0		= < &pinctrl_adc24 >;
-		pinctrl-names		= "default";
+		pinctrl-0		= <&pinctrl_adc24>;
+		pinctrl-1		= <&pinctrl_adc24_sleep>;
+		pinctrl-names		= "default", "sleep";
 		interrupts		= <163 3>,
 					  <164 3>,
 					  <165 3>,
