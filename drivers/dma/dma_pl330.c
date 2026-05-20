@@ -1072,9 +1072,9 @@ static int dma_pl330_dma_reload(const struct device *dev, uint32_t const channel
 		return -EBUSY;
 	}
 
-	channel_cfg->src_addr = local_to_global(UINT_TO_POINTER(src));
-	channel_cfg->dst_addr = local_to_global(UINT_TO_POINTER(dst));
-	channel_cfg->trans_size = size;
+	channel_cfg->block_pool[0].source_address = src;
+	channel_cfg->block_pool[0].dest_address   = dst;
+	channel_cfg->block_pool[0].block_size     = size;
 
 	return 0;
 }
