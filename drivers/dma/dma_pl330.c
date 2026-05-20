@@ -659,6 +659,7 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 	struct dma_pl330_ch_config *channel_cfg;
 	struct dma_pl330_ch_internal *ch_handle;
 	uint32_t bsize;
+	uint32_t count = (cfg->block_count > 0) ? cfg->block_count : 1;
 
 	if (channel >= dev_cfg->max_dma_channels) {
 		return -EINVAL;
@@ -735,8 +736,25 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 		return -EINVAL;
 	}
 
-	channel_cfg->head_block = cfg->head_block;
-	channel_cfg->current_block = cfg->head_block;
+	if (count > CONFIG_DMA_PL330_MAX_BLOCK_COUNT) {
+		LOG_ERR("DMA PL330: block_count %u exceeds CONFIG_DMA_PL330_MAX_BLOCK_COUNT=%u; ",
+			count, CONFIG_DMA_PL330_MAX_BLOCK_COUNT);
+		return -EINVAL;
+	}
+
+	memset(channel_cfg->block_pool, 0, sizeof(channel_cfg->block_pool));
+
+	struct dma_block_config *src = cfg->head_block;
+
+	for (uint32_t i = 0; i < count && src != NULL; i++) {
+		memcpy(&channel_cfg->block_pool[i], src, sizeof(*src));
+		channel_cfg->block_pool[i].next_block =
+			(i + 1 < count) ? &channel_cfg->block_pool[i + 1] : NULL;
+		src = src->next_block;
+	}
+
+	channel_cfg->head_block    = &channel_cfg->block_pool[0];
+	channel_cfg->current_block = &channel_cfg->block_pool[0];
 
 	if (cfg->head_block->source_addr_adj == DMA_ADDR_ADJ_INCREMENT ||
 	    cfg->head_block->source_addr_adj == DMA_ADDR_ADJ_NO_CHANGE) {
@@ -1061,12 +1079,24 @@ static int dma_pl330_dma_reload(const struct device *dev, uint32_t const channel
 	return 0;
 }
 
+static int dma_pl330_get_attribute(const struct device *dev, uint32_t type, uint32_t *value)
+{
+	switch (type) {
+	case DMA_ATTR_MAX_BLOCK_COUNT:
+		*value = CONFIG_DMA_PL330_MAX_BLOCK_COUNT;
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
 static DEVICE_API(dma, pl330_driver_api) = {
 	.config = dma_pl330_configure,
 	.reload = dma_pl330_dma_reload,
 	.start = dma_pl330_transfer_start,
 	.stop = dma_pl330_transfer_stop,
-	.get_status = dma_pl330_get_status,
+	.get_status    = dma_pl330_get_status,
+	.get_attribute = dma_pl330_get_attribute,
 };
 
 #ifdef CONFIG_PM_DEVICE
