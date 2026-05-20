@@ -53,6 +53,14 @@
 			label = "SW0";
 		};
 	};
+
+	cam_enbuf: cam-enbuf {
+		compatible = "regulator-fixed";
+		regulator-name = "cam_enbuf";
+		enable-gpios = <&gpio3 2 GPIO_ACTIVE_HIGH>;
+		startup-delay-us = <2000>;
+		status = "okay";
+	};
 };
 
 &uart2 {
@@ -96,6 +104,10 @@
 };
 
 &dma2 {
+	status = "okay";
+};
+
+&gpio3 {
 	status = "okay";
 };
 
