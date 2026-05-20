@@ -207,6 +207,8 @@ struct dma_pl330_ch_config {
 	 */
 	struct dma_block_config *head_block;
 	struct dma_block_config *current_block;
+	/* Copy of the caller's block chain */
+	struct dma_block_config block_pool[CONFIG_DMA_PL330_MAX_BLOCK_COUNT];
 };
 
 struct dma_pl330_config {
