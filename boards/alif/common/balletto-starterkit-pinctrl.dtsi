@@ -234,8 +234,8 @@
 
 	pinctrl_lpi2c0: pinctrl_lpi2c0 {
 		group0 {
-			pinmux = <PIN_P0_0__LPI2C0_SCL_A>,
-				 <PIN_P0_1__LPI2C0_SDA_A>;
+			pinmux = <PIN_P2_1__LPI2C0_SCL_B>,
+				 <PIN_P2_3__LPI2C0_SDA_B>;
 
 			read-enable = <0x1>;
 			driver-state-control = <0x1>;
