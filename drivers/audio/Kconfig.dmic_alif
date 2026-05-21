@@ -9,3 +9,14 @@ config ALIF_PDM
 	depends on DT_HAS_ALIF_ALIF_PDM_ENABLED
 	help
 		Enable Alif PDM module driver
+if ALIF_PDM
+
+config ALIF_PDM_USE_DMA
+	bool "DMA path for Alif PDM transfers"
+	default n
+	help
+		Enables the DMA code path for Alif PDM audio capture.
+		Even though the code path will be enabled by this, DMA will
+		be enabled based on the dts.
+
+endif # ALIF_PDM
