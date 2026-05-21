@@ -65,6 +65,15 @@ if(CONFIG_ARM_ETHOS_U AND CONFIG_MULTITHREADING)
         endif()
     endif()
 
+    # For Cortex-A32 (APSS) the Ethos-U core driver needs CMSIS Core_A headers
+    # instead of Core_M headers.  The upstream driver CMakeLists adds
+    # ${CMSIS_PATH}/CMSIS/Core/Include which only contains Cortex-M headers.
+    # Prepend the Core_A include path so cmsis_compiler.h resolves correctly.
+    if(CONFIG_APSS)
+        target_include_directories(ethosu_core_driver BEFORE PUBLIC
+            ${ZEPHYR_HAL_CMSIS_MODULE_DIR}/CMSIS/Core_A/Include)
+    endif()
+
     target_link_libraries(ethosu_core_driver PUBLIC
        zephyr_interface)
 
