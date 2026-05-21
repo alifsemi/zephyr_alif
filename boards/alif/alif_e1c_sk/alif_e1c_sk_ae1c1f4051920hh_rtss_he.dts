@@ -49,9 +49,12 @@
 		zephyr,memory-region = "OSPI0";
 	};
 
-	cam_enbuf: cam_enbuf {
-		compatible = "arducam-enbuf";
-		enbuf-gpios = <&gpio3 2 GPIO_ACTIVE_HIGH>;
+	cam_enbuf: cam-enbuf {
+		compatible = "regulator-fixed";
+		regulator-name = "cam_enbuf";
+		enable-gpios = <&gpio3 2 GPIO_ACTIVE_HIGH>;
+		startup-delay-us = <2000>;
+		status = "okay";
 	};
 };
 
