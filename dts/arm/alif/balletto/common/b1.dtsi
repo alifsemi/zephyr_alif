@@ -7,7 +7,6 @@
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/clock/alif_balletto_clocks.h>
 #include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
-#include <dt-bindings/misc/alif_aipm_balletto_b1.h>
 #include <zephyr/dt-bindings/timer/alif_utimer.h>
 #include <zephyr/dt-bindings/adc/adc_alif.h>
 #include <zephyr/dt-bindings/pwm/pwm.h>
@@ -1489,13 +1488,6 @@
 			zephyr,pm-device-disabled;
 			status = "disabled";
 		};
-		subsys_off: subsys_off {
-			compatible = "zephyr,power-state";
-			power-state-name = "soft-off";
-			min-residency-us = <5000000>;
-			exit-latency-us = <60000>;
-			status = "disabled";
-		};
 		standby_s2ram: standby_s2ram {
 			compatible = "zephyr,power-state";
 			power-state-name = "suspend-to-ram";
@@ -1512,6 +1504,13 @@
 			substate-id = <1>;
 			status = "disabled";
 		};
+		subsys_off: subsys_off {
+			compatible = "zephyr,power-state";
+			power-state-name = "soft-off";
+			min-residency-us = <5000000>;
+			exit-latency-us = <60000>;
+			status = "disabled";
+		};
 	};
 
 	cpus {
@@ -1524,90 +1523,7 @@
 			d-cache-line-size = <32>;
 			i-cache-line-size = <32>;
 			reg = <0>;
-			cpu-power-states = <&suspend_idle &subsys_off &standby_s2ram &stop_s2ram>;
-		};
-	};
-};
-
-/ {
-	aipm_run: aipm-run {
-		compatible = "alif,aipm-run";
-		status = "okay";
-
-		aipm_run_default: run-profile-default {
-			aipm-power-domains = <(ALIF_PD_SSE700_AON_MASK | ALIF_PD_SYST_MASK |
-					       ALIF_PD_DBSS_MASK)>;
-			dcdc-voltage    = <825>;
-			dcdc-mode       = "pwm";
-			aon-clk-src     = "lfxo";
-			clk-src         = "pll";
-			cpu-clk-freq    = <ALIF_CLOCK_FREQ_160MHZ>;
-			scaled-clk-freq = <ALIF_SCALED_FREQ_RC_ACTIVE_76_8_MHZ>;
-			memory-blocks   = <ALIF_MRAM_MASK>;
-			ip-clock-gating = <0>;
-			phy-pwr-gating  = <0>;
-			vdd-ioflex      = <ALIF_IOFLEX_LEVEL_1V8>;
-		};
-	};
-};
-
-/ {
-	aipm_off: aipm-off {
-		compatible = "alif,aipm-off";
-		status = "disabled";
-		vtor-address = <0x80000000>;
-
-		off_profile_standby: off-profile-standby {
-			status             = "disabled";
-			pm-state           = <4>; /* PM_STATE_SUSPEND_TO_RAM */
-			pm-substate        = <0>;
-			aipm-power-domains = <(ALIF_PD_SSE700_AON_MASK | ALIF_PD_VBAT_AON_MASK)>;
-			dcdc-voltage       = <825>;
-			dcdc-mode          = "off";
-			aon-clk-src        = "lfxo";
-			stby-clk-src       = "hfrc";
-			stby-clk-freq      = <ALIF_SCALED_FREQ_RC_STDBY_76_8_MHZ>;
-			memory-blocks      = <(ALIF_MRAM_MASK | ALIF_SERAM_MASK)>;
-			ip-clock-gating    = <0>;
-			phy-pwr-gating     = <0>;
-			vdd-ioflex         = <ALIF_IOFLEX_LEVEL_1V8>;
-			wakeup-events      = <0>;
-			ewic-cfg           = <0>;
-		};
-
-		off_profile_stop: off-profile-stop {
-			status             = "disabled";
-			pm-state           = <4>; /* PM_STATE_SUSPEND_TO_RAM */
-			pm-substate        = <1>;
-			aipm-power-domains = <ALIF_PD_VBAT_AON_MASK>;
-			dcdc-voltage       = <825>;
-			dcdc-mode          = "off";
-			aon-clk-src        = "lfxo";
-			stby-clk-src       = "hfrc";
-			stby-clk-freq      = <ALIF_SCALED_FREQ_RC_STDBY_76_8_MHZ>;
-			memory-blocks      = <(ALIF_MRAM_MASK | ALIF_SERAM_MASK)>;
-			ip-clock-gating    = <0>;
-			phy-pwr-gating     = <0>;
-			vdd-ioflex         = <ALIF_IOFLEX_LEVEL_1V8>;
-			wakeup-events      = <0>;
-			ewic-cfg           = <0>;
-		};
-
-		off_profile_soft_off: off-profile-soft-off {
-			status             = "disabled";
-			pm-state           = <6>; /* PM_STATE_SOFT_OFF */
-			aipm-power-domains = <ALIF_PD_VBAT_AON_MASK>;
-			dcdc-voltage       = <825>;
-			dcdc-mode          = "off";
-			aon-clk-src        = "lfxo";
-			stby-clk-src       = "hfrc";
-			stby-clk-freq      = <ALIF_SCALED_FREQ_RC_STDBY_76_8_MHZ>;
-			memory-blocks      = <(ALIF_MRAM_MASK | ALIF_SERAM_MASK)>;
-			ip-clock-gating    = <0>;
-			phy-pwr-gating     = <0>;
-			vdd-ioflex         = <ALIF_IOFLEX_LEVEL_1V8>;
-			wakeup-events      = <0>;
-			ewic-cfg           = <0>;
+			cpu-power-states = <&suspend_idle &standby_s2ram &stop_s2ram &subsys_off>;
 		};
 	};
 };
