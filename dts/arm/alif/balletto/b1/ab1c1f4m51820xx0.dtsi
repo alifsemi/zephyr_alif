@@ -4,6 +4,7 @@
  */
 
 #include <alif/balletto/common/b1.dtsi>
+#include <alif/balletto/common/aipm_balletto_b1.dtsi>
 
 &itcm {
 	reg = <0x0 DT_SIZE_K(512)>;
