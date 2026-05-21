@@ -4,6 +4,7 @@
  */
 
 #include "alif/ensemble/common/e1c.dtsi"
+#include "alif/ensemble/common/aipm_ensemble_e1c.dtsi"
 
 &itcm {
 	reg = <0x0 DT_SIZE_K(512)>;

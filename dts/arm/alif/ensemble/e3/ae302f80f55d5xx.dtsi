@@ -4,6 +4,7 @@
  */
 
 #include "alif/ensemble/common/e3_e5_e7.dtsi"
+#include "alif/ensemble/common/aipm_ensemble_gen1.dtsi"
 
 &sram0 {
 	reg = <0x02000000 DT_SIZE_K(4096)>;

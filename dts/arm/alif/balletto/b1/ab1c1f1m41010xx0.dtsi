@@ -4,6 +4,7 @@
  */
 
 #include <alif/balletto/common/b1.dtsi>
+#include <alif/balletto/common/aipm_balletto_b1.dtsi>
 
 /delete-node/ &ethosu0;
 

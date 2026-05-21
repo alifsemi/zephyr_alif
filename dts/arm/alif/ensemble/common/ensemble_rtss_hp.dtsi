@@ -4,7 +4,7 @@
  */
 
 #include <alif/common/alif_common.dtsi>
-#include <dt-bindings/misc/alif_aipm_ensemble.h>
+#include <dt-bindings/misc/alif_aipm_common.h>
 
 &{/soc} {
 	itcm: itcm@0 {
@@ -101,6 +101,22 @@
 			zephyr,pm-device-disabled;
 			status = "disabled";
 		};
+		standby_s2ram: standby_s2ram {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-ram";
+			min-residency-us = <1000000>;
+			exit-latency-us = <10000>;
+			substate-id = <0>;
+			status = "disabled";
+		};
+		stop_s2ram: stop_s2ram {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-ram";
+			min-residency-us = <2000000>;
+			exit-latency-us = <20000>;
+			substate-id = <1>;
+			status = "disabled";
+		};
 		subsys_off: subsys_off {
 			compatible = "zephyr,power-state";
 			power-state-name = "soft-off";
@@ -119,7 +135,7 @@
 			d-cache-line-size = <32>;
 			i-cache-line-size = <32>;
 			reg = <0>;
-			cpu-power-states = <&suspend_idle &subsys_off>;
+			cpu-power-states = <&suspend_idle &standby_s2ram &stop_s2ram &subsys_off>;
 		};
 	};
 
@@ -165,49 +181,10 @@
 	};
 };
 
-/ {
-	aipm_run: aipm-run {
-		compatible = "alif,aipm-run";
-		status = "okay";
-
-		aipm_run_default: run-profile-default {
-			aipm-power-domains = <(ALIF_PD_SSE700_AON_MASK | ALIF_PD_SYST_MASK |
-					       ALIF_PD_DBSS_MASK)>;
-			dcdc-voltage    = <825>;
-			dcdc-mode       = "pwm";
-			aon-clk-src     = "lfxo";
-			clk-src         = "pll";
-			cpu-clk-freq    = <ALIF_CLOCK_FREQ_400MHZ>;
-			scaled-clk-freq = <ALIF_SCALED_FREQ_RC_ACTIVE_76_8_MHZ>;
-			memory-blocks   = <(ALIF_MRAM_MASK | ALIF_SRAM0_MASK | ALIF_SRAM1_MASK)>;
-			ip-clock-gating = <0>;
-			phy-pwr-gating  = <0>;
-			vdd-ioflex      = <ALIF_IOFLEX_LEVEL_1V8>;
-		};
-	};
+&aipm_run_default {
+	cpu-clk-freq = <ALIF_CLOCK_FREQ_400MHZ>;
 };
 
-/ {
-	aipm_off: aipm-off {
-		compatible = "alif,aipm-off";
-		status = "disabled";
-		vtor-address = <0x80200000>; /* HP boots from MRAM slot-2 */
-
-		off_profile_soft_off: off-profile-soft-off {
-			status             = "disabled";
-			pm-state           = <6>; /* PM_STATE_SOFT_OFF */
-			aipm-power-domains = <ALIF_PD_VBAT_AON_MASK>;
-			dcdc-voltage       = <825>;
-			dcdc-mode          = "off";
-			aon-clk-src        = "lfxo";
-			stby-clk-src       = "hfrc";
-			stby-clk-freq      = <ALIF_SCALED_FREQ_RC_STDBY_76_8_MHZ>;
-			memory-blocks      = <ALIF_MRAM_MASK>;
-			ip-clock-gating    = <0>;
-			phy-pwr-gating     = <0>;
-			vdd-ioflex         = <ALIF_IOFLEX_LEVEL_1V8>;
-			wakeup-events      = <0>;
-			ewic-cfg           = <0>;
-		};
-	};
+&aipm_off {
+	vtor-address = <0x80200000>; /* Default MRAM boot address */
 };
