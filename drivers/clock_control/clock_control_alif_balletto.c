@@ -77,6 +77,10 @@ struct clock_control_alif_config {
 /** clock module (from clkid cell) */
 #define ALIF_CLOCK_CFG_MODULE(id) (((id) >> ALIF_CLOCK_MODULE_SHIFT) & ALIF_CLOCK_MODULE_MASK)
 
+/* AON MISC_REG1: HFXO clock divider bit position */
+#define AON_MISC_REG1_HFXO_CLKDIV_POS	17U
+#define AON_MISC_REG1_HFXO_CLKDIV_MASK	0xFU
+
 static uint32_t get_hfrc_clk_freq(void)
 {
 	/* Read HFRC clock divider from VBAT Analog Control 2 */
@@ -159,10 +163,34 @@ static uint32_t get_syst_pclk_freq(void)
 
 static uint32_t get_hfxo_divided_clk_freq(void)
 {
-	uint32_t divider = (sys_read32(AON_MISC_REG1) >> 13) & 0xF;
+	const uint32_t divider = (sys_read32(AON_MISC_REG1) >> AON_MISC_REG1_HFXO_CLKDIV_POS) &
+					AON_MISC_REG1_HFXO_CLKDIV_MASK;
 
-	divider = (divider > 7) ? 0 : divider;
-	return (ALIF_CLOCK_HFOSC_CLK_FREQ >> divider);
+	if (divider < 8) {
+		return (ALIF_CLOCK_HFOSC_CLK_FREQ >> divider);
+	}
+
+	switch (divider) {
+	case 0x9:
+		return ALIF_CLOCK_HFOSC_CLK_FREQ / 2;
+	case 0xA:
+		return ALIF_CLOCK_HFOSC_CLK_FREQ / 4;
+	case 0xB:
+		return ALIF_CLOCK_HFOSC_CLK_FREQ / 16;
+	case 0xC:
+		return ALIF_CLOCK_HFOSC_CLK_FREQ / 64;
+	case 0xD:
+		return ALIF_CLOCK_HFOSC_CLK_FREQ / 128;
+	case 0xE:
+		return ALIF_CLOCK_HFOSC_CLK_FREQ / 256;
+	case 0xF:
+		return ALIF_CLOCK_HFOSC_CLK_FREQ / 1024;
+	case 0x8:
+	default:
+		break;
+	}
+
+	return ALIF_CLOCK_HFOSC_CLK_FREQ;
 }
 
 static uint32_t get_hfosc_clk_freq(void)
