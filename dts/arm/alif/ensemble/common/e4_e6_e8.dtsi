@@ -227,6 +227,7 @@
 		compatible       = "verisilicon,hantro-vc9000e-jpeg";
 		reg              = <0x49044000 0x1000>;
 		interrupts       = <360 0>;
+		clocks           = <&clockctrl ALIF_JPEG_CLK>;
 		max-burst-length = <64>;
 		quality-factor   = <75>;
 		status           = "disabled";

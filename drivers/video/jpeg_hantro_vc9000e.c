@@ -9,6 +9,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/video/video_alif.h>
 #include <zephyr/drivers/video-controls.h>
+#include <zephyr/drivers/clock_control.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/cache.h>
@@ -28,6 +29,8 @@ LOG_MODULE_REGISTER(jpeg_hantro_vc9000e, CONFIG_VIDEO_LOG_LEVEL);
 struct jpeg_hantro_vc9000e_config {
 	DEVICE_MMIO_ROM;
 	void (*irq_config_func)(const struct device *dev);
+	const struct device   *clock_dev;
+	clock_control_subsys_t clock_subsys;
 	uint8_t                max_burst_length;
 	uint8_t                axi_wr_outstanding;
 	uint8_t                axi_rd_outstanding;
@@ -740,6 +743,19 @@ static int jpeg_hantro_vc9000e_init(const struct device *dev)
 
 	DEVICE_MMIO_MAP(dev, K_MEM_CACHE_NONE);
 
+	if (config->clock_dev != NULL) {
+		if (!device_is_ready(config->clock_dev)) {
+			LOG_ERR("Clock controller not ready");
+			return -ENODEV;
+		}
+		ret = clock_control_on(config->clock_dev,
+				       config->clock_subsys);
+		if (ret < 0) {
+			LOG_ERR("Failed to enable JPEG clock: %d", ret);
+			return ret;
+		}
+	}
+
 	k_sem_init(&data->encode_sem, 0, 1);
 	k_mutex_init(&data->lock);
 
@@ -784,6 +800,11 @@ static int jpeg_hantro_vc9000e_init(const struct device *dev)
 		jpeg_hantro_vc9000e_config_##inst = {					\
 		DEVICE_MMIO_ROM_INIT(DT_DRV_INST(inst)),				\
 		.irq_config_func = jpeg_hantro_vc9000e_irq_config_##inst,		\
+		.clock_dev = COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, clocks),		\
+			(DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(inst))), (NULL)),		\
+		.clock_subsys = COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, clocks),	\
+			((clock_control_subsys_t)DT_INST_CLOCKS_CELL(inst, clkid)),	\
+			((clock_control_subsys_t)0)),					\
 		.max_burst_length = DT_INST_PROP(inst, max_burst_length),		\
 		.axi_wr_outstanding = DT_INST_PROP(inst, axi_wr_outstanding),		\
 		.axi_rd_outstanding = DT_INST_PROP(inst, axi_rd_outstanding),		\
