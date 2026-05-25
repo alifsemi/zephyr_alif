@@ -542,6 +542,10 @@ static int isp_stream_start(const struct device *dev)
 		return -EBUSY;
 	}
 
+	/* Cancel any stale work from a previous session before starting */
+	struct k_work_sync sync;
+	k_work_cancel_sync(&data->cb_work, &sync);
+
 	vbuf = k_fifo_peek_head(&data->fifo_in);
 	if (vbuf == NULL) {
 		LOG_ERR("Unexpected condition! Empty IN-FIFO. Can't start streaming!");
@@ -612,9 +616,17 @@ static int isp_stream_start(const struct device *dev)
 		return ret;
 	}
 
+	/*
+	 * Set is_streaming before starting ISP hardware. The ISP may fire
+	 * an MI interrupt immediately upon start, and the bottom half needs
+	 * to see is_streaming=true to process the frame correctly.
+	 */
+	data->is_streaming = true;
+
 	ret = isp_vsi_start(&data->init_cfg);
 	if (ret) {
 		LOG_ERR("Failed to start stream!");
+		data->is_streaming = false;
 		goto dequeue_buf;
 	}
 
@@ -622,10 +634,10 @@ static int isp_stream_start(const struct device *dev)
 	if (ret) {
 		LOG_ERR("Failed to start stream for Endpoint device: %s!",
 				config->controller->name);
+		data->is_streaming = false;
 		goto stop_isp_stream;
 	}
 
-	data->is_streaming = true;
 	return 0;
 
 stop_isp_stream:

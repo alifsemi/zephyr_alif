@@ -371,9 +371,14 @@ static void alif_cam_work_helper(const struct device *dev)
 		/* Now assign a new framebuffer to the CPI Controller. */
 		vbuf = k_fifo_peek_head(&data->fifo_in);
 		if (vbuf == NULL) {
-			LOG_DBG("No more Empty buffers in the IN-FIFO."
-					"Stopping Video Capture. If Re-queued, restart stream.");
+			LOG_INF("work_helper: No more buffers, stopping capture");
 			data->curr_vid_buf = 0;
+			/* Disable CPI interrupts to prevent ISR from restarting */
+			hw_disable_interrupts(regs, INTR_VSYNC | INTR_BRESP_ERR |
+					       INTR_OUTFIFO_OVERRUN |
+					       INTR_INFIFO_OVERRUN | INTR_STOP);
+			/* Stop the CPI hardware */
+			sys_write32(0, regs + CAM_CTRL);
 			data->is_streaming = false;
 			video_stream_stop(config->endpoint_dev);
 			signal_status = VIDEO_BUF_DONE;
@@ -387,8 +392,15 @@ static void alif_cam_work_helper(const struct device *dev)
 		sys_write32(local_to_global(UINT_TO_POINTER(data->curr_vid_buf)),
 				regs + CAM_FRAME_ADDR);
 
-		/* Restart video capture. */
-		hw_cam_start_video_capture(dev);
+		/* Lock and check before restart to prevent race with stream_stop */
+		k_mutex_lock(&data->stream_lock, K_FOREVER);
+		if (data->is_streaming) {
+			LOG_INF("work_helper: restarting capture");
+			hw_cam_start_video_capture(dev);
+		} else {
+			LOG_INF("work_helper: not streaming, SKIP restart (race prevented)");
+		}
+		k_mutex_unlock(&data->stream_lock);
 
 done:
 		LOG_DBG("cur_vid_buf - 0x%08x", data->curr_vid_buf);
@@ -398,8 +410,15 @@ done:
 		}
 #endif /* defined(CONFIG_POLL) */
 	} else {
-		/* Restart video capture. */
-		hw_cam_start_video_capture(dev);
+		/* Lock and check before restart to prevent race with stream_stop */
+		k_mutex_lock(&data->stream_lock, K_FOREVER);
+		if (data->is_streaming) {
+			LOG_INF("work_helper: non-STOP path, restarting capture");
+			hw_cam_start_video_capture(dev);
+		} else {
+			LOG_INF("work_helper: non-STOP path, not streaming, SKIP restart (race prevented)");
+		}
+		k_mutex_unlock(&data->stream_lock);
 	}
 }
 
@@ -505,9 +524,18 @@ static int alif_cam_stream_start(const struct device *dev)
 		return -EBUSY;
 	}
 
+	/* Cancel any stale work from a previous session before starting */
+	struct k_work_sync sync;
+
+	k_work_cancel_sync(&data->cb_work, &sync);
+
+	/* Stop endpoint (CSI) if still running from a previous flush(cancel=false) */
+	video_stream_stop(config->endpoint_dev);
+
 	if (sys_read32(regs + CAM_CTRL) & CAM_CTRL_BUSY) {
-		LOG_ERR("Can't start stream. Already Capturing!");
-		return -EBUSY;
+		LOG_WRN("CPI BUSY on stream_start, forcing reset...");
+		sys_write32(CAM_CTRL_SW_RESET, regs + CAM_CTRL);
+		sys_write32(0, regs + CAM_CTRL);
 	}
 
 	if (((IS_ENABLED(CONFIG_VIDEO_ALIF_CAM_EXTENDED)) && config->axi_bus_ep) ||
@@ -556,21 +584,36 @@ static int alif_cam_stream_stop(const struct device *dev)
 		return 0;
 	}
 
+	/*
+	 * Disable interrupts BEFORE anything else to prevent new ISRs
+	 * from submitting work while we're stopping.
+	 */
+	LOG_INF("stream_stop: disabling interrupts...");
+	hw_disable_interrupts(regs, INTR_VSYNC | INTR_BRESP_ERR | INTR_OUTFIFO_OVERRUN |
+					    INTR_INFIFO_OVERRUN | INTR_STOP);
+
+	/* Stop CPI hardware immediately */
+	LOG_INF("stream_stop: stopping CPI hardware...");
+	sys_write32(0, regs + CAM_CTRL);
+
+	/* Now lock and update state */
+	k_mutex_lock(&data->stream_lock, K_FOREVER);
+	LOG_INF("stream_stop: acquired lock, setting is_streaming=false...");
+	data->is_streaming = false;
+	data->curr_vid_buf = 0;
+	k_mutex_unlock(&data->stream_lock);
+
+	/* Cancel any pending/running work and wait for completion */
+	LOG_INF("stream_stop: cancelling work...");
+	struct k_work_sync sync;
+	k_work_cancel_sync(&data->cb_work, &sync);
+	LOG_INF("stream_stop: work cancelled.");
+
 	ret = video_stream_stop(config->endpoint_dev);
 	if (ret) {
 		LOG_ERR("Failed to stop streaming in Pipeline!");
 		return ret;
 	}
-
-	/* Disable Interrupts. */
-	hw_disable_interrupts(regs, INTR_VSYNC | INTR_BRESP_ERR | INTR_OUTFIFO_OVERRUN |
-					    INTR_INFIFO_OVERRUN | INTR_STOP);
-
-	/* Stop the Camera sensor to dump image. */
-	sys_write32(0, regs + CAM_CTRL);
-
-	/* Set the Current buffer state to NULL */
-	data->curr_vid_buf = 0;
 
 	/*
 	 * Poll on Busy flag of CPI to find out when the video buffer
@@ -581,8 +624,6 @@ static int alif_cam_stream_stop(const struct device *dev)
 		k_msleep(1);
 	}
 	LOG_DBG("Stream stopped");
-
-	data->is_streaming = false;
 
 	return 0;
 }
@@ -829,7 +870,7 @@ static void alif_video_cam_isr(const struct device *dev)
 		sys_write32(0, regs + CAM_CTRL);
 		/* No corruption observed during dumping this frame. */
 		if (is_not_corrupted_frame) {
-			LOG_DBG("Video Capture stopped.");
+			LOG_INF("ISR: STOP interrupt, submitting work");
 			k_work_submit_to_queue(&data->cb_workq, &data->cb_work);
 		} else {
 			/* Wait for user to handle corrupted frame capture. */
@@ -1058,6 +1099,7 @@ static int alif_video_cam_init(const struct device *dev)
 	}
 
 	data->is_streaming = false;
+	k_mutex_init(&data->stream_lock);
 
 	return 0;
 }
