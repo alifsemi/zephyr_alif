@@ -7,7 +7,7 @@
 	vqmmc-supply = <&sd_vsel>;
 };
 
-&{/soc} {
+&{/} {
 	sd_pwr: regulator-sd-pwr {
 		compatible = "regulator-fixed";
 		regulator-name = "sd-pwr";
