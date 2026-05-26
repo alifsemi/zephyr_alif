@@ -7,6 +7,7 @@
 
 #include <alif/balletto/b1/ab1c1f4m51820ph0.dtsi>
 #include "../common/balletto-pinctrl.dtsi"
+#include "../common/balletto-sd-vsel.dtsi"
 
 #include <zephyr/dt-bindings/dma/alif_dma_event_router.h>
 
