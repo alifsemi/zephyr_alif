@@ -7,6 +7,7 @@
 
 #include <alif/ensemble/e1c/ae1c1f4051920hh.dtsi>
 #include "../common/ensemble-e1c-pinctrl.dtsi"
+#include "../common/balletto-sd-vsel.dtsi"
 
 / {
 	compatible = "arm,alif-e1c-dk-ae1c1f4051920hh-rtss-he";
@@ -56,10 +57,6 @@
 
 &gpio5 {
 	status = "okay";
-};
-
-&sdhc {
-	reset-gpios = <&gpio7 0 GPIO_ACTIVE_HIGH>;
 };
 
 &uart2 {
