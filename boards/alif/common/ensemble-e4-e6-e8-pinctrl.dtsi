@@ -182,7 +182,7 @@
 		group0 {
 			pinmux = < PIN_P6_7__PDM_C2_A >,
 				 < PIN_P0_5__PDM_C0_A >,
-				 < PIN_P6_3__PDM_C1_C >,
+				 < PIN_P3_3__PDM_C1_B >,
 				 < PIN_P5_2__PDM_C3_A >;
 
 			read-enable = < 0x0 >;
@@ -190,7 +190,7 @@
 		group1 {
 			pinmux = < PIN_P5_4__PDM_D2_B >,
 				 < PIN_P0_4__PDM_D0_A >,
-				 < PIN_P6_2__PDM_D1_C >,
+				 < PIN_P3_2__PDM_D1_B >,
 				 < PIN_P5_1__PDM_D3_A >;
 
 			read-enable = < 0x1 >;
