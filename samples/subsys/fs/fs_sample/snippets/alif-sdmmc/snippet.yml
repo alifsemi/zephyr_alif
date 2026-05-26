@@ -9,10 +9,11 @@ append:
   EXTRA_CONF_FILE: alif-sdmmc.conf
 
 boards:
-  # B1 Balletto and E1C boards (gpio6 for cd, gpio7 for reset)
+  # B1 Balletto and E1C boards (gpio6 for cd, gpio7 for sd-pwr, gpio0 for sd-vsel)
   /(alif_b1|alif_e1c).*/.*/rtss_he/:
     append:
       EXTRA_DTC_OVERLAY_FILE: alif_balletto_e1c_dk.overlay
+      EXTRA_CONF_FILE: alif_balletto_e1c_dk.conf
 
   # E7 Ensemble boards (gpio3 for cd, no reset gpio)
   /(alif_e7).*/.*/rtss_(hp|he)/:
