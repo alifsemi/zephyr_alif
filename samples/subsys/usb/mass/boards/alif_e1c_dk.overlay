@@ -7,6 +7,14 @@
 
 &aipm_run_default {
 	phy-pwr-gating = <ALIF_PHY_GATE_USB_MASK>;
+
+/* GPIO0 is needed for SDHC sd-vsel regulator */
+&gpio0 {
+	status = "okay";
+};
+
+&gpio7 {
+	status = "okay";
 };
 
 &ns {

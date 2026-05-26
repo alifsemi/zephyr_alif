@@ -17,6 +17,11 @@ zephyr_udc0: &usb {
 	status = "okay";
 };
 
+/* GPIO0 is needed for SDHC sd-vsel regulator */
+&gpio0 {
+	status = "okay";
+};
+
 &gpio7 {
 	status = "okay";
 };
