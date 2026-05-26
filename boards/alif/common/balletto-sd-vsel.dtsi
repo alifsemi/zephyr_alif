@@ -1,0 +1,27 @@
+/* Copyright (c) 2026 Alif Semiconductor
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+&sdhc {
+	vmmc-supply = <&sd_pwr>;
+	vqmmc-supply = <&sd_vsel>;
+};
+
+&{/} {
+	sd_pwr: regulator-sd-pwr {
+		compatible = "regulator-fixed";
+		regulator-name = "sd-pwr";
+		enable-gpios = <&gpio7 0 GPIO_ACTIVE_HIGH>;
+		startup-delay-us = <2000>;
+	};
+
+	sd_vsel: regulator-sd-vsel {
+		compatible = "regulator-gpio";
+		regulator-name = "sd-vsel";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <3300000>;
+		gpios = <&gpio0 4 GPIO_ACTIVE_HIGH>;
+		states = <1800000 0>,
+				 <3300000 1>;
+	};
+};
