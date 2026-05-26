@@ -82,6 +82,10 @@ struct clock_control_alif_config {
 #define ALIF_CLK_ENA_CLK100M_BIT      21U
 #define ALIF_CLK_ENA_CLK160M_BIT      20U
 
+/* EXPMST0 control register config */
+#define ALIF_EXPMST0_CTRL_IPCLK_FORCE_BIT BIT(31U)
+#define ALIF_EXPMST0_CTRL_PCLK_FORCE_BIT  BIT(30U)
+
 static uint32_t alif_get_input_clock(uint32_t clock_name)
 {
 	switch (clock_name) {
@@ -271,6 +275,33 @@ static int alif_clock_control_on(const struct device *dev,
 	if (ret) {
 		return ret;
 	}
+
+	switch (clk_id) {
+#if defined(CONFIG_UART_ASYNC_API)
+	/* Force enable pclk for UART — only when DMA enable. */
+	case ALIF_UART0_SYST_PCLK:
+	case ALIF_UART1_SYST_PCLK:
+	case ALIF_UART2_SYST_PCLK:
+	case ALIF_UART3_SYST_PCLK:
+	case ALIF_UART4_SYST_PCLK:
+	case ALIF_UART5_SYST_PCLK:
+	case ALIF_UART0_38M4_CLK:
+	case ALIF_UART1_38M4_CLK:
+	case ALIF_UART2_38M4_CLK:
+	case ALIF_UART3_38M4_CLK:
+	case ALIF_UART4_38M4_CLK:
+	case ALIF_UART5_38M4_CLK:
+		reg_addr = module_base + ALIF_EXPMST0_CTRL_REG;
+
+		sys_set_bits(reg_addr, ALIF_EXPMST0_CTRL_PCLK_FORCE_BIT);
+
+		break;
+#endif
+
+	default:
+		break;
+	}
+
 	reg_addr = module_base + ALIF_CLOCK_CFG_REG(clk_id);
 
 	sys_set_bit(reg_addr, ALIF_CLOCK_CFG_ENABLE(clk_id));

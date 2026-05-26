@@ -326,7 +326,10 @@ static int alif_clock_control_on(const struct device *dev,
 			clock_control_subsys_t sub_system)
 {
 	uint32_t clk_id = (uint32_t) sub_system;
-	uint32_t cgu_module_base, module_base, reg_addr;
+	uint32_t module_base, reg_addr;
+#if defined(CONFIG_ENSEMBLE_GEN2)
+	uint32_t cgu_module_base;
+#endif
 	int32_t ret;
 
 	if (!ALIF_CLOCK_CFG_EN_MASK(clk_id)) {
@@ -367,9 +370,11 @@ static int alif_clock_control_on(const struct device *dev,
 		/* enable the HFOSCx2 clock */
 		sys_set_bit(reg_addr, ALIF_CLK_ENA_CLK76P8M_BIT);
 		break;
-#else
-	ARG_UNUSED(cgu_module_base);
-	/* Force enable ipclk and pclk as uart requires it */
+#endif
+
+#if !defined(CONFIG_ENSEMBLE_GEN2) || \
+	 (defined(CONFIG_ENSEMBLE_GEN2) && defined(CONFIG_UART_ASYNC_API))
+	/* Force enable pclk for UART — always on E7, DMA-only on E8 */
 	case ALIF_UART0_SYST_PCLK:
 	case ALIF_UART1_SYST_PCLK:
 	case ALIF_UART2_SYST_PCLK:
@@ -388,11 +393,11 @@ static int alif_clock_control_on(const struct device *dev,
 	case ALIF_UART7_38M4_CLK:
 		reg_addr = module_base + ALIF_EXPMST0_CTRL_REG;
 
-		sys_set_bits(reg_addr, (ALIF_EXPMST0_CTRL_IPCLK_FORCE_BIT |
-				ALIF_EXPMST0_CTRL_PCLK_FORCE_BIT));
+		sys_set_bits(reg_addr, ALIF_EXPMST0_CTRL_PCLK_FORCE_BIT);
 
 		break;
 #endif
+
 	default:
 		break;
 	}
