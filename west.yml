@@ -149,7 +149,7 @@ manifest:
       groups:
         - hal
     - name: hal_alif
-      revision: f51acf52a4017ad1068385b00a5f0eb581239d65
+      revision: 7ac87c470362d57b8ec0952e1b20a16988f593c9
       path: modules/hal/alif
       remote: alif
       groups:
