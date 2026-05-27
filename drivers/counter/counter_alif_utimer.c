@@ -34,9 +34,9 @@ struct counter_alif_utimer_data {
 };
 
 struct counter_alif_utimer_config {
+	struct counter_config_info counter_info;
 	DEVICE_MMIO_NAMED_ROM(global);
 	DEVICE_MMIO_NAMED_ROM(timer);
-	struct counter_config_info counter_info;
 	const uint8_t timer_id;
 	uint32_t counterdirection;
 	const struct device *clk_dev;
@@ -497,8 +497,6 @@ static DEVICE_API(counter, counter_alif_utimer_api) = {
 	}                                                                                       \
 	static struct counter_alif_utimer_data counter_alif_utimer_data_##n;                    \
 	static const struct counter_alif_utimer_config counter_alif_utimer_cfg_##n = {          \
-		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(global, DT_INST_PARENT(n)),	                \
-		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(timer, DT_INST_PARENT(n)),		        \
 		.counter_info = {                                                               \
 			.max_top_value = UINT32_MAX,                                            \
 			.flags = ((DT_PROP(TIMER(n), counter_direction) ==                      \
@@ -506,6 +504,8 @@ static DEVICE_API(counter, counter_alif_utimer_api) = {
 					 COUNTER_CONFIG_INFO_COUNT_UP : 0),                     \
 			.channels = NUM_CHANNELS,                                               \
 		},                                                                              \
+		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(global, DT_INST_PARENT(n)),	                \
+		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(timer, DT_INST_PARENT(n)),	            \
 		.timer_id = DT_PROP(TIMER(n), timer_id),                                        \
 		.counterdirection = DT_PROP(TIMER(n), counter_direction),                       \
 		.clk_dev = DEVICE_DT_GET(DT_CLOCKS_CTLR(TIMER(n))),                             \
