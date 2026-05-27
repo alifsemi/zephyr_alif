@@ -537,6 +537,11 @@ static int isp_stream_start(const struct device *dev)
 	uint32_t tmp;
 	int ret;
 
+	/* Cancel any stale work from previous session before starting */
+	struct k_work_sync sync;
+
+	k_work_cancel_sync(&data->cb_work, &sync);
+
 	if (data->is_streaming) {
 		LOG_DBG("Already streaming");
 		return -EBUSY;
@@ -546,7 +551,7 @@ static int isp_stream_start(const struct device *dev)
 	if (vbuf == NULL) {
 		LOG_ERR("Unexpected condition! Empty IN-FIFO. Can't start streaming!");
 		data->is_streaming = false;
-		return -ENODEV;
+		return -ENOBUFS;
 	}
 
 	data->curr_vid_buf = POINTER_TO_UINT(vbuf->buffer);
@@ -612,9 +617,15 @@ static int isp_stream_start(const struct device *dev)
 		return ret;
 	}
 
+	/* Set is_streaming BEFORE starting hardware to prevent
+	 * bottom_half from stopping CPI mid-start
+	 */
+	data->is_streaming = true;
+
 	ret = isp_vsi_start(&data->init_cfg);
 	if (ret) {
 		LOG_ERR("Failed to start stream!");
+		data->is_streaming = false;
 		goto dequeue_buf;
 	}
 
@@ -622,10 +633,10 @@ static int isp_stream_start(const struct device *dev)
 	if (ret) {
 		LOG_ERR("Failed to start stream for Endpoint device: %s!",
 				config->controller->name);
+		data->is_streaming = false;
 		goto stop_isp_stream;
 	}
 
-	data->is_streaming = true;
 	return 0;
 
 stop_isp_stream:
