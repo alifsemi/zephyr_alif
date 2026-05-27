@@ -215,14 +215,30 @@ static inline void hw_disable_interrupts(uintptr_t regs, uint32_t intr_mask)
 	sys_clear_bits(regs + CAM_INTR_ENA, intr_mask);
 }
 
+/**
+ * @brief Apply CPI soft reset sequence per HWRM Section 17 step 3a-3c
+ *
+ * Performs the three-step soft reset sequence:
+ * a. CAM_CTRL = 0       — prepare for soft reset
+ * b. CAM_CTRL = 0x100   — activate soft reset (SW_RESET)
+ * c. CAM_CTRL = 0       — stop soft reset
+ *
+ * @param regs CPI register base address
+ */
+static inline void hw_cam_soft_reset(uintptr_t regs)
+{
+	sys_write32(0, regs + CAM_CTRL);
+	sys_write32(CAM_CTRL_SW_RESET, regs + CAM_CTRL);
+	sys_write32(0, regs + CAM_CTRL);
+}
+
 static inline void hw_cam_start_video_capture(const struct device *dev)
 {
 	const struct video_cam_config *config = dev->config;
 	uintptr_t regs = DEVICE_MMIO_GET(dev);
 
-	/* Reset the CPI-Controller IP. */
-	sys_write32(CAM_CTRL_SW_RESET, regs + CAM_CTRL);
-	sys_write32(0, regs + CAM_CTRL);
+	/* Apply soft reset before starting capture */
+	hw_cam_soft_reset(regs);
 
 	/* Start video capture. */
 	if (config->capture_mode == CPI_CAPTURE_MODE_SNAPSHOT) {
@@ -500,13 +516,13 @@ static int alif_cam_stream_start(const struct device *dev)
 	struct video_buffer *vbuf;
 	int ret;
 
+	/* Cancel any stale work_helper from previous session before starting */
+	struct k_work_sync sync;
+
+	k_work_cancel_sync(&data->cb_work, &sync);
+
 	if (data->is_streaming) {
 		LOG_DBG("Already streaming.");
-		return -EBUSY;
-	}
-
-	if (sys_read32(regs + CAM_CTRL) & CAM_CTRL_BUSY) {
-		LOG_ERR("Can't start stream. Already Capturing!");
 		return -EBUSY;
 	}
 
@@ -577,9 +593,16 @@ static int alif_cam_stream_stop(const struct device *dev)
 	 * is no longer accessed.
 	 */
 	mask = CAM_CTRL_BUSY;
-	for (int i = 0; (i < 20) && (sys_read32(regs + CAM_CTRL) & mask) == mask; i++) {
+	for (int i = 0; (i < 1000) && (sys_read32(regs + CAM_CTRL) & mask) == mask; i++) {
 		k_msleep(1);
 	}
+
+	/* Apply soft reset to clear BUSY flag and leave CPI in clean state */
+	hw_cam_soft_reset(regs);
+
+	/* Clear any stale latched interrupts after reset */
+	sys_write32(sys_read32(regs + CAM_INTR), regs + CAM_INTR);
+
 	LOG_DBG("Stream stopped");
 
 	data->is_streaming = false;
@@ -633,9 +656,12 @@ static int alif_cam_flush(const struct device *dev, enum video_endpoint_id ep, b
 		 * is no longer accessed.
 		 */
 		mask = CAM_CTRL_BUSY;
-		for (int i = 0; (i < 20) && (sys_read32(regs + CAM_CTRL) & mask) == mask; i++) {
+		for (int i = 0; (i < 1000) && (sys_read32(regs + CAM_CTRL) & mask) == mask; i++) {
 			k_msleep(1);
 		}
+
+		/* Apply soft reset to clear BUSY flag and leave CPI in clean state */
+		hw_cam_soft_reset(regs);
 
 		while ((vbuf = k_fifo_get(&data->fifo_in, K_NO_WAIT))) {
 			k_fifo_put(&data->fifo_out, vbuf);
@@ -827,6 +853,10 @@ static void alif_video_cam_isr(const struct device *dev)
 
 	if (int_st & INTR_STOP) {
 		sys_write32(0, regs + CAM_CTRL);
+		/* Guard: don't process stale STOP after stream was turned off */
+		if (!data->is_streaming) {
+			return;
+		}
 		/* No corruption observed during dumping this frame. */
 		if (is_not_corrupted_frame) {
 			LOG_DBG("Video Capture stopped.");
