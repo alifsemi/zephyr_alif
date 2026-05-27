@@ -283,12 +283,6 @@ static int counter_alif_utimer_set_top_value(const struct device *dev,
 		}
 	}
 
-	if (cfg->flags & COUNTER_CONFIG_INFO_COUNT_UP) {
-		alif_utimer_set_up_counter(timer_base);
-	} else {
-		alif_utimer_set_down_counter(timer_base);
-	}
-
 	alif_utimer_disable_interrupt(timer_base, CHAN_INTERRUPT_OVER_FLOW_BIT);
 	alif_utimer_set_counter_reload_value(timer_base, cfg->ticks);
 	alif_utimer_clear_interrupt(timer_base, CHAN_INTERRUPT_OVER_FLOW_BIT);
