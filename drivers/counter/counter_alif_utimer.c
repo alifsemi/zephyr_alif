@@ -259,6 +259,8 @@ static int counter_alif_utimer_cancel_alarm(const struct device *dev, uint8_t ch
 
 	alif_utimer_disable_compare_match(timer_base, chan);
 	alif_utimer_disable_interrupt(timer_base, evt_bit);
+	alif_utimer_clear_interrupt(timer_base, evt_bit);
+	atomic_and(&data->cc_int_pending, ~BIT(evt_bit));
 	chdata->alarm_cb = NULL;
 	return 0;
 }
