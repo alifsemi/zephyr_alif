@@ -362,7 +362,7 @@ static void alarm_irq_handle(const struct device *dev, uint32_t chan)
 	uint8_t evt_bit = chan;
 	bool hw_irq_pending = ((alif_utimer_get_pending_interrupt(timer_base) &
 		BIT(evt_bit)) && alif_utimer_check_interrupt_enabled(timer_base, evt_bit));
-	bool sw_irq_pending = (data->cc_int_pending & evt_bit);
+	bool sw_irq_pending = (data->cc_int_pending & BIT(evt_bit));
 
 	if (hw_irq_pending || sw_irq_pending) {
 		alif_utimer_clear_interrupt(timer_base, evt_bit);
