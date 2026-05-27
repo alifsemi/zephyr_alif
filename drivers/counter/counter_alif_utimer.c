@@ -223,7 +223,7 @@ static int counter_alif_utimer_set_alarm(const struct device *dev, uint8_t chan,
 	struct counter_alif_utimer_data *data = DEV_DATA(dev);
 	struct counter_alif_utimer_ch_data *chdata = &data->alarm[chan];
 
-	if (chan > cfg->counter_info.channels) {
+	if (chan >= cfg->counter_info.channels) {
 		LOG_ERR("Invalid counter channel number");
 		return -EINVAL;
 	}
@@ -252,7 +252,7 @@ static int counter_alif_utimer_cancel_alarm(const struct device *dev, uint8_t ch
 	struct counter_alif_utimer_ch_data *chdata = &data->alarm[chan];
 	uint8_t evt_bit = chan;
 
-	if (chan > cfg->counter_info.channels) {
+	if (chan >= cfg->counter_info.channels) {
 		LOG_ERR("Invalid counter channel number");
 		return -EINVAL;
 	}
