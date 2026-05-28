@@ -375,7 +375,9 @@ static void alif_cam_work_helper(const struct device *dev)
 					"Stopping Video Capture. If Re-queued, restart stream.");
 			data->curr_vid_buf = 0;
 			data->is_streaming = false;
-			video_stream_stop(config->endpoint_dev);
+			if (!config->isp_ep) {
+				video_stream_stop(config->endpoint_dev);
+			}
 			signal_status = VIDEO_BUF_DONE;
 			goto done;
 		}
@@ -530,13 +532,18 @@ static int alif_cam_stream_start(const struct device *dev)
 
 	/* Start the MIPI CSI-2 IP in case the MIPI CSI is available. */
 	ret = video_stream_start(config->endpoint_dev);
-	if (ret) {
+	if (ret && ret != -EBUSY) {
 		LOG_ERR("Failed to start streaming of Video pipeline!");
 		return -EIO;
 	}
 
 	hw_cam_start_video_capture(dev);
 	LOG_DBG("Stream started");
+
+	LOG_INF("CAM_CFG: 0x%08x | AXI_PORT_EN: %d | ISP_PORT_EN: %d",
+		sys_read32(regs + CAM_CFG),
+		!!(sys_read32(regs + CAM_CFG) & CAM_CFG_AXI_PORT_EN),
+		!!(sys_read32(regs + CAM_CFG) & CAM_CFG_ISP_PORT_EN));
 
 	data->is_streaming = true;
 
