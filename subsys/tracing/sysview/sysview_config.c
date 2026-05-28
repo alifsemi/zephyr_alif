@@ -7,6 +7,10 @@
 #include <zephyr/kernel.h>
 #include <SEGGER_SYSVIEW.h>
 #include <ksched.h>
+#ifdef CONFIG_SYMTAB
+#include <zephyr/debug/symtab.h>
+#include <zephyr/sw_isr_table.h>
+#endif
 
 extern const SEGGER_SYSVIEW_OS_API SYSVIEW_X_OS_TraceAPI;
 
@@ -46,6 +50,23 @@ void sys_trace_thread_info(struct k_thread *thread)
 	SEGGER_SYSVIEW_SendTaskInfo(&Info);
 }
 
+/**
+ * @brief User-defined SystemView system description hook.
+ *
+ * Override this weak function in your application to inject additional
+ * SEGGER_SYSVIEW_SendSysDesc() calls — e.g. IRQ name mappings:
+ *
+ *   void sysview_app_send_sys_desc(void) {
+ *       SEGGER_SYSVIEW_SendSysDesc("I#15=SysTick");
+ *   }
+ *
+ * The function is called at the end of every cbSendSystemDesc() invocation,
+ * including reconnects from the SystemView host.
+ */
+__weak void sysview_app_send_sys_desc(void)
+{
+}
+
 
 static void cbSendSystemDesc(void)
 {
@@ -53,6 +74,24 @@ static void cbSendSystemDesc(void)
 	SEGGER_SYSVIEW_SendSysDesc("D=" CONFIG_BOARD " "
 				   CONFIG_SOC_FAMILY " " CONFIG_ARCH);
 	SEGGER_SYSVIEW_SendSysDesc("O=Zephyr");
+
+#ifdef CONFIG_SYMTAB
+	char isr_desc[SEGGER_SYSVIEW_MAX_STRING_LEN];
+
+	for (int idx = 0; idx < IRQ_TABLE_SIZE; idx++) {
+		const struct _isr_table_entry *entry = &_sw_isr_table[idx];
+
+		if ((entry->isr == z_irq_spurious) || (entry->isr == NULL)) {
+			continue;
+		}
+		const char *name = symtab_find_symbol_name((uintptr_t)entry->isr, NULL);
+
+		snprintf(isr_desc, SEGGER_SYSVIEW_MAX_STRING_LEN, "I#%d=%s", idx + 16, name);
+
+		SEGGER_SYSVIEW_SendSysDesc(isr_desc);
+	}
+#endif
+	sysview_app_send_sys_desc();
 }
 
 static void send_task_list_cb(void)
