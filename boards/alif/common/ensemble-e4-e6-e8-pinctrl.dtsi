@@ -180,39 +180,39 @@
 
 	pinctrl_pdm0: pinctrl_pdm0 {
 		group0 {
-			pinmux = < PIN_P6_7__PDM_C2_A >,
-				 < PIN_P0_5__PDM_C0_A >,
-				 < PIN_P6_3__PDM_C1_C >,
-				 < PIN_P5_2__PDM_C3_A >;
+			pinmux = <PIN_P6_7__PDM_C2_A>,
+				 <PIN_P0_5__PDM_C0_A>,
+				 <PIN_P3_3__PDM_C1_B>,
+				 <PIN_P5_2__PDM_C3_A>;
 
-			read-enable = < 0x0 >;
+			read-enable = <0x0>;
 		};
 		group1 {
-			pinmux = < PIN_P5_4__PDM_D2_B >,
-				 < PIN_P0_4__PDM_D0_A >,
-				 < PIN_P6_2__PDM_D1_C >,
-				 < PIN_P5_1__PDM_D3_A >;
+			pinmux = <PIN_P5_4__PDM_D2_B>,
+				 <PIN_P0_4__PDM_D0_A>,
+				 <PIN_P3_2__PDM_D1_B>,
+				 <PIN_P5_1__PDM_D3_A>;
 
-			read-enable = < 0x1 >;
+			read-enable = <0x1>;
 		};
 	};
 
 	pinctrl_lppdm: pinctrl_lppdm {
 		group0 {
-			pinmux = < PIN_P3_4__LPPDM_CO_B >,
-				 < PIN_P3_6__LPPDM_C1_B >,
-				 < PIN_P11_2__LPPDM_C2_B >,
-				 < PIN_P7_6__LPPDM_C3_A >;
+			pinmux = <PIN_P3_4__LPPDM_CO_B>,
+				 <PIN_P3_6__LPPDM_C1_B>,
+				 <PIN_P11_2__LPPDM_C2_B>,
+				 <PIN_P7_6__LPPDM_C3_A>;
 
-			read-enable = < 0x0 >;
+			read-enable = <0x0>;
 		};
 		group1 {
-			pinmux = < PIN_P3_5__LPPDM_DO_B >,
-				 < PIN_P3_7__LPPDM_D1_B >,
-				 < PIN_P11_6__LPPDM_D2_B >,
-				 < PIN_P7_7__LPPDM_D3_A >;
+			pinmux = <PIN_P3_5__LPPDM_DO_B>,
+				 <PIN_P3_7__LPPDM_D1_B>,
+				 <PIN_P11_6__LPPDM_D2_B>,
+				 <PIN_P7_7__LPPDM_D3_A>;
 
-			read-enable = < 0x1 >;
+			read-enable = <0x1>;
 		};
 	};
 
