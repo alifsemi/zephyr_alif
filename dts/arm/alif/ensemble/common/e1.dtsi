@@ -1682,7 +1682,14 @@
 		interrupt-parent = <&nvic>;
 		interrupts = <96 ALIF_DEFAULT_IRQ_PRIORITY>;
 		aes-reg = <0x83001000 0x100>;
+		clocks = <&clockctrl ALIF_OSPI0_ACLK_CLK>;
+		bus-speed = <100000000>;
 		cs-pin = <0>;
+		ddr-drive-edge = <1>;
+		rx-ds-delay = <11>;
+		tx-fifo-threshold = <0>;
+		xip-wait-cycles = <255>;
+		xip-base-address = <0xA0000000 0x10000000>;
 		status = "disabled";
 	};
 

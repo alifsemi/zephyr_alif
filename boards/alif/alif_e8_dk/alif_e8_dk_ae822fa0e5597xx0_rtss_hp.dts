@@ -67,6 +67,15 @@
 	status = "okay";
 };
 
+&ospi0 {
+	aps512xxn: aps512xxn {
+		compatible = "alif,apmemory-aps512xxn";
+		size = <DT_SIZE_M(64)>;
+		latency-code = <4>;
+		status = "disabled";
+	};
+};
+
 &ospi1 {
 	/* External Flash on OSPI */
 	ospi_flash: ospi_flash@0 {
