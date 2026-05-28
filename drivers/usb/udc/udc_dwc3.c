@@ -320,7 +320,215 @@ static int32_t udc_dwc3_ep0_recv(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t
 	return ret;
 }
 
-static int32_t udc_dwc3_bulk_send(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t dir,
+static void usbd_isoc_micro_frame_update(udc_dwc3_driver_t *drv, uint32_t current_fn)
+{
+	uint32_t last_frame_num = drv->micro_frame_number & 0x3FFF;
+
+	/* Detect rollover in the 14-bit micro-frame counter.
+	 * Even though events provide 16 bits, DWC3 SOFFN is 14 bits in HS.
+	 */
+	if ((current_fn & 0x3FFF) < last_frame_num) {
+		drv->micro_frame_number += BIT(14);
+	}
+
+	/* Keep the upper bits and update the lower 14 bits */
+	drv->micro_frame_number = (drv->micro_frame_number & ~0x3FFF) | (current_fn & 0x3FFF);
+}
+
+static int32_t udc_dwc3_stop_transfer(udc_dwc3_driver_t *drv, uint8_t ep_num,
+		uint8_t dir, uint8_t force_rm)
+{
+	udc_dwc3_ep_t *ept;
+	udc_dwc3_trb_t      *trb_ptr;
+	udc_dwc3_ep_params_t params = {0};
+	uint8_t phy_ep;
+	uint32_t cmd;
+	uint32_t ret;
+
+	phy_ep = USB_GET_PHYSICAL_EP(ep_num, dir);
+	ept = &drv->eps[phy_ep];
+	if (ept->trb_enqueue == 0U) {
+		ept->trb_enqueue = NO_OF_TRB_PER_EP - 1;
+	} else {
+		ept->trb_enqueue--;
+	}
+	/* check the endpoint stall condition */
+	if (ept->ep_status & USB_EP_STALL) {
+		ret = udc_dwc3_send_ep_cmd(drv, phy_ep, USB_DEPCMD_CLEARSTALL, params);
+		if (ret < 0) {
+			LOG_ERR("Failed to send command CLEARSTALL");
+			return ret;
+		}
+		CLEAR_BIT(ept->ep_status, USB_EP_STALL);
+	}
+	if (ept->ep_resource_index == 0U) {
+		return USB_EP_RESOURCE_INDEX_INVALID;
+	}
+	/* Data book says for end transfer  HW needs some
+	 * extra time to synchronize with the interconnect
+	 * - Issue EndTransfer WITH CMDIOC bit set
+	 * - Wait 100us
+	 */
+	cmd = USB_DEPCMD_ENDTRANSFER;
+	cmd |= (force_rm == 1) ? USB_DEPCMD_HIPRI_FORCERM : 0U;
+	SET_BIT(cmd, USB_DEPCMD_CMDIOC);
+	cmd |= USB_DEPCMD_PARAM(ept->ep_resource_index);
+
+	ret = udc_dwc3_send_ep_cmd(drv, phy_ep, cmd, params);
+	if (ret < 0) {
+		LOG_ERR("Failed to send command at END transfer");
+		return ret;
+	}
+	trb_ptr = &ept->ep_trb[ept->trb_enqueue];
+	if (trb_ptr->ctrl) {
+		trb_ptr->ctrl = 0;
+	}
+	ept->trb_enqueue = 0;
+	if (force_rm == 1) {
+		ept->ep_resource_index = 0U;
+	}
+	CLEAR_BIT(ept->ep_status, USB_EP_BUSY);
+	k_busy_wait(100);
+
+	return ret;
+}
+
+static int32_t udc_dwc3_isoc_send(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t dir,
+		uint8_t *bufferptr, uint32_t buf_len)
+{
+	udc_dwc3_ep_t        *ept;
+	udc_dwc3_trb_t       *trb_ptr;
+	udc_dwc3_ep_params_t params = {0};
+	uint8_t              phy_ep;
+	int32_t              ret;
+	uint32_t             cmd;
+	uint32_t             mult;
+
+	phy_ep = USB_GET_PHYSICAL_EP(ep_num, dir);
+	ept = &drv->eps[phy_ep];
+	if (ept->ep_dir != USB_DIR_IN) {
+		LOG_ERR("Direction is wrong returning");
+		return USB_EP_DIRECTION_WRONG;
+	}
+
+	ept->bytes_txed = 0U;
+	ept->ep_requested_bytes = buf_len;
+	trb_ptr = &ept->ep_trb[ept->trb_enqueue];
+	ept->trb_enqueue++;
+	if (ept->trb_enqueue == NO_OF_TRB_PER_EP) {
+		ept->trb_enqueue = 0U;
+	}
+	sys_cache_data_flush_range(bufferptr, buf_len);
+#if CONFIG_UDC_DWC3_ALIF
+	trb_ptr->buf_ptr_low  = LOWER_32_BITS(local_to_global((uint32_t *)bufferptr));
+#else
+	trb_ptr->buf_ptr_low  = LOWER_32_BITS((uint32_t *)bufferptr);
+#endif
+	trb_ptr->buf_ptr_high = 0;
+	trb_ptr->size         = USB_TRB_SIZE_LENGTH(buf_len);
+	trb_ptr->ctrl         = USB_TRBCTL_ISOCHRONOUS_FIRST;
+	/* For High-Speed, High-Bandwidth IN endpoints, a maximum of three
+	 * packets can be sent during an interval. The PktCntM1 field
+	 * ([25:24] of the third DWORD) must be set to (number of packets
+	 * in the Buffer Descriptor - 1).
+	 *
+	 * Example: If there is only a single transaction in the microframe,
+	 * only a DATA0 data packet PID is used. If there are two transactions
+	 * per microframe, DATA1 is used for the first transaction data packet
+	 * and DATA0 is used for the second. If there are three transactions
+	 * per microframe, DATA2 is used for the first, DATA1 for the second,
+	 * and DATA0 for the third.
+	 */
+	/* If there are three transactions per microframe mult should be 2 */
+
+	/* 1) length <= maxpacket
+	 *  - DATA0
+	 *
+	 * 2) maxpacket < length <= (2 * maxpacket)
+	 *  - DATA1, DATA0
+	 *
+	 * 3) (2 * maxpacket) < length <= (3 * maxpacket)
+	 *  - DATA2, DATA1, DATA0
+	 */
+	mult = USB_ISOC_MAX_MULT_VALUE;
+	if (buf_len <= (2 * (ept->ep_maxpacket))) {
+		mult--;
+	}
+	if (buf_len <= ept->ep_maxpacket) {
+		mult--;
+	}
+	trb_ptr->size |= USB_TRB_PCM1(mult);
+	/* For Isochronous always enables the Interrupt on Missed ISOC  */
+	/* Sync microframe number from DSTS to ensure drv->micro_frame_number is current */
+	usbd_isoc_micro_frame_update(drv, USB_DSTS_SOFFN(drv->regs->DSTS));
+
+	if ((ept->ep_status & USB_EP_BUSY) != 0U) {
+		cmd  = USB_DEPCMD_UPDATETRANSFER;
+		cmd |= USB_DEPCMD_PARAM(ept->ep_resource_index);
+
+		SET_BIT(trb_ptr->ctrl, USB_TRB_CTRL_HWO | USB_TRB_CTRL_IOC | USB_TRB_CTRL_ISP_IMI);
+		sys_cache_data_flush_range(trb_ptr, sizeof(*trb_ptr));
+		params.param1 = (uint32_t) trb_ptr;
+
+		ret = udc_dwc3_send_ep_cmd(drv, phy_ep, cmd, params);
+	} else {
+		uint32_t future_frame;
+		int retries = 3;
+
+		trb_ptr->ctrl = USB_TRBCTL_ISOCHRONOUS_FIRST;
+		/* The future microframe time must be an integral multiple of
+		 * intervals after the current time and aligned to the beginning
+		 * of an interval. Add a small margin (e.g. 2 microframes) to
+		 * avoid Bus Expiry.
+		 */
+		future_frame = drv->micro_frame_number + 2;
+		if (ept->interval_uframe > 1) {
+			future_frame = ROUND_UP(future_frame, ept->interval_uframe);
+		}
+
+		SET_BIT(trb_ptr->ctrl, USB_TRB_CTRL_HWO | USB_TRB_CTRL_IOC | USB_TRB_CTRL_ISP_IMI);
+		sys_cache_data_flush_range(trb_ptr, sizeof(*trb_ptr));
+		params.param1 = (uint32_t) trb_ptr;
+
+		do {
+			cmd  = USB_DEPCMD_STARTTRANSFER;
+			cmd |= USB_DEPCMD_PARAM(future_frame);
+
+			ret = udc_dwc3_send_ep_cmd(drv, phy_ep, cmd, params);
+			if (ret != USB_EP_CMD_CMPLT_BUS_EXPIRY_ERROR) {
+				break;
+			}
+
+			/* Bus Expiry: the requested frame has already passed.
+			 * Push it further into the future.
+			 */
+			LOG_WRN("ISOC STARTTRANSFER Bus Expiry, retrying with future frame");
+			future_frame += (ept->interval_uframe > 0) ? ept->interval_uframe : 1;
+			retries--;
+		} while (retries > 0);
+	}
+
+	if (ret < USB_SUCCESS) {
+		LOG_ERR("failed to send the command for isoc send");
+		/* Revert TRB enqueue since we completely failed to submit it */
+		if (ept->trb_enqueue == 0U) {
+			ept->trb_enqueue = NO_OF_TRB_PER_EP - 1;
+		} else {
+			ept->trb_enqueue--;
+		}
+		return ret;
+	}
+
+	if ((ept->ep_status & USB_EP_BUSY) == 0U) {
+		ept->ep_resource_index = udc_dwc3_get_ep_transfer_resource_index(drv,
+				ept->ep_index, ept->ep_dir);
+
+		SET_BIT(ept->ep_status, USB_EP_BUSY);
+	}
+
+	return ret;
+}
+static int32_t udc_dwc3_bulk_int_send(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t dir,
 		uint8_t *bufferptr, uint32_t buf_len)
 {
 	udc_dwc3_ep_t *ept;
@@ -351,7 +559,7 @@ static int32_t udc_dwc3_bulk_send(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 #endif
 	trb_ptr->buf_ptr_high  = 0;
 	trb_ptr->size = USB_TRB_SIZE_LENGTH(buf_len);
-	if (buf_len == 0) {
+	if (buf_len == 0 && ept->ep_type == USB_BULK_EP) {
 	/* Normal ZLP(BULK IN) - set to 9 for BULK IN TRB for zero
 	 * length packet termination
 	 */
@@ -372,7 +580,7 @@ static int32_t udc_dwc3_bulk_send(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 	/* issue the command to the hardware */
 	ret = udc_dwc3_send_ep_cmd(drv, phy_ep, cmd, params);
 	if (ret < USB_SUCCESS) {
-		LOG_ERR("failed to send the command for bulk send");
+		LOG_ERR("failed to send the command for bulk_int send");
 		return ret;
 	}
 	if ((ept->ep_status & USB_EP_BUSY) == 0U) {
@@ -384,7 +592,7 @@ static int32_t udc_dwc3_bulk_send(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 	return ret;
 }
 
-static int32_t udc_dwc3_bulk_recv(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t dir,
+static int32_t udc_dwc3_bulk_int_recv(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t dir,
 		uint8_t *bufferptr, uint32_t buf_len)
 {
 	udc_dwc3_ep_t *ept;
@@ -398,10 +606,11 @@ static int32_t udc_dwc3_bulk_recv(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 	phy_ep = USB_GET_PHYSICAL_EP(ep_num, dir);
 	ept = &drv->eps[phy_ep];
 	if (ept->ep_dir != dir) {
-		LOG_ERR("Wrong BULK endpoint direction");
+		LOG_ERR("Wrong BULK/INT endpoint direction");
 		return USB_EP_DIRECTION_WRONG;
 	}
-	ept->bytes_txed = 0U;
+	ept->ep_requested_bytes = buf_len;
+	ept->bytes_txed         = 0U;
 	/*
 	 * An OUT transfer size (Total TRB buffer allocation)
 	 * must be a multiple of MaxPacketSize even if software is expecting a
@@ -411,9 +620,9 @@ static int32_t udc_dwc3_bulk_recv(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 		size                = ROUND_UP(buf_len, ept->ep_maxpacket);
 		ept->unaligned_txed = 1U;
 	} else {
-		size = buf_len;
+		size                = buf_len;
+		ept->unaligned_txed = 0U;
 	}
-	ept->ep_requested_bytes = size;
 	trb_ptr = &ept->ep_trb[ept->trb_enqueue];
 
 	ept->trb_enqueue++;
@@ -443,7 +652,7 @@ static int32_t udc_dwc3_bulk_recv(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 	/* Issue the command to the hardware */
 	ret = udc_dwc3_send_ep_cmd(drv, phy_ep, cmd, params);
 	if (ret < USB_SUCCESS) {
-		LOG_ERR("Failed to send the command for bulk recv");
+		LOG_ERR("Failed to send the command for bulk_int recv");
 		return ret;
 	}
 	if ((ept->ep_status & USB_EP_BUSY) == 0U) {
@@ -485,42 +694,48 @@ static void udc_dwc3_clear_stall_all_eps(udc_dwc3_driver_t *drv)
 
 static void udc_dwc3_ep_xfer_complete(udc_dwc3_driver_t *drv, uint8_t endp_number)
 {
-	udc_dwc3_trb_t      *trb_ptr;
-	udc_dwc3_ep_t       *ept;
-	uint32_t     length;
-	uint8_t      dir;
-	uint32_t trb_status;
+	udc_dwc3_trb_t *trb_ptr;
+	udc_dwc3_ep_t  *ept;
+	uint32_t       remaining_len;
+	uint8_t        dir;
+	uint32_t       trb_status;
 
 	ept = &drv->eps[endp_number];
 	dir = ept->ep_dir;
 	trb_ptr = &ept->ep_trb[ept->trb_dequeue];
 	sys_cache_data_invd_range(trb_ptr, sizeof(*trb_ptr));
 	trb_status = USB_TRB_SIZE_TRBSTS(trb_ptr->size);
-	if (trb_status == USB_TRBSTS_SETUP_PENDING) {
-		drv->setup_packet_pending = true;
-		LOG_ERR("TRB transmission pending in BULK DATA");
-		return;
-	}
+
 	ept->trb_dequeue++;
 	if (ept->trb_dequeue == NO_OF_TRB_PER_EP) {
 		ept->trb_dequeue = 0U;
 	}
-	length = trb_ptr->size & USB_TRB_SIZE_MASK;
-	if (length == 0U) {
-		ept->bytes_txed = ept->ep_requested_bytes;
+
+	if (trb_status == USB_TRBSTS_SETUP_PENDING) {
+		drv->setup_packet_pending = true;
+		LOG_ERR("TRB transmission was pending during the non control ep DATA");
+		return;
+	}
+	if (trb_status == USB_TRBSTS_MISSED_ISOC) {
+		LOG_ERR("Missed Isochronous transfer");
+		ept->bytes_txed = 0;
 	} else {
+		/* remaining_len = remaining bytes not transferred */
+		remaining_len = trb_ptr->size & USB_TRB_SIZE_MASK;
 		if (dir == USB_DIR_IN) {
-			ept->bytes_txed = ept->ep_requested_bytes - length;
+			/* For IN: bytes_txed = requested - remaining */
+			ept->bytes_txed = ept->ep_requested_bytes - remaining_len;
 		} else {
+			uint32_t trb_size;
+			/* For OUT: Calculate based on actual TRB buffer size */
 			if (ept->unaligned_txed == 1U) {
-				ept->bytes_txed = ROUND_UP(ept->ep_requested_bytes,
+				trb_size = ROUND_UP(ept->ep_requested_bytes,
 						ept->ep_maxpacket);
-				ept->bytes_txed -= length;
 				ept->unaligned_txed = 0U;
 			} else {
-				/* Get the actual number of bytes transmitted by host */
-				ept->bytes_txed = ept->ep_requested_bytes - length;
+				trb_size = ept->ep_requested_bytes;
 			}
+			ept->bytes_txed = trb_size - remaining_len;
 		}
 	}
 	drv->num_bytes =  ept->bytes_txed;
@@ -788,6 +1003,7 @@ static void udc_dwc3_depevt_handler(udc_dwc3_driver_t *drv, uint32_t reg)
 		}
 	} else {
 		/* non control ep events */
+		uint32_t cmd_param;
 		switch (event_type) {
 		case USB_DEPEVT_XFERINPROGRESS:
 			udc_dwc3_ep_xfer_complete(drv, endp_number);
@@ -795,6 +1011,10 @@ static void udc_dwc3_depevt_handler(udc_dwc3_driver_t *drv, uint32_t reg)
 		case USB_DEPEVT_XFERCOMPLETE:
 			break;
 		case USB_DEPEVT_XFERNOTREADY:
+			/* for Isoc_only */
+			/* Get the frame from event param BIT[31:16] */
+			cmd_param = USB_GET_EVENT_CMD_PARAM(reg);
+			usbd_isoc_micro_frame_update(drv, cmd_param);
 			break;
 		default:
 			break;
@@ -972,64 +1192,6 @@ static void udc_dwc3_interrupt_handler(udc_dwc3_driver_t  *drv)
 	drv->regs->GEVNTSIZ0 = mask_interrupt;
 }
 
-static int32_t udc_dwc3_stop_transfer(udc_dwc3_driver_t *drv, uint8_t ep_num,
-		uint8_t dir, uint8_t force_rm)
-{
-	udc_dwc3_ep_t *ept;
-	udc_dwc3_trb_t      *trb_ptr;
-	udc_dwc3_ep_params_t params = {0};
-	uint8_t phy_ep;
-	uint32_t cmd;
-	uint32_t ret;
-
-	phy_ep = USB_GET_PHYSICAL_EP(ep_num, dir);
-	ept = &drv->eps[phy_ep];
-	if (ept->trb_enqueue == 0U) {
-		ept->trb_enqueue = NO_OF_TRB_PER_EP - 1;
-	} else {
-		ept->trb_enqueue--;
-	}
-	/* check the endpoint stall condition */
-	if (ept->ep_status & USB_EP_STALL) {
-		ret = udc_dwc3_send_ep_cmd(drv, phy_ep, USB_DEPCMD_CLEARSTALL, params);
-		if (ret < 0) {
-			LOG_ERR("Failed to send command CLEARSTALL");
-			return ret;
-		}
-		CLEAR_BIT(ept->ep_status, USB_EP_STALL);
-	}
-	if (ept->ep_resource_index == 0U) {
-		return USB_EP_RESOURCE_INDEX_INVALID;
-	}
-	/* Data book says for end transfer  HW needs some
-	 * extra time to synchronize with the interconnect
-	 * - Issue EndTransfer WITH CMDIOC bit set
-	 * - Wait 100us
-	 */
-	cmd = USB_DEPCMD_ENDTRANSFER;
-	cmd |= (force_rm == 1) ? USB_DEPCMD_HIPRI_FORCERM : 0U;
-	SET_BIT(cmd, USB_DEPCMD_CMDIOC);
-	cmd |= USB_DEPCMD_PARAM(ept->ep_resource_index);
-
-	ret = udc_dwc3_send_ep_cmd(drv, phy_ep, cmd, params);
-	if (ret < 0) {
-		LOG_ERR("Failed to send command at END transfer");
-		return ret;
-	}
-	trb_ptr = &ept->ep_trb[ept->trb_enqueue];
-	if (trb_ptr->ctrl) {
-		trb_ptr->ctrl = 0;
-	}
-	ept->trb_enqueue = 0;
-	if (force_rm == 1) {
-		ept->ep_resource_index = 0U;
-	}
-	CLEAR_BIT(ept->ep_status, USB_EP_BUSY);
-	k_busy_wait(100);
-
-	return ret;
-}
-
 static int32_t udc_dwc3_ep_disable(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t dir)
 {
 	udc_dwc3_ep_t *ept;
@@ -1173,6 +1335,13 @@ static int32_t udc_dwc3_ep_enable(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 	ept->ep_dir = dir;
 	ept->ep_maxpacket = ep_max_packet_size;
 	ept->phy_ep   = phy_ep;
+	ept->ep_type  = ep_type;
+	ept->ep_interval = ep_interval;
+	if (ep_interval) {
+		ept->interval_uframe = 1 << (ep_interval - 1);
+	} else {
+		ept->interval_uframe = 0;
+	}
 	if (!(ept->ep_status & USB_EP_ENABLED)) {
 		ret = udc_dwc3_start_endpoint_config(drv, ep_num, dir);
 		if (ret) {
@@ -1221,42 +1390,16 @@ static int32_t  udc_dwc3_endpoint_create(udc_dwc3_driver_t *drv, uint8_t ep_type
 {
 	int32_t status;
 
-	switch (ep_type) {
-	case USB_CONTROL_EP:
-		/* Enable the control endpoint  */
-		status = udc_dwc3_ep_enable(drv, ep_num, dir, ep_type,
-				ep_max_packet_size, ep_interval);
-		if (status) {
-			LOG_ERR("Failed to enable control ep num : %d direction: %d", ep_num, dir);
-			return status;
-		}
-		break;
-	case USB_BULK_EP:
-		status = udc_dwc3_ep_enable(drv, ep_num, dir, ep_type,
-				ep_max_packet_size, ep_interval);
-		if (status) {
-			LOG_ERR("Failed to enable bulk ep num %d: direction: %d", ep_num, dir);
-			return status;
-		}
-		break;
-	case USB_ISOCRONOUS_EP:
-		/* Not yet implemented   */
-		status = USB_EP_UNSUPPORTED;
-		break;
-	case USB_INTERRUPT_EP:
-		/* Enable the Interrupt endpoint  */
-		status = udc_dwc3_ep_enable(drv, ep_num, dir, ep_type,
-				ep_max_packet_size, ep_interval);
-		if (status) {
-			LOG_ERR("failed to enable interrupt ep num %d: direction: %d", ep_num, dir);
-			return status;
-		}
-		break;
-	default:
+	if (ep_type > USB_INTERRUPT_EP) {
 		LOG_ERR("Invalid Endpoint");
 		return USB_EP_INVALID;
 	}
-	/* Return successful completion.  */
+	status = udc_dwc3_ep_enable(drv, ep_num, dir, ep_type,
+			ep_max_packet_size, ep_interval);
+	if (status) {
+		LOG_ERR("Failed to enable ep num %d: direction: %d", ep_num, dir);
+	}
+
 	return status;
 }
 
@@ -2122,6 +2265,14 @@ static int udc_dwc3_tx(const struct device *dev, uint8_t ep, struct net_buf *buf
 	uint8_t  ep_num, ep_dir;
 	int ret;
 	struct udc_dwc3_data *priv = udc_get_private(dev);
+	struct udc_ep_config *ep_cfg = udc_get_ep_cfg(dev, ep);
+	uint8_t ep_type;
+
+	if (ep_cfg == NULL) {
+		LOG_ERR("No ep_cfg for ep 0x%02x", ep);
+		return -ENODEV;
+	}
+	ep_type = ep_cfg->attributes & USB_EP_TRANSFER_TYPE_MASK;
 
 	ep_num = EP_NUM(ep);
 	ep_dir = (ep & USB_EP_DIR_MASK) ? USB_DIR_IN : USB_DIR_OUT;
@@ -2134,17 +2285,24 @@ static int udc_dwc3_tx(const struct device *dev, uint8_t ep, struct net_buf *buf
 	if ((data == NULL) && (len == 0) && (ep_dir != 0)) {
 		return 0;
 	}
-	if (ep_num == 0) {
+
+	switch (ep_type) {
+	case USB_CONTROL_EP:
 		ret = udc_dwc3_ep0_send(&priv->drv, ep_num, ep_dir, data, len);
-		if (ret != 0) {
-			return ret;
-		}
-		udc_ep_set_busy(dev, ep, true);
-	} else {
-		ret = udc_dwc3_bulk_send(&priv->drv, ep_num, ep_dir, data, len);
-		if (ret != 0) {
-			return ret;
-		}
+		break;
+	case USB_BULK_EP:
+	case USB_INTERRUPT_EP:
+		ret = udc_dwc3_bulk_int_send(&priv->drv, ep_num, ep_dir, data, len);
+		break;
+	case USB_ISOCRONOUS_EP:
+		ret = udc_dwc3_isoc_send(&priv->drv, ep_num, ep_dir, data, len);
+		break;
+	default:
+		LOG_ERR("Invalid endpoint type");
+		return -EINVAL;
+	}
+
+	if (ret == 0) {
 		udc_ep_set_busy(dev, ep, true);
 	}
 
@@ -2154,22 +2312,36 @@ static int udc_dwc3_rx(const struct device *dev, uint8_t ep, struct net_buf *buf
 {
 	uint8_t  ep_num, ep_dir;
 	int ret;
-
 	struct udc_dwc3_data *priv = udc_get_private(dev);
+	struct udc_ep_config *ep_cfg = udc_get_ep_cfg(dev, ep);
+	uint8_t ep_type;
+
+	if (ep_cfg == NULL) {
+		LOG_ERR("No ep_cfg for ep 0x%02x", ep);
+		return -ENODEV;
+	}
+	ep_type = ep_cfg->attributes & USB_EP_TRANSFER_TYPE_MASK;
 
 	ep_num = EP_NUM(ep);
 	ep_dir = (ep & USB_EP_DIR_MASK) ? USB_DIR_IN : USB_DIR_OUT;
-	if (ep_num == 0) {
+
+	switch (ep_type) {
+	case USB_CONTROL_EP:
 		ret = udc_dwc3_ep0_recv(&priv->drv, ep_num, ep_dir, buf->data, buf->size);
-		if (ret != 0) {
-			return ret;
-		}
-		udc_ep_set_busy(dev, ep, true);
-	} else {
-		ret = udc_dwc3_bulk_recv(&priv->drv, ep_num, ep_dir, buf->data, buf->size);
-		if (ret != 0) {
-			return ret;
-		}
+		break;
+	case USB_BULK_EP:
+	case USB_INTERRUPT_EP:
+		ret = udc_dwc3_bulk_int_recv(&priv->drv, ep_num, ep_dir, buf->data, buf->size);
+		break;
+	case USB_ISOCRONOUS_EP:
+		LOG_WRN("Isoc Out transfer not yet implemented");
+		return -ENOTSUP;
+	default:
+		LOG_ERR("Invalid endpoint type index %d", ep_type);
+		return -EINVAL;
+	}
+
+	if (ret == 0) {
 		udc_ep_set_busy(dev, ep, true);
 	}
 
@@ -2338,7 +2510,7 @@ static void handle_data_in(struct udc_dwc3_data *priv, uint8_t epnum)
 	}
 	udc_submit_ep_event(dev, buf, 0);
 	buf = udc_buf_peek(dev, ep);
-	if (buf) {
+	if (buf && buf->len) {
 		udc_dwc3_tx(dev, ep, buf);
 	}
 }
