@@ -8,6 +8,7 @@
 #include <alif/ensemble/e1c/ae1c1f4051920hh.dtsi>
 #include "../common/ensemble-e1c-pinctrl.dtsi"
 #include "../common/balletto-sd-vsel.dtsi"
+#include <zephyr/dt-bindings/display/ili9xxx.h>
 
 / {
 	compatible = "arm,alif-e1c-dk-ae1c1f4051920hh-rtss-he";
@@ -24,6 +25,7 @@
 		led0 = &aled0;
 		sw0 = &button0;
 		watchdog0 = &wdog0;
+		panel = &ili9488;
 	};
 
 	leds {
@@ -120,4 +122,27 @@
 		};
 		status = "disabled";
 	};
+};
+
+&mipi_dsi {
+		ili9488: ili9488@0 {
+			compatible = "ilitek,ili9488";
+			reg = <0>;
+			pixel-format = <ILI9XXX_PIXEL_FORMAT_RGB666_PACKED>;
+			width = <320>;
+			height = <480>;
+			rotation = <0>;
+
+			display-inversion;
+
+			vmctrl = [00 25 80 25];
+			pwctrl1 = [0f 0c];
+			pwctrl2 = [41];
+			pgamctrl = [00 10 14 01 0e 04 33 56 48 03 0c 0b 2b 34 0f];
+			ngamctrl = [00 12 18 05 12 06 40 34 57 06 10 0c 3b 3f 0f];
+			data-lanes = <1>;
+			reset-gpios = <&gpio8 0 GPIO_ACTIVE_LOW>;
+			bl-gpios = <&gpio8 1 GPIO_ACTIVE_HIGH>;
+			status = "disabled";
+		};
 };
