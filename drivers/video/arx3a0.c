@@ -48,6 +48,11 @@ LOG_MODULE_REGISTER(arx3a0);
 
 #define ARX3A0_FRAME_RATE 5
 
+/* Default format settings for ARX3A0 (RAW10 MIPI 560x560) */
+#define ARX3A0_DEFAULT_WIDTH   560
+#define ARX3A0_DEFAULT_HEIGHT  560
+#define ARX3A0_DEFAULT_PITCH   (ARX3A0_DEFAULT_WIDTH << 1)
+
 struct arx3a0_config {
 	const struct gpio_dt_spec reset_gpio;
 	const struct gpio_dt_spec power_gpio;
@@ -1336,6 +1341,23 @@ static int arx3a0_init(const struct device *dev)
 
 	data->is_streaming = false;
 	k_msleep(500);
+
+	/*
+	 * Currently ARX3A0 sensor supports only one format - RAW10 MIPI.
+	 * Set default format so video_get_format works before video_set_format.
+	 */
+	struct video_format fmt = {
+		.pixelformat = VIDEO_PIX_FMT_Y10P,
+		.width = ARX3A0_DEFAULT_WIDTH,
+		.height = ARX3A0_DEFAULT_HEIGHT,
+		.pitch = ARX3A0_DEFAULT_PITCH,
+	};
+
+	ret = arx3a0_set_fmt(dev, VIDEO_EP_OUT, &fmt);
+	if (ret) {
+		LOG_ERR("Unable to set default format. ret - %d", ret);
+		return ret;
+	}
 
 	return 0;
 }
