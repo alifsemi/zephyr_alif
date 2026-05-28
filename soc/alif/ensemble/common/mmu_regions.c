@@ -27,6 +27,11 @@ static const struct arm_mmu_region mmu_regions[] = {
 		DT_REG_SIZE_BY_IDX(DT_INST(0, arm_gic), 1),
 		MT_STRONGLY_ORDERED | MPERM_R | MPERM_W),
 
+	MMU_REGION_FLAT_ENTRY("UART",
+		DT_REG_ADDR(DT_INST(0, ns16550)),
+		DT_REG_SIZE(DT_INST(0, ns16550)),
+		MT_DEVICE | MATTR_SHARED | MPERM_R | MPERM_W),
+
 	/* CLKCTL_PER_MST & CLKCTL_PER_SLV regions */
 	MMU_REGION_FLAT_ENTRY("CLKCTL",
 		0x4902F000,
@@ -38,6 +43,25 @@ static const struct arm_mmu_region mmu_regions[] = {
 		0x1A603000,
 		0x7000,
 		MT_DEVICE | MATTR_SHARED | MPERM_R | MPERM_W),
+
+#if DT_NODE_EXISTS(DT_NODELABEL(ethosu1))
+	/* Ethos-U85 NPU register space — device memory */
+	MMU_REGION_FLAT_ENTRY("NPU",
+		DT_REG_ADDR(DT_NODELABEL(ethosu1)),
+		DT_REG_SIZE(DT_NODELABEL(ethosu1)),
+		MT_DEVICE | MATTR_SHARED | MPERM_R | MPERM_W),
+#endif
+
+#if DT_NODE_EXISTS(DT_NODELABEL(sram1))
+	/* SRAM1 — non-cacheable normal memory for NPU tensor arena.
+	 * Mapped without cache attributes so the NPU and CPU share a
+	 * coherent view without explicit cache maintenance. */
+	MMU_REGION_FLAT_ENTRY("SRAM1",
+		DT_REG_ADDR(DT_NODELABEL(sram1)),
+		DT_REG_SIZE(DT_NODELABEL(sram1)),
+		MT_NORMAL | MPERM_R | MPERM_W | MATTR_SHARED |
+		MATTR_MAY_MAP_L1_SECTION),
+#endif
 };
 
 const struct arm_mmu_config mmu_config = {
