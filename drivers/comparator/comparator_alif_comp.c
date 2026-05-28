@@ -22,6 +22,8 @@ LOG_MODULE_REGISTER(CMP);
 
 #define DT_DRV_COMPAT alif_cmp
 
+#define CMP_MAX_CLOCKS 2
+
 struct cmp_config {
 	DEVICE_MMIO_NAMED_ROM(cmp_reg);
 	DEVICE_MMIO_NAMED_ROM(adc_vref);
@@ -31,7 +33,8 @@ struct cmp_config {
 	void (*irq_config_func)(const struct device *dev);
 	const struct gpio_dt_spec cmp_gpio;
 	const struct device *clk_dev;
-	clock_control_subsys_t clkid;
+	clock_control_subsys_t clkid[CMP_MAX_CLOCKS];
+	size_t clk_count;
 	uint32_t drv_inst;
 	uint8_t polarity_en;
 	uint32_t filter_taps;
@@ -484,34 +487,37 @@ static int cmp_init(const struct device *dev)
 		return ret;
 	}
 
-	/* comparator set configuration */
-	cmp_analog_config(dev);
-
 	if (config->drv_inst == CMP_INSTANCE_LP) {
 
 		/* LPCMP configuration value to the Vbat reg2 */
 		lpcmp_set_config(dev);
 
 	} else {
-		/* check device availability */
 		if (!device_is_ready(config->clk_dev)) {
-			LOG_ERR("clock controller device not ready");
+			LOG_ERR("clock controller not ready");
 			return -ENODEV;
 		}
-
-		/* Configure CMP clock sources */
-		ret = clock_control_configure(config->clk_dev,
-						config->clkid, NULL);
-		if (ret != 0) {
-			LOG_ERR("Unable to configure clock: err:%d", ret);
-			return ret;
-		}
-
-		/* Enable CMP clock from clock manager */
-		ret = clock_control_on(config->clk_dev, config->clkid);
-		if (ret != 0) {
-			LOG_ERR("Unable to turn on clock: err:%d", ret);
-			return ret;
+		for (size_t i = 0; i < config->clk_count; i++) {
+			ret = clock_control_configure(config->clk_dev,
+						      config->clkid[i], NULL);
+			if (ret != 0) {
+				LOG_ERR("Unable to configure clock %zu: err:%d", i, ret);
+				/* Turn off any previously enabled clocks */
+				for (size_t j = 0; j < i; j++) {
+					clock_control_off(config->clk_dev, config->clkid[j]);
+				}
+				return ret;
+			}
+			ret = clock_control_on(config->clk_dev, config->clkid[i]);
+			if (ret != 0) {
+				LOG_ERR("Unable to turn on clock %zu: err:%d", i, ret);
+				/* Turn off any previously enabled clocks */
+				for (size_t j = 0; j < i; j++) {
+					clock_control_off(config->clk_dev,
+							  config->clkid[j]);
+				}
+				return ret;
+			}
 		}
 
 		/*Configure Reg1 register*/
@@ -529,6 +535,9 @@ static int cmp_init(const struct device *dev)
 			}
 		}
 	}
+
+	/* comparator set configuration */
+	cmp_analog_config(dev);
 
 	config->irq_config_func(dev);
 
@@ -555,8 +564,14 @@ static DEVICE_API(comparator, alif_comp_api) = {
 		IF_ENABLED(DT_INST_REG_HAS_NAME(inst, adc_vref),                                   \
 		(DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(adc_vref, DT_DRV_INST(inst)),))                \
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, clocks), (                                  \
-		.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(inst)),                               \
-		.clkid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL(inst, clkid),))               \
+		.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR_BY_IDX(inst, 0)),                     \
+		.clkid = {                                                                         \
+			(clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_IDX(inst, 0, clkid),        \
+			COND_CODE_1(DT_INST_CLOCKS_HAS_IDX(inst, 1),                               \
+			((clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_IDX(inst, 1, clkid)),      \
+			 (0)),                                                                     \
+		},                                                                                 \
+		.clk_count = DT_INST_PROP_LEN(inst, clocks),))                                     \
 		.irq_config_func = cmp_config_func_##inst,                                         \
 		.cmp_gpio = GPIO_DT_SPEC_INST_GET_OR(inst, cmp_gpios, {0}),                        \
 		.drv_inst = DT_INST_ENUM_IDX(inst, driver_instance),                               \

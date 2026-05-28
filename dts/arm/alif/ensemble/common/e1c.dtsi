@@ -592,7 +592,8 @@
 			<0x4902A000 0x100>,
 			<0x4902B000 0x100>;
 		reg-names	 = "cmp_reg", "config_reg","dac6_reg","adc_vref";
-		clocks		 = <&clockctrl ALIF_CMP1_CLK>;
+		clocks		 = <&clockctrl ALIF_CMP1_CLK>,
+				   <&clockctrl ALIF_CMP0_CLK>;
 		pinctrl-0	 = < &pinctrl_cmp1 >;
 		pinctrl-names	 = "default";
 		driver_instance	 = "CMP_INSTANCE_1";
