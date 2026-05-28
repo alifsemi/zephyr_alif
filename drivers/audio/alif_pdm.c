@@ -16,10 +16,23 @@
 #include <zephyr/drivers/clock_control.h>
 #include "alif_pdm_reg.h"
 
+#ifdef CONFIG_ALIF_PDM_USE_DMA
+#include <zephyr/drivers/dma.h>
+#include <zephyr/drivers/dma/dma_pl330_opcode.h>
+#include <zephyr/drivers/dma/dma_alif_event_router.h>
+#include <zephyr/drivers/dma/dma_pl330.h>
+#include <zephyr/dt-bindings/dma/alif_dma_event_router.h>
+#include <soc_memory_map.h>
+#endif
+
 LOG_MODULE_REGISTER(alif_pdm, LOG_LEVEL_INF);
 
 #define DEV_DATA(dev) ((struct pdm_data *)((dev)->data))
 #define DEV_CFG(dev)  ((const struct pdm_config *)((dev)->config))
+
+#ifdef CONFIG_ALIF_PDM_USE_DMA
+#define PDM_DMA_MCODE_SIZE 256
+#endif
 
 struct pdm_data {
 	DEVICE_MMIO_RAM;
@@ -36,6 +49,11 @@ struct pdm_data {
 	uint8_t bypass_iir_filter;
 	void *queue_data[MAX_QUEUE_LEN];
 	uint16_t data[MAX_NUM_CHANNELS * MAX_DATA_ITEMS];
+
+	#ifdef CONFIG_ALIF_PDM_USE_DMA
+	uint8_t __aligned(4) dma_mcode[PDM_DMA_MCODE_SIZE];
+	#endif
+
 };
 
 struct pdm_config {
@@ -45,7 +63,409 @@ struct pdm_config {
 	const struct pinctrl_dev_config *pcfg;
 	const struct device *clk_dev;
 	clock_control_subsys_t clkid;
+
+	#ifdef CONFIG_ALIF_PDM_USE_DMA
+	const struct device *dma_dev;
+	const struct device *evtrtr_dev;
+	uint8_t periph_id;
+	uint32_t dma_channel;
+	#endif
+	bool dma_enabled;
+
 };
+/**
+ * @fn		static bool factorize_loop_counts(uint32_t n_bursts,
+ *						  uint16_t *lc1, uint16_t *lc0)
+ * @brief	Factorizes n_bursts into two loop counter values (lc1 x lc0)
+ *		each fitting within the PL330 DMA loop counter range (1-256).
+ * @param[in]	n_bursts : Total number of DMA bursts to factorize.
+ * @param[out]	lc1      : Outer loop counter value.
+ * @param[out]	lc0      : Inner loop counter value.
+ * @return	true if factorization succeeded, false if not possible.
+ */
+#ifdef CONFIG_ALIF_PDM_USE_DMA
+static bool factorize_loop_counts(uint32_t n_bursts,
+		uint16_t *lc1, uint16_t *lc0)
+{
+	if (n_bursts == 0) {
+		return false;
+	}
+	if (n_bursts <= 256) {
+		*lc1 = 1;
+		*lc0 = n_bursts;
+		return true;
+	}
+	for (uint16_t outer = 2; outer <= 256; outer++) {
+		if (n_bursts % outer == 0) {
+			uint32_t inner = n_bursts / outer;
+
+			if (inner <= 256) {
+				*lc1 = outer;
+				*lc0 = (uint16_t)inner;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+/**
+ * @fn		static bool pdm_build_mcode(struct pdm_data *pdata,
+ *					    uintptr_t reg_base,
+ *					    uint8_t *dst,
+ *					    uint32_t n_samples,
+ *					    uint8_t periph_id,
+ *					    uint8_t dma_channel,
+ *					    uint8_t channel_map)
+ * @brief	Builds the PL330 DMA microcode sequence to transfer audio
+ *		samples from PDM channel pair registers to a destination
+ *		buffer. Waits for FIFO DRQ on the first active pair and
+ *		reads all active pairs per sample iteration.
+ * @param[in]	pdata       : Pointer to the PDM driver data structure.
+ * @param[in]	reg_base    : MMIO base address of the PDM peripheral.
+ * @param[in]	dst         : Pointer to the destination PCM data buffer.
+ * @param[in]	n_samples   : Number of sample iterations (bursts) to transfer.
+ * @param[in]	periph_id   : DMA peripheral request ID for PDM FIFO.
+ * @param[in]	dma_channel : DMA channel number used to send completion event.
+ * @param[in]	channel_map : Bitmask of active PDM channels.
+ * @return	true on success, false if mcode buffer overflows or
+ *		no active channel pairs found.
+ */
+static bool pdm_build_mcode(struct pdm_data *pdata,
+		uintptr_t reg_base,
+		uint8_t  *dst,
+		uint32_t  n_samples,
+		uint8_t   periph_id,
+		uint8_t   dma_channel,
+		uint8_t   channel_map)
+{
+	struct dma_pl330_opcode_buf ob = {
+		.buf      = pdata->dma_mcode,
+		.off      = 0,
+		.buf_size = PDM_DMA_MCODE_SIZE,
+	};
+	const uint32_t ch_pair_offsets[] = {
+		PDM_CH0_CH1_AUDIO_OUT,
+		PDM_CH2_CH3_AUDIO_OUT,
+		PDM_CH4_CH5_AUDIO_OUT,
+		PDM_CH6_CH7_AUDIO_OUT,
+	};
+	const uint8_t ch_pair_masks[] = {
+		PDM_CHANNEL_0 | PDM_CHANNEL_1,
+		PDM_CHANNEL_2 | PDM_CHANNEL_3,
+		PDM_CHANNEL_4 | PDM_CHANNEL_5,
+		PDM_CHANNEL_6 | PDM_CHANNEL_7,
+	};
+
+	/* find first active pair — waits for FIFO request */
+	int first_active_pair = -1;
+
+	for (int i = 0; i < 4; i++) {
+		if (channel_map & ch_pair_masks[i]) {
+			first_active_pair = i;
+			break;
+		}
+	}
+
+	if (first_active_pair == -1) {
+		LOG_ERR("PDM: no active channel pairs in channel_map");
+		return false;
+	}
+
+	union dma_pl330_ccr ccr = { .value = 0 };
+
+	ccr.b.src_inc        = 0;
+	ccr.b.dst_inc        = 1;
+	ccr.b.src_burst_size = 2;
+	ccr.b.dst_burst_size = 2;
+	ccr.b.src_burst_len  = 0;
+	ccr.b.dst_burst_len  = 0;
+	ccr.b.src_cache_ctrl = 0;
+	ccr.b.dst_cache_ctrl = 2;
+	ccr.b.dst_prot_ctrl  = 0x0;
+	ccr.b.src_prot_ctrl  = 0x0;
+	ccr.b.endian_swap    = 0x0;
+
+	bool ret = true;
+
+	ret &= dma_pl330_gen_move(ccr.value, DMA_PL330_REG_CCR, &ob);
+	ret &= dma_pl330_gen_move(
+			(uint32_t)local_to_global(dst),
+			DMA_PL330_REG_DAR, &ob);
+
+	uint16_t lc0, lc1;
+
+	if (!factorize_loop_counts(n_samples, &lc1, &lc0)) {
+		LOG_ERR("PDM: n_samples %u cannot be factored", n_samples);
+		return false;
+	}
+
+	ret &= dma_pl330_gen_loop(DMA_PL330_LC_1, lc1, &ob);
+	uint32_t outer_start = ob.off;
+
+	ret &= dma_pl330_gen_loop(DMA_PL330_LC_0, lc0, &ob);
+	uint32_t inner_start = ob.off;
+
+	for (int pair = 0; pair < 4; pair++) {
+		if (!(channel_map & ch_pair_masks[pair])) {
+			continue;
+		}
+
+		/* point SAR at this pair's register */
+		ret &= dma_pl330_gen_move(
+				(uint32_t)(reg_base + ch_pair_offsets[pair]),
+				DMA_PL330_REG_SAR, &ob);
+
+		if (pair == first_active_pair) {
+			/* wait for FIFO request ONCE per sample iteration */
+			ret &= dma_pl330_gen_flushperiph(periph_id, &ob);
+			ret &= dma_pl330_gen_wfp(DMA_PL330_XFER_SINGLE, periph_id, &ob);
+			ret &= dma_pl330_gen_loadperiph(DMA_PL330_XFER_SINGLE, periph_id, &ob);
+		} else {
+			/* subsequent pairs — data already available, no wait */
+			ret &= dma_pl330_gen_loadperiph(DMA_PL330_XFER_SINGLE, periph_id, &ob);
+		}
+		ret &= dma_pl330_gen_store(DMA_PL330_XFER_FORCE, &ob);
+	}
+
+	/* close inner loop — PL330 jump field is 8-bit; */
+	uint32_t inner_jump = ob.off - inner_start;
+
+	if (inner_jump > UINT8_MAX) {
+		LOG_ERR("PDM mcode: inner loop body too large (%u bytes, max 255)",
+			inner_jump);
+		return false;
+	}
+
+	struct dma_pl330_loop lp0 = {
+		.xfer_type = DMA_PL330_XFER_SINGLE,
+		.lc        = DMA_PL330_LC_0,
+		.jump      = (uint8_t)inner_jump,
+		.nf        = true,
+	};
+	ret &= dma_pl330_gen_loopend(&lp0, &ob);
+
+	/* close outer loop — re-measure after lp0 was written */
+	uint32_t outer_jump = ob.off - outer_start;
+
+	if (outer_jump > UINT8_MAX) {
+		LOG_ERR("PDM mcode: outer loop body too large (%u bytes, max 255)",
+			outer_jump);
+		return false;
+	}
+
+	struct dma_pl330_loop lp1 = {
+		.xfer_type = DMA_PL330_XFER_SINGLE,
+		.lc        = DMA_PL330_LC_1,
+		.jump      = (uint8_t)outer_jump,
+		.nf        = true,
+	};
+	ret &= dma_pl330_gen_loopend(&lp1, &ob);
+
+	ret &= dma_pl330_gen_wmb(&ob);
+	ret &= dma_pl330_gen_send_event(dma_channel, &ob);
+	ret &= dma_pl330_gen_end(&ob);
+
+	if (!ret) {
+		LOG_ERR("PDM mcode overflow: increase PDM_DMA_MCODE_SIZE");
+	}
+
+	return ret;
+}
+struct pdm_pair_info {
+	uint8_t has_low;
+	uint8_t has_high;
+};
+
+/**
+ * @fn		static void build_pair_info(uint8_t channel_map,
+ *					    struct pdm_pair_info *pairs,
+ *					    uint32_t *num_active_pairs)
+ * @brief	Scans the channel_map and fills the pairs array with
+ *		has_low and has_high flags for each active PDM pair.
+ *		Also sets num_active_pairs to the count of active pairs.
+ * @param[in]	channel_map      : Bitmask of active PDM channels.
+ * @param[out]	pairs            : Array to store active pair info.
+ * @param[out]	num_active_pairs : Number of active pairs found.
+ * @return	None.
+ */
+static void build_pair_info(uint8_t channel_map,
+				struct pdm_pair_info *pairs,
+				uint32_t *num_active_pairs)
+{
+	const uint8_t low_masks[] = {
+		PDM_CHANNEL_0, PDM_CHANNEL_2,
+		PDM_CHANNEL_4, PDM_CHANNEL_6
+	};
+	const uint8_t high_masks[] = {
+		PDM_CHANNEL_1, PDM_CHANNEL_3,
+		PDM_CHANNEL_5, PDM_CHANNEL_7
+	};
+
+	*num_active_pairs = 0;
+
+	for (int p = 0; p < 4; p++) {
+		uint8_t has_low  = !!(channel_map & low_masks[p]);
+		uint8_t has_high = !!(channel_map & high_masks[p]);
+
+		if (has_low || has_high) {
+			pairs[*num_active_pairs].has_low  = has_low;
+			pairs[*num_active_pairs].has_high = has_high;
+			(*num_active_pairs)++;
+		}
+	}
+}
+
+/**
+ * @fn		static void compact_to_actual_channels(uint8_t *buf,
+ *						       uint8_t channel_map,
+ *						       uint32_t num_channels,
+ *						       uint32_t n_bursts)
+ * @brief	For odd channel counts, compacts the DMA output buffer
+ *		in-place. DMA always reads full 32-bit pair registers,
+ *		so for odd channel counts the last pair contains one
+ *		valid 16-bit sample and one garbage 16-bit sample.
+ *		This function extracts only the valid samples.
+ *		For even channel counts, all pairs are fully populated
+ *		so no compaction is needed.
+ * @param[in]	buf          : Pointer to the DMA output buffer.
+ * @param[in]	channel_map  : Bitmask of active PDM channels.
+ * @param[in]	num_channels : Total number of active channels.
+ * @param[in]	n_bursts     : Number of DMA bursts completed.
+ * @return	None.
+ */
+static void compact_to_actual_channels(uint8_t *buf,
+					uint8_t channel_map,
+					uint32_t num_channels,
+					uint32_t n_bursts)
+{
+	struct pdm_pair_info pairs[4];
+	uint32_t num_active_pairs = 0;
+
+	build_pair_info(channel_map, pairs, &num_active_pairs);
+	bool all_full = true;
+
+	for (uint32_t p = 0; p < num_active_pairs; p++) {
+		if (!pairs[p].has_low || !pairs[p].has_high) {
+			all_full = false;
+			break;
+		}
+	}
+
+	if (all_full) {
+		return;
+	}
+
+	uint32_t *src = (uint32_t *)buf;
+	uint16_t *dst = (uint16_t *)buf;
+	uint32_t out_idx = 0;
+
+	for (uint32_t s = 0; s < n_bursts; s++) {
+		for (uint32_t p = 0; p < num_active_pairs; p++) {
+			uint32_t word = src[s * num_active_pairs + p];
+
+			if (pairs[p].has_low) {
+				dst[out_idx++] = (uint16_t)(word & 0xFFFF);
+			}
+			if (pairs[p].has_high) {
+				dst[out_idx++] = (uint16_t)(word >> 16);
+			}
+		}
+	}
+}
+
+/**
+ * @fn		static void pdm_dma_callback(const struct device *dma_dev,
+ *					     void *user_data,
+ *					     uint32_t channel,
+ *					     int status)
+ * @brief	DMA completion callback for PDM audio capture. On the first
+ *		call frees the pipeline-flush buffer without enqueuing it.
+ *		On subsequent calls compacts the buffer if channel count is
+ *		odd, enqueues the completed PCM buffer, allocates the next
+ *		buffer from the slab, rebuilds the DMA microcode, and
+ *		restarts the DMA transfer.
+ * @param[in]	dma_dev   : Pointer to the DMA controller device.
+ * @param[in]	user_data : Pointer to the PDM device passed at DMA config time.
+ * @param[in]	channel   : DMA channel number that completed.
+ * @param[in]	status    : Completion status. Non-zero indicates an error.
+ * @return	None.
+ */
+static void *get_slab(struct pdm_data *pdm_data);
+static void pdm_dma_callback(const struct device *dma_dev, void *user_data,
+		uint32_t channel, int status)
+{
+	const struct device     *dev      = user_data;
+	struct pdm_data         *pdata    = DEV_DATA(dev);
+	const struct pdm_config *cfg      = DEV_CFG(dev);
+	uintptr_t                reg_base = DEVICE_MMIO_GET(dev);
+
+	if (status != 0 || !pdata->record_data) {
+		return;
+	}
+
+	if (pdata->num_channels == 0) {
+		LOG_ERR("PDM callback: no active channels");
+		return;
+	}
+
+	uint32_t n_samples = pdata->block_size / (pdata->num_channels * sizeof(uint16_t));
+	uint32_t n_bursts  = n_samples;
+
+	if (pdata->buf_index == UINT32_MAX) {
+		/* first callback — pipeline flush buffer, discard it */
+		k_mem_slab_free(pdata->mem_slab, pdata->data_buffer);
+		pdata->data_buffer = NULL;
+		pdata->buf_index   = 0;
+	} else {
+		if (pdata->data_buffer) {
+			/*
+			 * compact in-place before enqueue:
+			 * for odd channel counts, last pair has 1 garbage
+			 * 16-bit sample that must be stripped out.
+			 * for even channel counts this returns immediately.
+			 */
+			compact_to_actual_channels(pdata->data_buffer,
+						   pdata->channel_map,
+						   pdata->num_channels,
+						   n_bursts);
+			int q_ret = k_msgq_put(&pdata->buf_queue,
+					       &pdata->data_buffer, K_NO_WAIT);
+			if (q_ret != 0) {
+				/* Queue full — free buffer to avoid slab leak */
+				LOG_WRN("PDM: queue full, dropping buffer");
+				k_mem_slab_free(pdata->mem_slab, pdata->data_buffer);
+				pdata->data_buffer = NULL;
+			}
+		}
+	}
+
+	/* allocate next buffer */
+	pdata->data_buffer = get_slab(pdata);
+	if (!pdata->data_buffer) {
+		return;
+	}
+
+	if (!pdm_build_mcode(pdata, reg_base,
+			pdata->data_buffer, n_bursts,
+			cfg->periph_id, cfg->dma_channel,
+			pdata->channel_map)) {
+		LOG_ERR("PDM mcode build failed in callback");
+		k_mem_slab_free(pdata->mem_slab, pdata->data_buffer);
+		pdata->data_buffer = NULL;
+		return;
+	}
+
+	int ret = dma_pl330_start_with_mcode(cfg->dma_dev,
+			ALIF_DMA_DECODE_CHANNEL(cfg->dma_channel),
+			pdata->dma_mcode, PDM_DMA_MCODE_SIZE);
+	if (ret != 0) {
+		LOG_ERR("PDM: DMA restart failed in callback (err=%d)", ret);
+		k_mem_slab_free(pdata->mem_slab, pdata->data_buffer);
+		pdata->data_buffer = NULL;
+	}
+}
+#endif
 
 /**
  * @fn		int dmic_alif_pdm_configure(const struct device *dev,
@@ -74,9 +494,6 @@ static int dmic_alif_pdm_configure(const struct device *dev, struct dmic_cfg *co
 		pdata->channel_map = config->channel.req_chan_map_lo & 0xFF;
 
 		reg_val |= pdata->channel_map;
-
-		/* Enable the PDM multiple channels */
-		sys_write32(reg_val, reg_base + PDM_CONFIG_REGISTER);
 
 		pdata->num_channels = config->channel.req_num_chan;
 
@@ -213,6 +630,7 @@ void pdm_mode(const struct device *dev, uint8_t mode)
  * @param[in]	dev : Pointer to the runtime device structure.
  * @return	None
  */
+#ifndef CONFIG_ALIF_PDM_USE_DMA
 static void enable_interrupt(const struct device *dev)
 {
 	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
@@ -229,6 +647,7 @@ static void enable_interrupt(const struct device *dev)
 	/* Enable the Interrupt */
 	sys_write32(irq_value, reg_base + PDM_INTERRUPT_REGISTER);
 }
+#endif
 
 /**
  * @fn		void disable_interrupt(const struct device *dev)
@@ -245,10 +664,14 @@ static void disable_interrupt(const struct device *dev)
 }
 
 /**
- * @fn		int dmic_alif_pdm_trigger(const struct device *dev,
+ * @fn		static int dmic_alif_pdm_trigger(const struct device *dev,
  *					enum dmic_trigger cmd)
- * @brief	Send DMIC_TRIGGER_STOP or DMIC_TRIGGER_START to
- *			perform the specific operation.
+ * @brief	Starts or stops PDM audio capture. On DMIC_TRIGGER_START,
+ *		enables the PDM channels, allocates a buffer to flush the
+ *		pipeline, builds the initial DMA microcode, and starts the
+ *		DMA transfer. On DMIC_TRIGGER_STOP, halts the DMA and
+ *		disables interrupts. Falls back to interrupt-driven capture
+ *		if DMA is not enabled
  * @param[in]   dev	: pointer to Runtime device structure
  * @param[in]   cmd	: DMIC start or stop command
  * @return	  Zero on success, and a negative value on failure.
@@ -256,11 +679,26 @@ static void disable_interrupt(const struct device *dev)
 static int dmic_alif_pdm_trigger(const struct device *dev, enum dmic_trigger cmd)
 {
 	struct pdm_data *pdata = DEV_DATA(dev);
+	const struct pdm_config *cfg = DEV_CFG(dev);
+	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
+
+	LOG_INF("trigger called: dma_enabled=%d ", cfg->dma_enabled);
 
 	switch (cmd) {
 	case DMIC_TRIGGER_STOP:
+#ifdef CONFIG_ALIF_PDM_USE_DMA
+		if (cfg->dma_enabled) {
+			dma_stop(cfg->evtrtr_dev, cfg->dma_channel);
+		}
+#endif
 		disable_interrupt(dev);
 		pdata->record_data = 0;
+		{
+		uint32_t reg_val = sys_read32(reg_base + PDM_CONFIG_REGISTER);
+
+		reg_val &= ~PDM_CHANNEL_ENABLE;
+		sys_write32(reg_val, reg_base + PDM_CONFIG_REGISTER);
+		}
 
 		/* Free in-progress buffer to prevent slab leak */
 		if (pdata->data_buffer != NULL) {
@@ -277,14 +715,89 @@ static int dmic_alif_pdm_trigger(const struct device *dev, enum dmic_trigger cmd
 		break;
 
 	case DMIC_TRIGGER_START:
-		LOG_DBG("trigger start\n");
+
 		pdata->record_data = 1;
 		pdata->bytes_got = 0;
-		pdata->buf_index = 0;
-		pdata->data_buffer = NULL;
-		pdata->slab_missed = 0;
 
-		enable_interrupt(dev);
+#ifdef CONFIG_ALIF_PDM_USE_DMA
+		if (cfg->dma_enabled) {
+			pdata->data_buffer = get_slab(pdata);
+			if (!pdata->data_buffer) {
+				return -ENOMEM;
+			}
+			pdata->buf_index = UINT32_MAX;
+
+			if (pdata->num_channels == 0) {
+				LOG_ERR("PDM: no active channels");
+				return -EINVAL;
+			}
+
+			uint32_t n_samples = pdata->block_size /
+					(pdata->num_channels * sizeof(uint16_t));
+			uint32_t n_bursts  = n_samples;
+
+			/* build microcode */
+			if (!pdm_build_mcode(pdata, reg_base,
+					pdata->data_buffer, n_bursts,
+					cfg->periph_id, cfg->dma_channel,
+					pdata->channel_map)) {
+				return -ENOBUFS;
+			}
+
+			/* configure DMA */
+			struct dma_block_config dummy_block = {0};
+			struct dma_config dma_cfg = {0};
+
+			dma_cfg.channel_direction   = PERIPHERAL_TO_MEMORY;
+			dma_cfg.dma_callback        = pdm_dma_callback;
+			dma_cfg.user_data           = (void *)dev;
+			dma_cfg.source_data_size    = 4;
+			dma_cfg.dest_data_size      = 4;
+			dma_cfg.source_burst_length = 1;
+			dma_cfg.dest_burst_length   = 1;
+			dma_cfg.block_count         = 1;
+			dma_cfg.head_block          = &dummy_block;
+			dma_cfg.dma_slot            = cfg->periph_id;
+
+			int ret = dma_config(cfg->evtrtr_dev, cfg->dma_channel, &dma_cfg);
+
+			if (ret) {
+				return ret;
+			}
+
+			/* start DMA microcode */
+			ret = dma_pl330_start_with_mcode(cfg->dma_dev,
+					ALIF_DMA_DECODE_CHANNEL(cfg->dma_channel),
+					pdata->dma_mcode, PDM_DMA_MCODE_SIZE);
+			if (ret) {
+				return ret;
+			}
+			/* enable PDM channels AFTER DMA is ready */
+			uint32_t reg_val = sys_read32(reg_base + PDM_CONFIG_REGISTER);
+
+			reg_val |= pdata->channel_map;
+			sys_write32(reg_val, reg_base + PDM_CONFIG_REGISTER);
+		}
+#else
+		/* ---- ISR path  ---- */
+		{
+			pdata->buf_index   = 0;
+			pdata->data_buffer = NULL;
+			pdata->bytes_got   = 0;
+
+			uint32_t reg_val = sys_read32(reg_base + PDM_CONFIG_REGISTER);
+
+			reg_val |= pdata->channel_map;
+			sys_write32(reg_val, reg_base + PDM_CONFIG_REGISTER);
+			LOG_INF("CONFIG_REG after channel enable=0x%08x channel_map=0x%02x",
+				sys_read32(reg_base + PDM_CONFIG_REGISTER),
+				pdata->channel_map);
+
+			enable_interrupt(dev);
+			LOG_INF("IRQ_REG after enable=0x%08x",
+				sys_read32(reg_base + PDM_INTERRUPT_REGISTER));
+		}
+#endif
 		break;
 
 	default:
@@ -529,7 +1042,12 @@ static int pdm_initialize(const struct device *dev)
 	int32_t ret = 0;
 
 	DEVICE_MMIO_MAP(dev, K_MEM_CACHE_NONE);
-
+#ifdef CONFIG_ALIF_PDM_USE_DMA
+	LOG_INF("dma_enabled=%d dma_dev=%p evtrtr_dev=%p",
+		cfg->dma_enabled,
+		(void *)cfg->dma_dev,
+		(void *)cfg->evtrtr_dev);
+#endif
 	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
 
 	if (cfg->pcfg != NULL) {
@@ -555,15 +1073,29 @@ static int pdm_initialize(const struct device *dev)
 		LOG_ERR("Unable to turn on clock: err:%d", ret);
 		return ret;
 	}
+#ifdef CONFIG_ALIF_PDM_USE_DMA
+	if (cfg->dma_enabled) {
+		if (!device_is_ready(cfg->evtrtr_dev)) {
+			LOG_ERR("Event router not ready");
+			return -ENODEV;
+		}
+	}
+#endif
 
 	cfg->irq_config();
 
 	k_msgq_init(&pdata->buf_queue, (char *)pdata->queue_data, sizeof(void *), MAX_QUEUE_LEN);
 
 	/* Enable the Bypass IIR Filter */
-	sys_write32(pdata->bypass_iir_filter << PDM_BYPASS_IIR, reg_base + PDM_CTL_REGISTER);
+	uint32_t regdata = pdata->bypass_iir_filter << PDM_BYPASS_IIR;
 
-	sys_write32(cfg->fifo_watermark, reg_base + PDM_THRESHOLD_REGISTER);
+	if (cfg->dma_enabled) {
+		regdata |= (1U << 24U);   /* USE_DMA_HANDSHAKE */
+	}
+	sys_write32(regdata, reg_base + PDM_CTL_REGISTER);
+	uint32_t watermark = cfg->dma_enabled ? 1U : cfg->fifo_watermark;
+
+	sys_write32(watermark, reg_base + PDM_THRESHOLD_REGISTER);
 
 	LOG_DBG("alif pdm driver init okay");
 
@@ -626,7 +1158,26 @@ static int pdm_pm_action(const struct device *dev, enum pm_device_action action)
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),                                         \
 		.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),                                  \
 		.clkid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, clkid),                    \
-	};                                                                                         \
+		IF_ENABLED(CONFIG_ALIF_PDM_USE_DMA, (           \
+		.dma_dev = COND_CODE_1(DT_INST_NODE_HAS_PROP(n, dmas),           \
+				(DEVICE_DT_GET(DT_PHANDLE(DT_INST_DMAS_CTLR_BY_NAME(n, pdm_dma_1), \
+				    dma_controller))),                                       \
+				(NULL)),                                                     \
+			.evtrtr_dev = COND_CODE_1(                                           \
+				DT_INST_NODE_HAS_PROP(n, dmas),                                  \
+				(DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_NAME(n, pdm_dma_1))),         \
+				(NULL)),                                                          \
+			.dma_channel = COND_CODE_1(                                           \
+				DT_INST_NODE_HAS_PROP(n, dmas),                                   \
+				(DT_INST_DMAS_CELL_BY_NAME(n, pdm_dma_1, channel)),                \
+				(0)),                                                              \
+			.periph_id = COND_CODE_1(                                             \
+				DT_INST_NODE_HAS_PROP(n, dmas),                                    \
+				(DT_INST_DMAS_CELL_BY_NAME(n, pdm_dma_1, periph)),                 \
+				(0)),                                                              \
+				))                                                         \
+			.dma_enabled = DT_INST_NODE_HAS_PROP(n, dmas),                         \
+};                                                                                         \
 	static void pdm_irq_config_##n(void)                                                       \
 	{                                                                                          \
 		IRQ_CONNECT(DT_INST_IRQ_BY_NAME(n, warning_intr, irq),                             \
