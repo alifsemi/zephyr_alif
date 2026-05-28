@@ -140,6 +140,7 @@ struct video_cam_data {
 	struct k_poll_signal *signal;
 	struct video_format current_format;
 	bool is_streaming;
+	struct k_mutex stream_lock;  /* Protects is_streaming and restart */
 };
 
 #endif /* _VIDEO_ALIF_H_ */
