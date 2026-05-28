@@ -219,3 +219,18 @@
 		status = "disabled";
 	};
 };
+
+&cmp1 {
+	clocks = <&clockctrl ALIF_CMP1_CLK>,
+		 <&clockctrl ALIF_CMP0_CLK>;
+};
+
+&cmp2 {
+	clocks = <&clockctrl ALIF_CMP2_CLK>,
+		 <&clockctrl ALIF_CMP0_CLK>;
+};
+
+&cmp3 {
+	clocks = <&clockctrl ALIF_CMP3_CLK>,
+		 <&clockctrl ALIF_CMP0_CLK>;
+};
