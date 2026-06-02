@@ -32,6 +32,19 @@ properties:
     description:
       Handle to the PHY interface.
 
+  sync-pkt-enable:
+    type: boolean
+    description: |
+      Sync packets are enabled from sensor.
+
+  pkt2-pkt-time:
+    type: int
+    required: false
+    default: 0
+    description: |
+      Time gap in nanoseconds between two consecutive CSI-2 packets transmitted
+      on link.
+
   ipi-mode:
     type: string
     required: false
