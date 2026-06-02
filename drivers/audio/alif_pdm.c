@@ -274,6 +274,8 @@ static int dmic_alif_pdm_trigger(const struct device *dev, enum dmic_trigger cmd
 		while (k_msgq_get(&pdata->buf_queue, &buf, K_NO_WAIT) == 0) {
 			k_mem_slab_free(pdata->mem_slab, buf);
 		}
+
+		pm_device_busy_clear(dev);
 		break;
 
 	case DMIC_TRIGGER_START:
@@ -285,6 +287,8 @@ static int dmic_alif_pdm_trigger(const struct device *dev, enum dmic_trigger cmd
 		pdata->slab_missed = 0;
 
 		enable_interrupt(dev);
+
+		pm_device_busy_set(dev);
 		break;
 
 	default:
@@ -577,7 +581,75 @@ static const struct _dmic_ops dmic_alif_pdm_api = {
 };
 
 #if defined(CONFIG_PM_DEVICE)
+static int pdm_suspend(const struct device *dev)
+{
+	const struct pdm_config *cfg = DEV_CFG(dev);
+	int ret;
 
+	disable_interrupt(dev);
+	/* Disable PDM clock from clock manager */
+	if (cfg->clk_dev != NULL) {
+		ret = clock_control_off(cfg->clk_dev, cfg->clkid);
+		if (ret != 0 && ret != -EALREADY) {
+			LOG_ERR("Unable to turn off clock: err:%d", ret);
+			return ret;
+		}
+	}
+
+#if defined(CONFIG_PINCTRL)
+	/* Apply sleep pin configuration if available */
+	if (cfg->pcfg != NULL) {
+		ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_SLEEP);
+		if (ret < 0 && ret != -ENOENT) {
+			/* Ignore -ENOENT (sleep state not defined) */
+			return ret;
+		}
+	}
+#endif
+
+	return 0;
+}
+
+static int pdm_resume(const struct device *dev)
+{
+	const struct pdm_config *cfg = DEV_CFG(dev);
+	struct pdm_data *pdata = DEV_DATA(dev);
+	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
+	int ret = 0;
+
+#if defined(CONFIG_PINCTRL)
+	if (cfg->pcfg != NULL) {
+		ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_DEFAULT);
+		if (ret < 0) {
+			LOG_ERR("PDM pinctrl setup failed [%d]", ret);
+			return ret;
+		}
+	}
+#endif
+	if (cfg->clk_dev) {
+		/* Reconfigure PDM clock sources */
+		ret = clock_control_configure(cfg->clk_dev, cfg->clkid, NULL);
+		if (ret != 0 && ret != -ENOSYS && ret != -ENOTSUP) {
+			LOG_ERR("Unable to configure clock: err:%d", ret);
+			return ret;
+		}
+
+		/* Enable PDM clock from clock manager */
+		ret = clock_control_on(cfg->clk_dev, cfg->clkid);
+		if (ret != 0 && ret != -EALREADY) {
+			LOG_ERR("Unable to turn on clock: err:%d", ret);
+			return ret;
+		}
+	}
+	/* Enable the Bypass IIR Filter */
+	sys_write32(pdata->bypass_iir_filter << PDM_BYPASS_IIR, reg_base + PDM_CTL_REGISTER);
+
+	sys_write32(cfg->fifo_watermark, reg_base + PDM_THRESHOLD_REGISTER);
+
+	LOG_DBG("alif pdm driver resume okay");
+
+	return 0;
+}
 /**
  * @brief PDM PM device action handler
  *
@@ -591,23 +663,28 @@ static const struct _dmic_ops dmic_alif_pdm_api = {
  */
 static int pdm_pm_action(const struct device *dev, enum pm_device_action action)
 {
-	switch (action) {
-	case PM_DEVICE_ACTION_RESUME:
-		/* Device is powered - restore state */
-		return pdm_initialize(dev);
+	int ret = 0;
 
+	switch (action) {
 	case PM_DEVICE_ACTION_SUSPEND:
 		/* Save state and prepare for power down */
+		ret = pdm_suspend(dev);
+		break;
+	case PM_DEVICE_ACTION_RESUME:
+		/* Device is powered - restore state */
+		ret = pdm_resume(dev);
+		break;
+
 	case PM_DEVICE_ACTION_TURN_OFF:
 	case PM_DEVICE_ACTION_TURN_ON:
 		/* Power domain handling is automatic via PM framework */
 		return 0;
 
 	default:
-		break;
+		return -ENOTSUP;
 	}
 
-	return -ENOTSUP;
+	return ret;
 }
 #endif /* CONFIG_PM_DEVICE */
 
