@@ -863,19 +863,39 @@ static int transceive(const struct device *dev,
 	}
 #endif
 
-	write_imr(dev, reg_data);
-
 	if (!spi_dw_is_slave(spi)) {
+		write_imr(dev, reg_data);
+
 		/* if cs is not defined as gpio, use hw cs */
 		if (spi_cs_is_gpio(config)) {
 			spi_context_cs_control(&spi->ctx, true);
 		} else {
 			write_ser(dev, BIT(config->slave));
 		}
+	} else {
+		/*
+		 * In slave mode, keep interrupts masked until after SSI is
+		 * enabled and the TX FIFO is prefilled.  Some controllers fault
+		 * on DR writes while SSIENR is 0, but waiting for TXEIS leaves
+		 * a window where the master can clock an empty TX FIFO.
+		 */
+		write_imr(dev, DW_SPI_IMR_MASK);
 	}
 
 	LOG_DBG("Enabling controller");
 	set_bit_ssienr(dev);
+
+	if (spi_dw_is_slave(spi)) {
+		if (spi_context_tx_on(&spi->ctx)
+#ifdef CONFIG_SPI_DW_USE_DMA
+		    && (!info->dma_tx.enabled && !info->dma_rx.enabled)
+#endif
+		    ) {
+			push_data(dev);
+		}
+
+		write_imr(dev, reg_data);
+	}
 
 	/* Do a dummy write in case of rx only */
 	if (!spi_dw_is_slave(spi) && (!tx_bufs || !tx_bufs->buffers)) {
