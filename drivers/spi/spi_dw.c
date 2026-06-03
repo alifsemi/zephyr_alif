@@ -200,9 +200,10 @@ static void pull_data(const struct device *dev)
 		spi->fifo_diff--;
 	}
 
-	if (!spi->ctx.rx_len && spi->ctx.tx_len < info->fifo_depth) {
+	if (!spi->ctx.rx_len && spi->ctx.tx_len &&
+	    spi->ctx.tx_len < info->fifo_depth) {
 		write_rxftlr(dev, spi->ctx.tx_len - 1);
-	} else if (read_rxftlr(dev) >= spi->ctx.rx_len) {
+	} else if (spi->ctx.rx_len && read_rxftlr(dev) >= spi->ctx.rx_len) {
 		write_rxftlr(dev, spi->ctx.rx_len - 1);
 	}
 }
@@ -833,7 +834,7 @@ static int transceive(const struct device *dev,
 
 	if (spi_dw_is_slave(spi)) {
 		if (spi->ctx.rx_len &&
-		    spi->ctx.rx_len < dw_spi_rxftlr_dflt) {
+		    spi->ctx.rx_len <= dw_spi_rxftlr_dflt) {
 			reg_data = spi->ctx.rx_len - 1;
 		}
 	} else {
