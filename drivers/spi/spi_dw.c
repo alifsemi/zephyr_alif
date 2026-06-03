@@ -612,6 +612,11 @@ static int spi_dw_configure(const struct device *dev,
 		return -EINVAL;
 	}
 
+	if (!(config->operation & SPI_OP_MODE_SLAVE) && !config->frequency) {
+		LOG_ERR("Master mode requires non-zero frequency");
+		return -EINVAL;
+	}
+
 	if (info->max_xfer_size < SPI_WORD_SIZE_GET(config->operation)) {
 		LOG_ERR("Max xfer size is %u, word size of %u not allowed",
 			info->max_xfer_size, SPI_WORD_SIZE_GET(config->operation));
