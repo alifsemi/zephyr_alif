@@ -395,7 +395,7 @@ static int alif_clock_control_set_rate(const struct device *dev,
 	}
 	reg_addr = module_base + ALIF_CLOCK_CFG_REG(clk_id);
 
-	freq_div = (clk_freq / frequency);
+	freq_div = DIV_ROUND_CLOSEST(clk_freq, frequency);
 
 	alif_get_div_reg_info(clk_id, &div_mask, &div_pos);
 
