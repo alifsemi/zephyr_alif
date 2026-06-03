@@ -169,8 +169,8 @@
 		interrupts = <345 0>;
 		pinctrl-0 = <&pinctrl_cam8>;
 		pinctrl-names = "default";
-		clocks = <&clockctrl ALIF_CPI_CLK>;
-		clock-names = "cam_clk";
+		clocks = <&clockctrl ALIF_CPI_CLK>, <&clockctrl ALIF_CAMERA_PIX_SYST_ACLK>;
+		clock-names = "cam_clk", "pix_clk";
 		fifo-wr-wmark = <0x18>;
 		fifo-rd-wmark = <0x08>;
 		wait-vsync;
