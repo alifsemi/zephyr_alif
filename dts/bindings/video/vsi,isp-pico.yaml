@@ -84,6 +84,23 @@ properties:
     description: |
       specify the top coordinate at the start of ROI.
 
+  binning-en:
+    type: boolean
+    description: |
+      Specify the binning enablement status of ISP.
+
+  binning-hstep:
+    type: int
+    description: |
+      Binning horizontal step size, stored as an 8-bit unsigned value.
+      Valid range is 1 to 255.
+
+  binning-vstep:
+    type: int
+    description: |
+      Binning vertical step size, stored as an 8-bit unsigned value.
+      Valid range is 1 to 255.
+
 child-binding:
   child-binding:
       include: video-interfaces.yaml

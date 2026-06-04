@@ -66,6 +66,12 @@ struct rect {
 	uint32_t height;
 };
 
+struct binning {
+	bool enable;
+	uint8_t hstep;
+	uint8_t vstep;
+};
+
 struct port_parameters {
 	enum input_type input;
 	uint8_t tpg_image_idx;
@@ -81,6 +87,7 @@ struct port_parameters {
 	struct rect out_form_rect;
 	uint8_t isp_idx;
 	uint8_t port_id;
+	struct binning bin;
 };
 
 struct channel_parameters {
