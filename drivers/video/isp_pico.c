@@ -1064,7 +1064,31 @@ int video_isp_init(const struct device *dev)
 	DT_NODELABEL(DT_STRING_TOKEN(DT_INST_ENDPOINT_BY_ID(n, pid, epid), \
 				remote_endpoint_label))
 
+/*
+ * binning-hstep and binning-vstep are DT ints, but struct isp_vsi_binning
+ * stores them as uint8_t. Reject values that would truncate.
+ *
+ * Binning steps are only meaningful when the binning module is built into the
+ * ISP library and binning is enabled for the instance, where a step of zero is
+ * not a valid ratio. When binning is disabled both steps are forced to zero, so
+ * any value set in the devicetree is ignored.
+ */
+#define ISP_BINNING_ASSERT(i)                                                                 \
+	BUILD_ASSERT(!DT_INST_PROP(i, binning_en) ||                                          \
+		     IS_ENABLED(CONFIG_ISP_LIB_BINNING_MODULE),                               \
+		     "CONFIG_ISP_LIB_BINNING_MODULE required by binning-en on "               \
+		     DT_NODE_FULL_NAME(DT_DRV_INST(i)));                                      \
+	BUILD_ASSERT(!DT_INST_PROP(i, binning_en) ||                                          \
+		     IN_RANGE(DT_INST_PROP(i, binning_hstep), 1, UINT8_MAX),                  \
+		     "binning-hstep must fit in uint8_t (1-255) on "                          \
+		     DT_NODE_FULL_NAME(DT_DRV_INST(i)));                                      \
+	BUILD_ASSERT(!DT_INST_PROP(i, binning_en) ||                                          \
+		     IN_RANGE(DT_INST_PROP(i, binning_vstep), 1, UINT8_MAX),                  \
+		     "binning-vstep must fit in uint8_t (1-255) on "                          \
+		     DT_NODE_FULL_NAME(DT_DRV_INST(i)));
+
 #define ISP_DEFINE(i)                                                                         \
+	ISP_BINNING_ASSERT(i)                                                                 \
 	static void isp_config_func_##i(const struct device *dev);                            \
 	const struct isp_config isp_config_##i = {                                            \
 		DEVICE_MMIO_ROM_INIT(DT_DRV_INST(i)),                                         \
@@ -1092,6 +1116,17 @@ int video_isp_init(const struct device *dev)
 				},                                                            \
 				.isp_idx = i,                                                 \
 				.port_id = 0,                                                 \
+				.bin = {                                                      \
+					.enable = DT_INST_PROP(i, binning_en),                \
+					.hstep = COND_CODE_1(DT_INST_PROP(i, binning_en),     \
+							((uint8_t)DT_INST_PROP(i,             \
+								binning_hstep)),              \
+							(0)),                                 \
+					.vstep = COND_CODE_1(DT_INST_PROP(i, binning_en),     \
+							((uint8_t)DT_INST_PROP(i,             \
+								binning_vstep)),              \
+							(0)),                                 \
+				},                                                            \
 			},                                                                    \
 			.channel = {                                                          \
 				.trans_bus = ONLINE,                                          \
