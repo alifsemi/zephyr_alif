@@ -13,3 +13,19 @@ properties:
 
   interrupts:
     required: true
+
+  tx-fifo-watermark:
+    type: int
+    default: 8
+    description: |
+      TX FIFO trigger level (0-15). An interrupt is generated when the number
+      of entries in the TX FIFO is at or below this value. Default is 8
+      (half of the 16-entry FIFO depth).
+
+  rx-fifo-watermark:
+    type: int
+    default: 8
+    description: |
+      RX FIFO trigger level (0-15). An interrupt is generated when the number
+      of entries in the RX FIFO is at or above this value. Default is 8
+      (half of the 16-entry FIFO depth).
