@@ -437,15 +437,24 @@ static inline void adc_init_channel_select(uintptr_t adc, uint32_t channel)
 	sys_write32(data, adc + ADC_SEQUENCER_CTRL);
 }
 
-static inline void adc_set_ch_scan_mode(const struct device *dev)
+static inline int adc_set_ch_scan_mode(const struct device *dev)
 {
 	uint32_t regs = DEVICE_MMIO_NAMED_GET(dev, adc_reg);
 	const struct adc_config *config = dev->config;
 	uint32_t data;
 
+	/* Error: single-shot conversion with multi-channel scan is not supported */
+	if ((config->conv_mode == ADC_CONV_MODE_SINGLE_SHOT) &&
+	    (config->scan_mode == ADC_SCAN_MODE_MULTI_CH)) {
+		LOG_ERR("Single-shot conversion with multi-channel scan mode is not supported");
+		return -EINVAL;
+	}
+
 	data = sys_read32(regs + ADC_SEQUENCER_CTRL);
 	data |= config->scan_mode;
 	sys_write32(data, regs + ADC_SEQUENCER_CTRL);
+
+	return 0;
 }
 
 static inline void enable_adc24(const struct device *dev)
@@ -653,11 +662,18 @@ void adc_context_update_buffer_pointer(struct adc_context *ctx, bool repeat_samp
 	}
 }
 
-static int check_buffer_size(const struct adc_sequence *sequence, uint8_t active_channels)
+static int check_buffer_size(const struct adc_sequence *sequence,
+			     uint8_t active_channels, uint8_t conv_mode)
 {
 	size_t needed_buffer_size;
 
-	needed_buffer_size = active_channels * sizeof(uint32_t);
+	if (conv_mode == ADC_CONV_MODE_SINGLE_SHOT) {
+		/* Single-shot: single sample per conversion */
+		needed_buffer_size = sizeof(uint32_t);
+	} else {
+		/* Continuous/multi-channel: buffer size based on number of active channels */
+		needed_buffer_size = (size_t)active_channels * sizeof(uint32_t);
+	}
 
 	if (sequence->options) {
 		needed_buffer_size *= (1 + sequence->options->extra_samplings);
@@ -697,6 +713,7 @@ static int adc_start_read(const struct device *dev, const struct adc_sequence *s
 {
 	uintptr_t regs = DEVICE_MMIO_NAMED_GET(dev, adc_reg);
 	struct adc_data *data = dev->data;
+	const struct adc_config *config = dev->config;
 	uint32_t channel;
 	int error;
 
@@ -736,7 +753,7 @@ static int adc_start_read(const struct device *dev, const struct adc_sequence *s
 		return -ENOTSUP;
 	}
 
-	error = check_buffer_size(sequence, data->channels_count);
+	error = check_buffer_size(sequence, data->channels_count, config->conv_mode);
 	if (error) {
 		return error;
 	}
@@ -947,6 +964,7 @@ static int adc_hw_init(const struct device *dev)
 	const struct adc_config *config = dev->config;
 	struct adc_data *data = dev->data;
 	uintptr_t regs = DEVICE_MMIO_NAMED_GET(dev, adc_reg);
+	int err;
 
 	/* adc clock configuration */
 	adc_clk_config();
@@ -987,7 +1005,10 @@ static int adc_hw_init(const struct device *dev)
 	adc_set_comparator_ctrl_bit(regs, config->comparator_threshold_comparison);
 
 	/* set channel scan mode */
-	adc_set_ch_scan_mode(dev);
+	err = adc_set_ch_scan_mode(dev);
+	if (err) {
+		return err;
+	}
 
 	/* disabling the interrupts */
 	adc_unmask_interrupt(regs, data->interrupts);
