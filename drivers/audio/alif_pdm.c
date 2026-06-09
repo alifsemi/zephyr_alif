@@ -396,8 +396,7 @@ static bool pdm_emit_phase2(struct dma_pl330_opcode_buf *ob,
 }
 
 /**
- * @fn		static bool pdm_build_mcode(const struct device *dev,
- *					    struct pdm_data *pdata,
+ * @fn		static bool pdm_build_mcode(struct pdm_data *pdata,
  *					    uintptr_t reg_base,
  *					    uint8_t *dst,
  *					    uint32_t n_samples,
@@ -406,9 +405,8 @@ static bool pdm_emit_phase2(struct dma_pl330_opcode_buf *ob,
  *					    uint8_t channel_map)
  * @brief	Builds the PL330 DMA microcode sequence to transfer audio
  *		samples from PDM channel pair registers to a destination
- *		buffer. Waits for FIFO DRQ on the first active pair and
+ *		buffer. Waits for FIFO on the first active pair and
  *		reads all active pairs per sample iteration.
- * @param[in]	dev         : Pointer to the runtime device structure.
  * @param[in]	pdata       : Pointer to the PDM driver data structure.
  * @param[in]	reg_base    : MMIO base address of the PDM peripheral.
  * @param[in]	dst         : Pointer to the destination PCM data buffer.
@@ -419,8 +417,7 @@ static bool pdm_emit_phase2(struct dma_pl330_opcode_buf *ob,
  * @return	true on success, false if mcode buffer overflows or
  *		no active channel pairs found.
  */
-static bool pdm_build_mcode(const struct device *dev,
-		struct pdm_data *pdata,
+static int pdm_build_mcode(struct pdm_data *pdata,
 		uintptr_t reg_base,
 		uint8_t  *dst,
 		uint32_t  n_samples,
@@ -439,14 +436,14 @@ static bool pdm_build_mcode(const struct device *dev,
 
 	if (layout.num_active_pairs == 0) {
 		LOG_ERR("PDM: no active channel pairs in channel_map");
-		return false;
+		return -EINVAL;
 	}
 
 	uint16_t lc0, lc1;
 
 	if (!factorize_loop_counts(n_samples, &lc1, &lc0)) {
 		LOG_ERR("PDM: n_samples %u cannot be factored", n_samples);
-		return false;
+		return -EINVAL;
 	}
 
 	uint32_t slab_addr = (uint32_t)local_to_global(dst);
@@ -461,19 +458,39 @@ static bool pdm_build_mcode(const struct device *dev,
 
 	if (!ret) {
 		LOG_ERR("PDM mcode overflow: increase PDM_DMA_MCODE_SIZE");
-		return false;
+		return -ENOMEM;
 	}
+
+	return 0;
+}
+
+/**
+ * @fn		static int pdm_dma_start(const struct device *dev,
+ *					   struct pdm_data *pdata,
+ *					   uint8_t dma_channel)
+ * @brief	Launches the PL330 DMA channel with the microcode that has
+ *		already been built into pdata->dma_mcode.
+ * @param[in]	dev         : Pointer to the PDM device.
+ * @param[in]	pdata       : Pointer to the PDM driver data structure.
+ * @param[in]	dma_channel : DMA channel number (decoded) to launch.
+ * @return	0 on success, -ENODEV if pl330_dev is not bound, or the
+ *		negative errno returned by dma_pl330_start_with_mcode.
+ */
+static int pdm_dma_start(const struct device *dev,
+		struct pdm_data *pdata,
+		uint8_t dma_channel)
+{
 	const struct pdm_config *cfg = DEV_CFG(dev);
 
 	if (!cfg->pl330_dev) {
 		LOG_ERR("PDM: PL330 device not bound");
-		return false;
+		return -ENODEV;
 	}
 
 	return dma_pl330_start_with_mcode(cfg->pl330_dev,
 			dma_channel,
 			pdata->dma_mcode,
-			PDM_DMA_MCODE_SIZE) == 0;
+			PDM_DMA_MCODE_SIZE);
 }
 
 /**
@@ -527,11 +544,17 @@ static void pdm_dma_callback(const struct device *dma_dev, void *user_data,
 		return;
 	}
 
-	if (!pdm_build_mcode(dev, pdata, reg_base,
+	uint8_t dma_ch = ALIF_DMA_DECODE_CHANNEL(cfg->dma_channel);
+	int rc = pdm_build_mcode(pdata, reg_base,
 			pdata->data_buffer, n_bursts,
-			cfg->periph_id, ALIF_DMA_DECODE_CHANNEL(cfg->dma_channel),
-			pdata->channel_map)) {
-		LOG_ERR("PDM mcode build failed in callback");
+			cfg->periph_id, dma_ch,
+			pdata->channel_map);
+
+	if (rc == 0) {
+		rc = pdm_dma_start(dev, pdata, dma_ch);
+	}
+	if (rc < 0) {
+		LOG_ERR("PDM mcode build/start failed in callback: %d", rc);
 		k_mem_slab_free(pdata->mem_slab, pdata->data_buffer);
 		pdata->data_buffer = NULL;
 		return;
@@ -830,12 +853,18 @@ static int dmic_alif_pdm_trigger(const struct device *dev, enum dmic_trigger cmd
 			}
 
 			/* build microcode */
-			if (!pdm_build_mcode(dev, pdata, reg_base,
-					     pdata->data_buffer, n_bursts,
-					     cfg->periph_id,
-					     ALIF_DMA_DECODE_CHANNEL(cfg->dma_channel),
-					     pdata->channel_map)) {
-				return -ENOBUFS;
+			uint8_t dma_ch = ALIF_DMA_DECODE_CHANNEL(cfg->dma_channel);
+			int rc = pdm_build_mcode(pdata, reg_base,
+					pdata->data_buffer, n_bursts,
+					cfg->periph_id, dma_ch,
+					pdata->channel_map);
+
+			if (rc == 0) {
+				rc = pdm_dma_start(dev, pdata, dma_ch);
+			}
+			if (rc < 0) {
+				LOG_ERR("PDM mcode build/start failed: %d", rc);
+				return rc == -ENOMEM ? -ENOBUFS : rc;
 			}
 
 			/* enable PDM channels AFTER DMA is ready */
