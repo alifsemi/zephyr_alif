@@ -35,6 +35,7 @@
 #define PDM_CLK_MODE              (16U)  /* PDM clock frequency mode  */
 #define MAX_DATA_ITEMS            (8U)   /* Max data items      */
 #define MAX_NUM_CHANNELS          (8U)   /* Max number of channel   */
+#define MAX_NUM_PAIRS             (MAX_NUM_CHANNELS / 2U)
 #define MAX_QUEUE_LEN             (100U) /* Max Queue length      */
 #define PDM_CH_OFFSET             (0x100U)
 
