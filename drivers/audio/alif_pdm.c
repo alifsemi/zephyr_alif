@@ -136,6 +136,266 @@ static bool factorize_loop_counts(uint32_t n_bursts,
 }
 
 /**
+ * @brief Layout derived once from an 8-bit per-mic channel_map.
+ *
+ * Consumed by the two-phase DMA microcode emitter.
+ * Mics are organized as 4 stereo pairs:
+ * pair 0 = mics 0,1; pair 1 = mics 2,3; pair 2 = mics 4,5; pair 3 = mics 6,7.
+ *
+ * - @c active_pair_mask uses the same 8-bit space as channel_map: bit 0
+ *   = pair 0 active, bit 2 = pair 1, bit 4 = pair 2, bit 6 = pair 3.
+ * - @c pair_mask packs those four meaningful bits down to bits 0..3.
+ */
+struct pdm_channel_layout {
+	uint8_t channel_map;
+	uint8_t num_channels;
+	uint8_t active_pair_mask;
+	uint8_t pair_mask;
+	uint8_t num_active_pairs;
+};
+
+/**
+ * @fn		static void pdm_classify_channels(uint8_t channel_map,
+ *						  struct pdm_channel_layout *out)
+ * @brief	Derives the per-pair layout used by the two-phase microcode
+ *		emitter from an 8-bit per-mic channel_map. Computes the
+ *		packed pair mask, the active-pair mask (in channel-map bit
+ *		space), the number of active pairs, and the total number of
+ *		enabled channels.
+ * @param[in]	channel_map : Bitmask of enabled mics (bit n = mic n).
+ * @param[out]	out         : Layout populated from @p channel_map.
+ * @return	None.
+ */
+static void pdm_classify_channels(uint8_t channel_map,
+		struct pdm_channel_layout *out)
+{
+	uint8_t apm = (channel_map | (channel_map >> 1)) & 0x55U;
+	uint8_t pair_mask = (uint8_t)(((apm >> 0) & 0x1U) |
+				      ((apm >> 1) & 0x2U) |
+				      ((apm >> 2) & 0x4U) |
+				      ((apm >> 3) & 0x8U));
+
+	out->channel_map      = channel_map;
+	out->num_channels     = (uint8_t)POPCOUNT(channel_map);
+	out->active_pair_mask = apm;
+	out->pair_mask        = pair_mask;
+	out->num_active_pairs = (uint8_t)POPCOUNT(pair_mask);
+}
+
+/**
+ * @fn		static bool pdm_emit_phase1(struct dma_pl330_opcode_buf *ob,
+ *					    uintptr_t reg_base,
+ *					    uint32_t slab_addr,
+ *					    uint8_t periph_id,
+ *					    uint16_t lc1, uint16_t lc0,
+ *					    const struct pdm_channel_layout *layout)
+ * @brief	Emits Phase-1 of the PDM microcode: waits for the periph
+ *		DRQ on the first active pair, then reads one 32-bit word
+ *		from each active pair FIFO per sample iteration and writes
+ *		the raw pair stream into the slab. Loop iterations are
+ *		split across LC1 x LC0 to cover n_samples > 256.
+ * @param[in,out] ob       : Opcode buffer being built (offset advanced).
+ * @param[in]	reg_base    : MMIO base address of the PDM peripheral.
+ * @param[in]	slab_addr   : Global address of the destination slab.
+ * @param[in]	periph_id   : DMA peripheral request ID for the PDM FIFO.
+ * @param[in]	lc1         : Outer loop counter (1..256).
+ * @param[in]	lc0         : Inner loop counter (1..256).
+ * @param[in]	layout      : Pair layout from pdm_classify_channels().
+ * @return	true on success, false if any opcode emit failed or the
+ *		inner/outer loop body exceeded 255 bytes.
+ */
+static bool pdm_emit_phase1(struct dma_pl330_opcode_buf *ob,
+		uintptr_t reg_base,
+		uint32_t  slab_addr,
+		uint8_t   periph_id,
+		uint16_t  lc1, uint16_t lc0,
+		const struct pdm_channel_layout *layout)
+{
+	const uint32_t ch_pair_offsets[] = {
+		PDM_CH0_CH1_AUDIO_OUT,
+		PDM_CH2_CH3_AUDIO_OUT,
+		PDM_CH4_CH5_AUDIO_OUT,
+		PDM_CH6_CH7_AUDIO_OUT,
+	};
+	union dma_pl330_ccr ccr_p1 = { .value = 0 };
+
+	ccr_p1.b.src_inc        = 0;
+	ccr_p1.b.dst_inc        = 1;
+	ccr_p1.b.src_burst_size = 2;        /* 4 bytes per beat */
+	ccr_p1.b.dst_burst_size = 2;
+	ccr_p1.b.src_burst_len  = 0;
+	ccr_p1.b.dst_burst_len  = 0;
+	ccr_p1.b.src_cache_ctrl = 0;
+	ccr_p1.b.dst_cache_ctrl = 2;
+	ccr_p1.b.dst_prot_ctrl  = 0x0;
+	ccr_p1.b.src_prot_ctrl  = 0x0;
+	ccr_p1.b.endian_swap    = 0x0;
+
+	bool ret = true;
+
+	ret &= dma_pl330_gen_move(ccr_p1.value, DMA_PL330_REG_CCR, ob);
+	ret &= dma_pl330_gen_move(slab_addr, DMA_PL330_REG_DAR, ob);
+
+	ret &= dma_pl330_gen_loop(DMA_PL330_LC_1, lc1, ob);
+	uint32_t outer_start = ob->off;
+
+	ret &= dma_pl330_gen_loop(DMA_PL330_LC_0, lc0, ob);
+	uint32_t inner_start = ob->off;
+
+	bool first_emitted = false;
+
+	for (uint8_t pair = 0; pair < MAX_NUM_PAIRS; pair++) {
+		if (!(layout->active_pair_mask & (1U << (pair * 2U)))) {
+			continue;
+		}
+		ret &= dma_pl330_gen_move(
+				(uint32_t)(reg_base + ch_pair_offsets[pair]),
+				DMA_PL330_REG_SAR, ob);
+		if (!first_emitted) {
+			ret &= dma_pl330_gen_flushperiph(periph_id, ob);
+			ret &= dma_pl330_gen_wfp(DMA_PL330_XFER_SINGLE,
+						 periph_id, ob);
+			first_emitted = true;
+		}
+		ret &= dma_pl330_gen_loadperiph(DMA_PL330_XFER_SINGLE,
+						periph_id, ob);
+		ret &= dma_pl330_gen_store(DMA_PL330_XFER_FORCE, ob);
+	}
+
+	uint32_t inner_jump = ob->off - inner_start;
+
+	if (inner_jump > UINT8_MAX) {
+		LOG_ERR("PDM mcode: P1 inner loop body too large (%u bytes, max 255)",
+			inner_jump);
+		return false;
+	}
+
+	struct dma_pl330_loop lp0 = {
+		.xfer_type = DMA_PL330_XFER_SINGLE,
+		.lc        = DMA_PL330_LC_0,
+		.jump      = (uint8_t)inner_jump,
+		.nf        = true,
+	};
+	ret &= dma_pl330_gen_loopend(&lp0, ob);
+
+	uint32_t outer_jump = ob->off - outer_start;
+
+	if (outer_jump > UINT8_MAX) {
+		LOG_ERR("PDM mcode: P1 outer loop body too large (%u bytes, max 255)",
+			outer_jump);
+		return false;
+	}
+
+	struct dma_pl330_loop lp1 = {
+		.xfer_type = DMA_PL330_XFER_SINGLE,
+		.lc        = DMA_PL330_LC_1,
+		.jump      = (uint8_t)outer_jump,
+		.nf        = true,
+	};
+	ret &= dma_pl330_gen_loopend(&lp1, ob);
+
+	return ret;
+}
+
+/**
+ * @fn		static bool pdm_emit_phase2(struct dma_pl330_opcode_buf *ob,
+ *					    uint32_t slab_addr,
+ *					    uint16_t lc1, uint16_t lc0,
+ *					    const struct pdm_channel_layout *layout)
+ * @brief	Emits Phase-2 of the PDM microcode: compacts the raw pair
+ *		stream in place. For each sample iteration, walks the pair
+ *		words just written by Phase 1, copies the 16-bit halves the
+ *		channel_map selects, and skips the rest by advancing SAR.
+ *		Read trails write, so in-place compaction is safe.
+ * @param[in,out] ob       : Opcode buffer being built (offset advanced).
+ * @param[in]	slab_addr   : Global address of the slab (both SAR and DAR).
+ * @param[in]	lc1         : Outer loop counter (1..256).
+ * @param[in]	lc0         : Inner loop counter (1..256).
+ * @param[in]	layout      : Pair layout from pdm_classify_channels().
+ * @return	true on success, false if any opcode emit failed or the
+ *		inner/outer loop body exceeded 255 bytes.
+ */
+static bool pdm_emit_phase2(struct dma_pl330_opcode_buf *ob,
+		uint32_t  slab_addr,
+		uint16_t  lc1, uint16_t lc0,
+		const struct pdm_channel_layout *layout)
+{
+	union dma_pl330_ccr ccr_p2 = { .value = 0 };
+
+	ccr_p2.b.src_inc        = 1;
+	ccr_p2.b.dst_inc        = 1;
+	ccr_p2.b.src_burst_size = 1;        /* 2 bytes per beat */
+	ccr_p2.b.dst_burst_size = 1;
+	ccr_p2.b.src_burst_len  = 0;
+	ccr_p2.b.dst_burst_len  = 0;
+	ccr_p2.b.src_cache_ctrl = 2;
+	ccr_p2.b.dst_cache_ctrl = 2;
+	ccr_p2.b.dst_prot_ctrl  = 0x0;
+	ccr_p2.b.src_prot_ctrl  = 0x0;
+	ccr_p2.b.endian_swap    = 0x0;
+
+	bool ret = true;
+
+	ret &= dma_pl330_gen_move(ccr_p2.value, DMA_PL330_REG_CCR, ob);
+	ret &= dma_pl330_gen_move(slab_addr, DMA_PL330_REG_SAR, ob);
+	ret &= dma_pl330_gen_move(slab_addr, DMA_PL330_REG_DAR, ob);
+
+	ret &= dma_pl330_gen_loop(DMA_PL330_LC_1, lc1, ob);
+	uint32_t outer_start = ob->off;
+
+	ret &= dma_pl330_gen_loop(DMA_PL330_LC_0, lc0, ob);
+	uint32_t inner_start = ob->off;
+
+	for (uint8_t ch = 0; ch < MAX_NUM_CHANNELS; ch++) {
+		uint8_t pair_bit = (uint8_t)(1U << ((ch & ~1U)));
+
+		if (!(layout->active_pair_mask & pair_bit)) {
+			continue;       /* pair not written by Phase 1 */
+		}
+		if (layout->channel_map & (1U << ch)) {
+			ret &= dma_pl330_gen_load(DMA_PL330_XFER_SINGLE, ob);
+			ret &= dma_pl330_gen_store(DMA_PL330_XFER_SINGLE, ob);
+		} else {
+			ret &= dma_pl330_gen_add(DMA_PL330_REG_SAR, 2U, ob);
+		}
+	}
+
+	uint32_t inner_jump = ob->off - inner_start;
+
+	if (inner_jump > UINT8_MAX) {
+		LOG_ERR("PDM mcode: P2 inner loop body too large (%u bytes, max 255)",
+			inner_jump);
+		return false;
+	}
+
+	struct dma_pl330_loop lp0 = {
+		.xfer_type = DMA_PL330_XFER_SINGLE,
+		.lc        = DMA_PL330_LC_0,
+		.jump      = (uint8_t)inner_jump,
+		.nf        = true,
+	};
+	ret &= dma_pl330_gen_loopend(&lp0, ob);
+
+	uint32_t outer_jump = ob->off - outer_start;
+
+	if (outer_jump > UINT8_MAX) {
+		LOG_ERR("PDM mcode: P2 outer loop body too large (%u bytes, max 255)",
+			outer_jump);
+		return false;
+	}
+
+	struct dma_pl330_loop lp1 = {
+		.xfer_type = DMA_PL330_XFER_SINGLE,
+		.lc        = DMA_PL330_LC_1,
+		.jump      = (uint8_t)outer_jump,
+		.nf        = true,
+	};
+	ret &= dma_pl330_gen_loopend(&lp1, ob);
+
+	return ret;
+}
+
+/**
  * @fn		static bool pdm_build_mcode(const struct device *dev,
  *					    struct pdm_data *pdata,
  *					    uintptr_t reg_base,
@@ -173,54 +433,14 @@ static bool pdm_build_mcode(const struct device *dev,
 		.off      = 0,
 		.buf_size = PDM_DMA_MCODE_SIZE,
 	};
-	const uint32_t ch_pair_offsets[] = {
-		PDM_CH0_CH1_AUDIO_OUT,
-		PDM_CH2_CH3_AUDIO_OUT,
-		PDM_CH4_CH5_AUDIO_OUT,
-		PDM_CH6_CH7_AUDIO_OUT,
-	};
-	const uint8_t ch_pair_masks[] = {
-		PDM_CHANNEL_0 | PDM_CHANNEL_1,
-		PDM_CHANNEL_2 | PDM_CHANNEL_3,
-		PDM_CHANNEL_4 | PDM_CHANNEL_5,
-		PDM_CHANNEL_6 | PDM_CHANNEL_7,
-	};
+	struct pdm_channel_layout layout;
 
-	/* find first active pair — waits for FIFO request */
-	int first_active_pair = -1;
+	pdm_classify_channels(channel_map, &layout);
 
-	for (int i = 0; i < 4; i++) {
-		if (channel_map & ch_pair_masks[i]) {
-			first_active_pair = i;
-			break;
-		}
-	}
-
-	if (first_active_pair == -1) {
+	if (layout.num_active_pairs == 0) {
 		LOG_ERR("PDM: no active channel pairs in channel_map");
 		return false;
 	}
-
-	union dma_pl330_ccr ccr = { .value = 0 };
-
-	ccr.b.src_inc        = 0;
-	ccr.b.dst_inc        = 1;
-	ccr.b.src_burst_size = 2;
-	ccr.b.dst_burst_size = 2;
-	ccr.b.src_burst_len  = 0;
-	ccr.b.dst_burst_len  = 0;
-	ccr.b.src_cache_ctrl = 0;
-	ccr.b.dst_cache_ctrl = 2;
-	ccr.b.dst_prot_ctrl  = 0x0;
-	ccr.b.src_prot_ctrl  = 0x0;
-	ccr.b.endian_swap    = 0x0;
-
-	bool ret = true;
-
-	ret &= dma_pl330_gen_move(ccr.value, DMA_PL330_REG_CCR, &ob);
-	ret &= dma_pl330_gen_move(
-			(uint32_t)local_to_global(dst),
-			DMA_PL330_REG_DAR, &ob);
 
 	uint16_t lc0, lc1;
 
@@ -229,68 +449,12 @@ static bool pdm_build_mcode(const struct device *dev,
 		return false;
 	}
 
-	ret &= dma_pl330_gen_loop(DMA_PL330_LC_1, lc1, &ob);
-	uint32_t outer_start = ob.off;
+	uint32_t slab_addr = (uint32_t)local_to_global(dst);
+	bool ret = true;
 
-	ret &= dma_pl330_gen_loop(DMA_PL330_LC_0, lc0, &ob);
-	uint32_t inner_start = ob.off;
-
-	for (int pair = 0; pair < 4; pair++) {
-		if (!(channel_map & ch_pair_masks[pair])) {
-			continue;
-		}
-
-		/* point SAR at this pair's register */
-		ret &= dma_pl330_gen_move(
-				(uint32_t)(reg_base + ch_pair_offsets[pair]),
-				DMA_PL330_REG_SAR, &ob);
-
-		if (pair == first_active_pair) {
-			/* wait for FIFO request ONCE per sample iteration */
-			ret &= dma_pl330_gen_flushperiph(periph_id, &ob);
-			ret &= dma_pl330_gen_wfp(DMA_PL330_XFER_SINGLE, periph_id, &ob);
-			ret &= dma_pl330_gen_loadperiph(DMA_PL330_XFER_SINGLE, periph_id, &ob);
-		} else {
-			/* subsequent pairs — data already available, no wait */
-			ret &= dma_pl330_gen_loadperiph(DMA_PL330_XFER_SINGLE, periph_id, &ob);
-		}
-		ret &= dma_pl330_gen_store(DMA_PL330_XFER_FORCE, &ob);
-	}
-
-	/* close inner loop — PL330 jump field is 8-bit; */
-	uint32_t inner_jump = ob.off - inner_start;
-
-	if (inner_jump > UINT8_MAX) {
-		LOG_ERR("PDM mcode: inner loop body too large (%u bytes, max 255)",
-			inner_jump);
-		return false;
-	}
-
-	struct dma_pl330_loop lp0 = {
-		.xfer_type = DMA_PL330_XFER_SINGLE,
-		.lc        = DMA_PL330_LC_0,
-		.jump      = (uint8_t)inner_jump,
-		.nf        = true,
-	};
-	ret &= dma_pl330_gen_loopend(&lp0, &ob);
-
-	/* close outer loop — re-measure after lp0 was written */
-	uint32_t outer_jump = ob.off - outer_start;
-
-	if (outer_jump > UINT8_MAX) {
-		LOG_ERR("PDM mcode: outer loop body too large (%u bytes, max 255)",
-			outer_jump);
-		return false;
-	}
-
-	struct dma_pl330_loop lp1 = {
-		.xfer_type = DMA_PL330_XFER_SINGLE,
-		.lc        = DMA_PL330_LC_1,
-		.jump      = (uint8_t)outer_jump,
-		.nf        = true,
-	};
-	ret &= dma_pl330_gen_loopend(&lp1, &ob);
-
+	ret &= pdm_emit_phase1(&ob, reg_base, slab_addr, periph_id,
+			       lc1, lc0, &layout);
+	ret &= pdm_emit_phase2(&ob, slab_addr, lc1, lc0, &layout);
 	ret &= dma_pl330_gen_wmb(&ob);
 	ret &= dma_pl330_gen_send_event(dma_channel, &ob);
 	ret &= dma_pl330_gen_end(&ob);
@@ -303,114 +467,13 @@ static bool pdm_build_mcode(const struct device *dev,
 
 	if (!cfg->pl330_dev) {
 		LOG_ERR("PDM: PL330 device not bound");
-	return false;
+		return false;
 	}
 
-		return dma_pl330_start_with_mcode(cfg->pl330_dev,
-				dma_channel,
-				pdata->dma_mcode,
-				PDM_DMA_MCODE_SIZE) == 0;
-}
-struct pdm_pair_info {
-	uint8_t has_low;
-	uint8_t has_high;
-};
-
-/**
- * @fn		static void build_pair_info(uint8_t channel_map,
- *					    struct pdm_pair_info *pairs,
- *					    uint32_t *num_active_pairs)
- * @brief	Scans the channel_map and fills the pairs array with
- *		has_low and has_high flags for each active PDM pair.
- *		Also sets num_active_pairs to the count of active pairs.
- * @param[in]	channel_map      : Bitmask of active PDM channels.
- * @param[out]	pairs            : Array to store active pair info.
- * @param[out]	num_active_pairs : Number of active pairs found.
- * @return	None.
- */
-static void build_pair_info(uint8_t channel_map,
-				struct pdm_pair_info *pairs,
-				uint32_t *num_active_pairs)
-{
-	const uint8_t low_masks[] = {
-		PDM_CHANNEL_0, PDM_CHANNEL_2,
-		PDM_CHANNEL_4, PDM_CHANNEL_6
-	};
-	const uint8_t high_masks[] = {
-		PDM_CHANNEL_1, PDM_CHANNEL_3,
-		PDM_CHANNEL_5, PDM_CHANNEL_7
-	};
-
-	*num_active_pairs = 0;
-
-	for (int p = 0; p < 4; p++) {
-		uint8_t has_low  = !!(channel_map & low_masks[p]);
-		uint8_t has_high = !!(channel_map & high_masks[p]);
-
-		if (has_low || has_high) {
-			pairs[*num_active_pairs].has_low  = has_low;
-			pairs[*num_active_pairs].has_high = has_high;
-			(*num_active_pairs)++;
-		}
-	}
-}
-
-/**
- * @fn		static void compact_to_actual_channels(uint8_t *buf,
- *						       uint8_t channel_map,
- *						       uint32_t num_channels,
- *						       uint32_t n_bursts)
- * @brief	For odd channel counts, compacts the DMA output buffer
- *		in-place. DMA always reads full 32-bit pair registers,
- *		so for odd channel counts the last pair contains one
- *		valid 16-bit sample and one garbage 16-bit sample.
- *		This function extracts only the valid samples.
- *		For even channel counts, all pairs are fully populated
- *		so no compaction is needed.
- * @param[in]	buf          : Pointer to the DMA output buffer.
- * @param[in]	channel_map  : Bitmask of active PDM channels.
- * @param[in]	num_channels : Total number of active channels.
- * @param[in]	n_bursts     : Number of DMA bursts completed.
- * @return	None.
- */
-static void compact_to_actual_channels(uint8_t *buf,
-					uint8_t channel_map,
-					uint32_t num_channels,
-					uint32_t n_bursts)
-{
-	struct pdm_pair_info pairs[4];
-	uint32_t num_active_pairs = 0;
-
-	build_pair_info(channel_map, pairs, &num_active_pairs);
-	bool all_full = true;
-
-	for (uint32_t p = 0; p < num_active_pairs; p++) {
-		if (!pairs[p].has_low || !pairs[p].has_high) {
-			all_full = false;
-			break;
-		}
-	}
-
-	if (all_full) {
-		return;
-	}
-
-	uint32_t *src = (uint32_t *)buf;
-	uint16_t *dst = (uint16_t *)buf;
-	uint32_t out_idx = 0;
-
-	for (uint32_t s = 0; s < n_bursts; s++) {
-		for (uint32_t p = 0; p < num_active_pairs; p++) {
-			uint32_t word = src[s * num_active_pairs + p];
-
-			if (pairs[p].has_low) {
-				dst[out_idx++] = (uint16_t)(word & 0xFFFF);
-			}
-			if (pairs[p].has_high) {
-				dst[out_idx++] = (uint16_t)(word >> 16);
-			}
-		}
-	}
+	return dma_pl330_start_with_mcode(cfg->pl330_dev,
+			dma_channel,
+			pdata->dma_mcode,
+			PDM_DMA_MCODE_SIZE) == 0;
 }
 
 /**
@@ -418,10 +481,9 @@ static void compact_to_actual_channels(uint8_t *buf,
  *					     void *user_data,
  *					     uint32_t channel,
  *					     int status)
- * @brief	DMA completion callback for PDM audio capture. Compacts the
- *		buffer if channel count is odd, enqueues the completed PCM
- *		buffer, allocates the next buffer from the slab, rebuilds
- *		the DMA microcode, and restarts the DMA transfer.
+ * @brief	DMA completion callback for PDM audio capture. Enqueues the
+ *		completed PCM buffer, allocates the next buffer from the slab,
+ *		rebuilds the DMA microcode, and restarts the DMA transfer.
  * @param[in]	dma_dev   : Pointer to the DMA controller device.
  * @param[in]	user_data : Pointer to the PDM device passed at DMA config time.
  * @param[in]	channel   : DMA channel number that completed.
@@ -449,16 +511,6 @@ static void pdm_dma_callback(const struct device *dma_dev, void *user_data,
 	uint32_t n_bursts  = n_samples;
 
 	if (pdata->data_buffer) {
-		/*
-		 * compact in-place before enqueue:
-		 * for odd channel counts, last pair has 1 garbage
-		 * 16-bit sample that must be stripped out.
-		 * for even channel counts this returns immediately.
-		 */
-		compact_to_actual_channels(pdata->data_buffer,
-					   pdata->channel_map,
-					   pdata->num_channels,
-					   n_bursts);
 		int q_ret = k_msgq_put(&pdata->buf_queue,
 				       &pdata->data_buffer, K_NO_WAIT);
 		if (q_ret != 0) {
