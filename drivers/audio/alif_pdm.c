@@ -52,6 +52,8 @@ struct pdm_data {
 
 	#ifdef CONFIG_ALIF_PDM_USE_DMA
 	uint8_t __aligned(4) dma_mcode[PDM_DMA_MCODE_SIZE];
+	uint32_t n_samples;
+	uint32_t compacted_block_size;
 	#endif
 
 };
@@ -524,8 +526,7 @@ static void pdm_dma_callback(const struct device *dma_dev, void *user_data,
 		return;
 	}
 
-	uint32_t n_samples = pdata->block_size / (pdata->num_channels * sizeof(uint16_t));
-	uint32_t n_bursts  = n_samples;
+	uint32_t n_bursts = pdata->n_samples;
 
 	if (pdata->data_buffer) {
 		int q_ret = k_msgq_put(&pdata->buf_queue,
@@ -595,6 +596,46 @@ static int dmic_alif_pdm_configure(const struct device *dev, struct dmic_cfg *co
 
 		LOG_DBG("block size: %d\n", pdata->block_size);
 	}
+
+#ifdef CONFIG_ALIF_PDM_USE_DMA
+	{
+		const struct pdm_config *cfg = DEV_CFG(dev);
+
+		if (cfg->dma_enabled) {
+			struct pdm_channel_layout layout;
+
+			pdm_classify_channels(pdata->channel_map, &layout);
+			if (layout.num_active_pairs == 0) {
+				LOG_ERR("PDM: channel_map 0x%02x has no active pairs",
+					pdata->channel_map);
+				return -EINVAL;
+			}
+
+			uint32_t raw_bps = (uint32_t)layout.num_active_pairs * 4U;
+			/* raw_bps = Phase-1 bytes per sample iteration
+			 * (one 32-bit pair register read per active pair).
+			 */
+			uint32_t n_max   = pdata->block_size / raw_bps;
+
+			if (n_max == 0) {
+				LOG_ERR("PDM: slab block_size %u too small for raw bps %u",
+					pdata->block_size, raw_bps);
+				return -EINVAL;
+			}
+
+			uint16_t lc1, lc0;
+			uint32_t n;
+
+			for (n = n_max; n >= 1; n--) {
+				if (factorize_loop_counts(n, &lc1, &lc0)) {
+					break;
+				}
+			}
+			pdata->n_samples            = n;
+			pdata->compacted_block_size = n * layout.num_channels * 2U;
+		}
+	}
+#endif
 
 	LOG_DBG("DMIC configure okay\n");
 
@@ -825,9 +866,7 @@ static int dmic_alif_pdm_trigger(const struct device *dev, enum dmic_trigger cmd
 				return -EINVAL;
 			}
 
-			uint32_t n_samples = pdata->block_size /
-					(pdata->num_channels * sizeof(uint16_t));
-			uint32_t n_bursts  = n_samples;
+			uint32_t n_bursts = pdata->n_samples;
 
 
 			/* configure DMA */
