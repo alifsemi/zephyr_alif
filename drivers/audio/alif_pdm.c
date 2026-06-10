@@ -34,6 +34,11 @@ LOG_MODULE_REGISTER(alif_pdm, LOG_LEVEL_INF);
 #define PDM_USE_DMA_HANDSHAKE  BIT(24)
 #endif
 
+struct pdm_block {
+	void   *buf;
+	size_t  size;
+};
+
 struct pdm_data {
 	DEVICE_MMIO_RAM;
 	struct k_mem_slab *mem_slab;
@@ -47,7 +52,7 @@ struct pdm_data {
 	uint32_t record_data;
 	uint32_t bytes_got;
 	uint8_t bypass_iir_filter;
-	void *queue_data[MAX_QUEUE_LEN];
+	struct pdm_block queue_data[MAX_QUEUE_LEN];
 	uint16_t data[MAX_NUM_CHANNELS * MAX_DATA_ITEMS];
 
 	#ifdef CONFIG_ALIF_PDM_USE_DMA
@@ -529,8 +534,12 @@ static void pdm_dma_callback(const struct device *dma_dev, void *user_data,
 	uint32_t n_bursts = pdata->n_samples;
 
 	if (pdata->data_buffer) {
+		struct pdm_block blk = {
+			.buf  = pdata->data_buffer,
+			.size = pdata->compacted_block_size,
+		};
 		int q_ret = k_msgq_put(&pdata->buf_queue,
-				       &pdata->data_buffer, K_NO_WAIT);
+				       &blk, K_NO_WAIT);
 		if (q_ret != 0) {
 			/* Queue full — free buffer to avoid slab leak */
 			LOG_WRN("PDM: queue full, dropping buffer");
@@ -840,10 +849,10 @@ static int dmic_alif_pdm_trigger(const struct device *dev, enum dmic_trigger cmd
 		}
 
 		/* Drain queued buffers that the app hasn't read */
-		void *buf;
+		struct pdm_block blk;
 
-		while (k_msgq_get(&pdata->buf_queue, &buf, K_NO_WAIT) == 0) {
-			k_mem_slab_free(pdata->mem_slab, buf);
+		while (k_msgq_get(&pdata->buf_queue, &blk, K_NO_WAIT) == 0) {
+			k_mem_slab_free(pdata->mem_slab, blk.buf);
 		}
 		break;
 
@@ -951,14 +960,16 @@ static int dmic_alif_pdm_read(const struct device *dev, uint8_t stream, void **b
 			      int32_t timeout)
 {
 	struct pdm_data *pdata = DEV_DATA(dev);
+	struct pdm_block blk;
 	int rc;
 
-	rc = k_msgq_get(&pdata->buf_queue, buffer, SYS_TIMEOUT_MS(timeout));
+	rc = k_msgq_get(&pdata->buf_queue, &blk, SYS_TIMEOUT_MS(timeout));
 
 	if (rc != 0) {
 		LOG_DBG("No audio data to be read\n");
 	} else {
-		*size = pdata->block_size;
+		*buffer = blk.buf;
+		*size   = blk.size;
 	}
 	return rc;
 }
@@ -1113,13 +1124,18 @@ static void alif_pdm_warning_isr(const struct device *dev)
 		}
 		whole = data_bytes - bytes_available;
 
-		if (k_msgq_put(&pdmdata->buf_queue, &pdmdata->data_buffer, K_NO_WAIT) != 0) {
+		struct pdm_block blk = {
+			.buf  = pdmdata->data_buffer,
+			.size = pdmdata->block_size,
+		};
+
+		if (k_msgq_put(&pdmdata->buf_queue, &blk, K_NO_WAIT) != 0) {
 			/* Queue full: drop oldest block to make room */
-			void *oldest = NULL;
+			struct pdm_block oldest;
 
 			if (k_msgq_get(&pdmdata->buf_queue, &oldest, K_NO_WAIT) == 0) {
-				k_mem_slab_free(pdmdata->mem_slab, oldest);
-				k_msgq_put(&pdmdata->buf_queue, &pdmdata->data_buffer, K_NO_WAIT);
+				k_mem_slab_free(pdmdata->mem_slab, oldest.buf);
+				k_msgq_put(&pdmdata->buf_queue, &blk, K_NO_WAIT);
 			}
 		}
 
@@ -1178,7 +1194,8 @@ static int pdm_initialize(const struct device *dev)
 
 	cfg->irq_config();
 
-	k_msgq_init(&pdata->buf_queue, (char *)pdata->queue_data, sizeof(void *), MAX_QUEUE_LEN);
+	k_msgq_init(&pdata->buf_queue, (char *)pdata->queue_data,
+		    sizeof(struct pdm_block), MAX_QUEUE_LEN);
 
 	/* Enable the Bypass IIR Filter */
 	uint32_t regdata = pdata->bypass_iir_filter << PDM_BYPASS_IIR;
