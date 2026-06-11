@@ -162,6 +162,19 @@ static void soc_pm_pre_device_resume(enum pm_state state)
 		return;
 	}
 	soc_pm_restore_dma();
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi0), okay)
+	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2) ||
+		IS_ENABLED(CONFIG_SOC_SERIES_E1C)) {
+		sys_write32(0x1, CLKCTRL_PER_SLV_OSPI_CTRL);
+	}
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi1), okay)
+	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2)) {
+		sys_write32(0x2, CLKCTRL_PER_SLV_OSPI_CTRL);
+	}
+#endif
 }
 
 static struct pm_notifier soc_pm_notifier = {

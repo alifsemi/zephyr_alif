@@ -13,6 +13,7 @@
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/irq.h>
 #include <zephyr/kernel.h>
+#include <zephyr/pm/device.h>
 
 #include "flash_ospi_is25wx.h"
 
@@ -74,6 +75,35 @@ static void hal_event_update(uint32_t event_status, void *user_data)
 	k_event_post(&dev_data->event_f, event_status);
 }
 
+/*
+ * Wait for an OSPI transfer event.
+ *
+ * In normal (thread-context) operation this blocks on the event object,
+ * which is signalled from the OSPI ISR.
+ *
+ * During PM resume after STOP/S2RAM the device is re-initialised from the
+ * system PM exit path, which runs with interrupts globally locked. The OSPI
+ * ISR can therefore never run, so blocking on the event would deadlock.
+ * In that case the transfer is driven to completion by polling the HAL
+ * interrupt handler directly.
+ */
+static uint32_t flash_ospi_wait_event(const struct device *dev, uint32_t events)
+{
+	struct alif_flash_ospi_dev_data *dev_data = dev->data;
+	uint32_t match;
+
+	if (!dev_data->poll_mode) {
+		return k_event_wait(&dev_data->event_f, events, false, K_FOREVER);
+	}
+
+	do {
+		alif_hal_ospi_irq_handler(dev_data->ospi_handle);
+		match = k_event_wait(&dev_data->event_f, events, false, K_NO_WAIT);
+	} while (match == 0);
+
+	return match;
+}
+
 static inline int32_t set_cs_pin(HAL_OSPI_Handle_T handle, int activate)
 {
 	int ret;
@@ -119,8 +149,8 @@ static int32_t read_status_reg(const struct device *dev, uint8_t command, uint8_
 		return ret;
 	}
 
-	event = k_event_wait(&dev_data->event_f,
-			     OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST, false, K_FOREVER);
+	event = flash_ospi_wait_event(dev,
+			     OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST);
 
 	if (!(event & OSPI_EVENT_TRANSFER_COMPLETE)) {
 		/* De-Select Slave */
@@ -174,8 +204,8 @@ static int set_write_enable(const struct device *dev, int dfs)
 		return ret;
 	}
 
-	event = k_event_wait(&dev_data->event_f,
-			     OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST, false, K_FOREVER);
+	event = flash_ospi_wait_event(dev,
+			     OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST);
 	/* Check the Event Status*/
 	if (!(event & OSPI_EVENT_TRANSFER_COMPLETE)) {
 		set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
@@ -1117,8 +1147,8 @@ static int flash_is25wx_ospi_init(const struct device *dev)
 		return ret;
 	}
 
-	event = k_event_wait(&dev_data->event_f,
-			     OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST, false, K_FOREVER);
+	event = flash_ospi_wait_event(dev,
+			     OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST);
 
 	if (!(event & OSPI_EVENT_TRANSFER_COMPLETE)) {
 		/* De-Select slave */
@@ -1191,8 +1221,8 @@ static int flash_is25wx_ospi_init(const struct device *dev)
 		return ret;
 	}
 
-	event = k_event_wait(&dev_data->event_f,
-			     OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST, false, K_FOREVER);
+	event = flash_ospi_wait_event(dev,
+			     OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST);
 
 	if (!(event & OSPI_EVENT_TRANSFER_COMPLETE)) {
 		/* De-Select slave */
@@ -1215,6 +1245,98 @@ static int flash_is25wx_ospi_init(const struct device *dev)
 	return ret;
 }
 
+
+#if defined CONFIG_PM_DEVICE
+static int flash_is25wx_ospi_suspend(const struct device *dev)
+{
+	int ret;
+	const struct alif_flash_ospi_config *dev_cfg = dev->config;
+	struct alif_flash_ospi_dev_data *dev_data = dev->data;
+
+	if (IS_ENABLED(CONFIG_ALIF_OSPI_FLASH_XIP)) {
+		alif_hal_ospi_xip_disable(dev_data->ospi_handle);
+	}
+
+	ret = alif_hal_ospi_deinit(dev_data->ospi_handle);
+	if (ret != 0) {
+		return err_map_alif_hal_to_zephyr(ret);
+	}
+
+	if (dev_cfg->pcfg != NULL) {
+		ret = pinctrl_apply_state(dev_cfg->pcfg, PINCTRL_STATE_SLEEP);
+		if (ret < 0 && ret != -ENOENT) {
+			return ret;
+		}
+	}
+
+	dev_data->ISSI_Flags &= ~FLASH_POWER;
+
+	return 0;
+}
+
+static int flash_is25wx_ospi_resume(const struct device *dev)
+{
+	int ret;
+	const struct alif_flash_ospi_config *dev_cfg = dev->config;
+	struct alif_flash_ospi_dev_data *dev_data = dev->data;
+
+	if (dev_cfg->pcfg != NULL) {
+		ret = pinctrl_apply_state(dev_cfg->pcfg, PINCTRL_STATE_DEFAULT);
+		if (ret < 0 && ret != -ENOENT) {
+			return ret;
+		}
+	}
+
+	/*
+	 * On STOP/S2RAM exit this resume handler runs from the system PM
+	 * path with interrupts locked, so the OSPI ISR cannot run. Drive
+	 * the re-init transfers by polling instead of waiting on the ISR.
+	 */
+	dev_data->poll_mode = true;
+	ret = flash_is25wx_ospi_init(dev);
+	dev_data->poll_mode = false;
+
+	return ret;
+}
+
+/**
+ * @brief OSPI flash PM device action handler
+ *
+ * Handles power management state transitions for the OSPI flash device.
+ * Coordinates with power domain via PM framework.
+ *
+ * @param dev OSPI flash device struct
+ * @param action PM device action
+ *
+ * @return 0 if successful, negative errno otherwise
+ */
+static int flash_is25wx_ospi_pm_action(const struct device *dev,
+				       enum pm_device_action action)
+{
+	int ret = 0;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		ret = flash_is25wx_ospi_resume(dev);
+		break;
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		ret = flash_is25wx_ospi_suspend(dev);
+		break;
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Power domain handling is automatic via PM framework */
+		break;
+
+	default:
+		ret = -ENOTSUP;
+		break;
+	}
+
+	return ret;
+}
+#endif /* CONFIG_PM_DEVICE */
 
 #ifdef CONFIG_FLASH_PAGE_LAYOUT
 void flash_alif_ospi_page_layout(const struct device *dev,
@@ -1283,7 +1405,10 @@ static void flash_is25wx_ospi_isr(const struct device *dev)
 	alif_hal_ospi_irq_handler(dev_data->ospi_handle);
 }
 
-DEVICE_DT_DEFINE(OSPI_FLASH_NODE, &flash_is25wx_ospi_init, NULL, &flash_ospi_data,
+PM_DEVICE_DT_DEFINE(OSPI_FLASH_NODE, flash_is25wx_ospi_pm_action);
+
+DEVICE_DT_DEFINE(OSPI_FLASH_NODE, &flash_is25wx_ospi_init,
+		 PM_DEVICE_DT_GET(OSPI_FLASH_NODE), &flash_ospi_data,
 		 &alif_flash_ospi_config, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
 		 &flash_alif_ospi_driver_api);
 

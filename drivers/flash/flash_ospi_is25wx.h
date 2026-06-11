@@ -74,6 +74,7 @@ struct alif_flash_ospi_config {
 struct alif_flash_ospi_dev_data {
 	HAL_OSPI_Handle_T ospi_handle; /* HAL Handler*/
 	uint8_t ISSI_Flags;            /* Flash Init Status*/
+	bool poll_mode;                /* Drive transfers by polling (IRQs locked) */
 	struct k_sem sem;              /* Semaphore */
 	struct k_event event_f;        /* Event */
 	struct ospi_trans_config trans_conf;  /* Transfer Configs */
