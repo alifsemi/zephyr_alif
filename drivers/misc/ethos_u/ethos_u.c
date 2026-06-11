@@ -11,8 +11,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/irq.h>
 #include <zephyr/sys/util.h>
-
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
 #include <ethosu_driver.h>
+#include <ethosu_device.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(ethos_u, CONFIG_ARM_ETHOS_U_LOG_LEVEL);
@@ -150,6 +152,45 @@ static int ethosu_zephyr_init(const struct device *dev)
 	return 0;
 }
 
+#if defined(CONFIG_PM_DEVICE)
+/**
+ * @brief Ethos-U PM device action handler
+ *
+ * Handles power management state transitions for the Ethos-U device.
+ * Coordinates with power domain via PM framework.
+ *
+ * @param dev Ethos-U device struct
+ * @param action PM device action
+ *
+ * @return 0 if successful, negative errno otherwise
+ */
+static int ethosu_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	int ret = 0;
+	struct ethosu_data *data = dev->data;
+	struct ethosu_driver *drv = &data->drv;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		return ethosu_zephyr_init(dev);
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		return ethosu_dev_set_clock_and_power(&drv->dev, ETHOSU_CLOCK_Q_ENABLE,
+						      ETHOSU_POWER_Q_ENABLE);
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		break;
+
+	default:
+		ret = -ENOTSUP;
+		break;
+	}
+
+	return ret;
+}
+#endif /* CONFIG_PM_DEVICE */
+
 #define ETHOSU_DEVICE_INIT(n)                                                                      \
 	static struct ethosu_data ethosu_data_##n;                                                 \
                                                                                                    \
@@ -167,7 +208,10 @@ static int ethosu_zephyr_init(const struct device *dev)
 		.irq_config = &ethosu_zephyr_irq_config_##n,                                       \
 	};                                                                                         \
                                                                                                    \
-	DEVICE_DT_INST_DEFINE(n, ethosu_zephyr_init, NULL, &ethosu_data_##n, &ethosu_dts_info_##n, \
-			      POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, NULL);
+	PM_DEVICE_DT_INST_DEFINE(n, ethosu_pm_action);                                             \
+                                                                                                   \
+	DEVICE_DT_INST_DEFINE(n, ethosu_zephyr_init, PM_DEVICE_DT_INST_GET(n), &ethosu_data_##n,   \
+			      &ethosu_dts_info_##n, POST_KERNEL,                                   \
+			      CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, NULL);
 
 DT_INST_FOREACH_STATUS_OKAY(ETHOSU_DEVICE_INIT);
