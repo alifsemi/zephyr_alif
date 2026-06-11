@@ -11,8 +11,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/irq.h>
 #include <zephyr/sys/util.h>
-
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/policy.h>
 #include <ethosu_driver.h>
+#include <ethosu_device.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(ethos_u, CONFIG_ARM_ETHOS_U_LOG_LEVEL);
@@ -105,10 +107,21 @@ int ethosu_semaphore_give(void *sem)
 	return 0;
 }
 
+void ethosu_semaphore_destroy(void *sem)
+{
+	k_free(sem);
+}
+
+void ethosu_mutex_destroy(void *mutex)
+{
+	k_free(mutex);
+}
+
 struct ethosu_dts_info {
 	void *base_addr;
 	bool secure_enable;
 	bool privilege_enable;
+	unsigned int irqn;
 	void (*irq_config)(void);
 };
 
@@ -150,6 +163,80 @@ static int ethosu_zephyr_init(const struct device *dev)
 	return 0;
 }
 
+#if defined(CONFIG_PM_DEVICE)
+/**
+ * @brief Ethos-U PM device action handler
+ *
+ * Handles power management state transitions for the Ethos-U device.
+ * Coordinates with power domain via PM framework.
+ *
+ * @param dev Ethos-U device struct
+ * @param action PM device action
+ *
+ * @return 0 if successful, negative errno otherwise
+ */
+static int ethosu_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	int ret = 0;
+	const struct ethosu_dts_info *config = dev->config;
+	struct ethosu_data *data = dev->data;
+	struct ethosu_driver *drv = &data->drv;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		return ethosu_zephyr_init(dev);
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		/*
+		 * Refuse to suspend while the NPU is reserved or an inference is
+		 * in flight. Tearing down in that state would free the driver
+		 * semaphore under an active job, and ethosu_deregister_driver()
+		 * would block on the global handle semaphore while holding the
+		 * driver mutex, deadlocking the subsystem.
+		 */
+		if (drv->reserved || drv->job.state != ETHOSU_JOB_IDLE) {
+			return -EBUSY;
+		}
+
+		/*
+		 * Enable NPU clock and power gating for low-power STOP mode.
+		 * This writes NPU registers, so it must run while the NPU is
+		 * still powered and accessible (before ethosu_deinit()).
+		 */
+		if (ethosu_dev_set_clock_and_power(&drv->dev, ETHOSU_CLOCK_Q_ENABLE,
+						   ETHOSU_POWER_Q_ENABLE) != ETHOSU_SUCCESS) {
+			return -EIO;
+		}
+
+		/*
+		 * Disable the NPU IRQ before freeing the driver semaphore so a
+		 * stale/pending interrupt cannot call ethosu_semaphore_give() on
+		 * freed memory.
+		 */
+		irq_disable(config->irqn);
+
+		/*
+		 * Symmetric teardown: deregister the handle and free the driver
+		 * semaphore so the next RESUME's ethosu_init() starts from a clean
+		 * state. Retained SRAM would otherwise make
+		 * ethosu_register_driver() splice the driver onto itself.
+		 */
+		ethosu_deinit(drv);
+		return 0;
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		break;
+
+	default:
+		ret = -ENOTSUP;
+		break;
+	}
+
+	return ret;
+}
+#endif /* CONFIG_PM_DEVICE */
+
 #define ETHOSU_DEVICE_INIT(n)                                                                      \
 	static struct ethosu_data ethosu_data_##n;                                                 \
                                                                                                    \
@@ -164,10 +251,14 @@ static int ethosu_zephyr_init(const struct device *dev)
 		.base_addr = (void *)DT_INST_REG_ADDR(n),                                          \
 		.secure_enable = DT_INST_PROP(n, secure_enable),                                   \
 		.privilege_enable = DT_INST_PROP(n, privilege_enable),                             \
+		.irqn = DT_INST_IRQN(n),                                                           \
 		.irq_config = &ethosu_zephyr_irq_config_##n,                                       \
 	};                                                                                         \
                                                                                                    \
-	DEVICE_DT_INST_DEFINE(n, ethosu_zephyr_init, NULL, &ethosu_data_##n, &ethosu_dts_info_##n, \
-			      POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, NULL);
+	PM_DEVICE_DT_INST_DEFINE(n, ethosu_pm_action);                                             \
+                                                                                                   \
+	DEVICE_DT_INST_DEFINE(n, ethosu_zephyr_init, PM_DEVICE_DT_INST_GET(n), &ethosu_data_##n,   \
+			      &ethosu_dts_info_##n, POST_KERNEL,                                   \
+			      CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, NULL);
 
 DT_INST_FOREACH_STATUS_OKAY(ETHOSU_DEVICE_INIT);
