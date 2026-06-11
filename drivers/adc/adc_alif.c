@@ -74,6 +74,7 @@ struct adc_data {
 	uint32_t channels_count;
 	uint8_t  interrupts;
 	uint8_t *comparator;
+	bool differential;
 };
 
 enum ADC_INSTANCE {
@@ -268,6 +269,15 @@ enum ADC_SCAN_MODE {
 enum ADC_CONV_MODE {
 	ADC_CONV_MODE_CONTINUOUS,
 	ADC_CONV_MODE_SINGLE_SHOT
+};
+
+/**
+ * enum ADC_SHIFT_DIRECTION.
+ * Shift direction from the shift_direction DT property.
+ */
+enum ADC_SHIFT_DIRECTION {
+	LEFT_SHIFT,
+	RIGHT_SHIFT
 };
 
 /**
@@ -525,6 +535,76 @@ void adc_analog_config(const struct device *dev)
 #endif
 }
 
+/**
+ * Get the sign-bit position of a differential sample.
+ *
+ * ADC12 starts at bit 11 and grows with averaging (max bit 19).
+ * ADC24 uses bit 23. Shift left/right then moves this bit.
+ */
+static inline uint8_t adc_result_sign_bit(const struct adc_config *config)
+{
+	uint8_t sign_bit;
+	uint8_t avg_bits = 0U;
+
+	/* Extra bits from averaging: log2(avg). 256 -> 8. */
+	if (config->avg_sample_num > 1U) {
+		avg_bits = (uint8_t)(find_msb_set(config->avg_sample_num) - 1U);
+	}
+
+	if (config->drv_inst == ADC_INSTANCE_ADC24_0) {
+		sign_bit = 23U;
+	} else {
+		sign_bit = 11U + avg_bits;
+	}
+
+	if (config->shift_n_bits != 0U) {
+		if (config->shift_direction == LEFT_SHIFT) {
+			sign_bit += (uint8_t)config->shift_n_bits;
+		} else if (sign_bit >= config->shift_n_bits) {
+			sign_bit -= (uint8_t)config->shift_n_bits;
+		} else {
+			sign_bit = 0U;
+		}
+	}
+
+	/* ADC12 cannot exceed 20 bits */
+	if (config->drv_inst != ADC_INSTANCE_ADC24_0 && sign_bit > 19U) {
+		sign_bit = 19U;
+	}
+
+	return (sign_bit > 31U) ? 31U : sign_bit;
+}
+
+/**
+ * Sign-extend a differential sample to 32 bits.
+ * Single-ended samples are returned as-is.
+ */
+static inline uint32_t adc_sign_extend(const struct device *dev, uint32_t value)
+{
+	const struct adc_config *config = dev->config;
+	const struct adc_data *data = dev->data;
+	uint8_t sign_bit;
+	uint32_t mask;
+
+	if (!data->differential) {
+		return value;
+	}
+
+	sign_bit = adc_result_sign_bit(config);
+
+	/* Drop bits above the sample width */
+	mask = (sign_bit == 31U) ? UINT32_MAX : (BIT(sign_bit + 1U) - 1U);
+	value &= mask;
+
+	if (value & BIT(sign_bit)) {
+		if (sign_bit < 31U) {
+			value |= (0xFFFFFFFFU << sign_bit);
+		}
+	}
+
+	return value;
+}
+
 void adc_done0_irq_handler(const struct device *dev)
 {
 	uint32_t channel_sample_reg;
@@ -541,8 +621,9 @@ void adc_done0_irq_handler(const struct device *dev)
 		/* storing the address to be fetched for particular channels */
 		channel_sample_reg = sample_reg + sizeof(uint32_t) * channel;
 
-		/* storing the digital output to the respective buffer cells */
-		*(data->buffer + data->curr_cnt++) = sys_read32(channel_sample_reg);
+		/* Store sample and advance the buffer index (single and multi-channel) */
+		*(data->buffer + data->curr_cnt++) =
+			adc_sign_extend(dev, sys_read32(channel_sample_reg));
 
 		/* Check if the required number of samples has been read */
 		if (data->curr_cnt >= data->channels_count) {
@@ -571,7 +652,8 @@ void adc_done1_irq_handler(const struct device *dev)
 		channel_sample_reg = sample_reg + sizeof(uint32_t) * channel;
 
 		/* storing the digital output to the respected buffer cells */
-		*(data->buffer + data->curr_cnt++) = sys_read32(channel_sample_reg);
+		*(data->buffer + data->curr_cnt++) =
+			adc_sign_extend(dev, sys_read32(channel_sample_reg));
 
 		/* Check if the required number of samples has been read */
 		if (data->curr_cnt >= data->channels_count) {
@@ -953,6 +1035,11 @@ static int adc_channel_select(const struct device *dev, const struct adc_channel
 			}
 		}
 	}
+	/* Used later in the IRQ to decide if sign-extend is needed */
+	DEV_DATA(dev)->differential =
+		(config->drv_inst == ADC_INSTANCE_ADC24_0) ? true
+						    : channel_cf->differential;
+
 	/* set the channel to operate */
 	adc_init_channel_select(regs, channel_cf->channel_id);
 
