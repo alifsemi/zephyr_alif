@@ -53,7 +53,7 @@ config USE_ALIF_HAL_OSPI
 config SPI_DW_ENABLE
 	bool "SPI DW"
 	default y
-	depends on SPI
+	depends on SPI && DT_HAS_SNPS_DESIGNWARE_SPI_ENABLED
 	help
 	  Enable Designware SPI driver.
 	select SPI_DW
