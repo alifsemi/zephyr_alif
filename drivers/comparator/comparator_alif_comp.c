@@ -439,18 +439,21 @@ static int alif_comp_set_trigger_callback(const struct device *dev,
 static int alif_comp_get_output(const struct device *dev)
 {
 	/* read pin status */
-#if defined(CONFIG_ANALOG_ALIASING)
-	uintptr_t regs;
-
-	regs = DEVICE_MMIO_NAMED_GET(dev, cmp_reg);
-
-	return sys_read32(regs + CMP_STATUS);
-#else
 	const struct cmp_config *config = dev->config;
 
-	return gpio_pin_get_dt(&config->cmp_gpio);
-#endif
+	/* LPCMP lacks CMP_STATUS; output read not supported */
+	if (config->drv_inst == CMP_INSTANCE_LP) {
+		LOG_ERR("LPCMP output read not supported");
+		return -EINVAL;
+	}
 
+	if (config->cmp_gpio.port) {
+		return gpio_pin_get_dt(&config->cmp_gpio);
+	}
+
+	uintptr_t regs = DEVICE_MMIO_NAMED_GET(dev, cmp_reg);
+
+	return sys_read32(regs + CMP_STATUS);
 }
 
 static int alif_cmp_trigger_is_pending(const struct device *dev)
