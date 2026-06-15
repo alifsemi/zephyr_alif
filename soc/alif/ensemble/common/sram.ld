@@ -12,6 +12,9 @@ KEEP(*(.alif_sram0))
 KEEP(*(".alif_sram0.*"))
 KEEP(*(.noinit.*kheap_buf_video_buffer_pool))
 KEEP(*(.bss.disk_buf_0))
+#if defined(CONFIG_SYSTEM_HEAP_IN_SRAM) && (CONFIG_SYSTEM_HEAP_IN_SRAM == 0)
+KEEP(*libkernel.a:mempool.*(.noinit.kheap_buf__system_heap .noinit.*.kheap_buf__system_heap))
+#endif /* CONFIG_SYSTEM_HEAP_IN_SRAM */
 	} GROUP_LINK_IN(SRAM0)
 
 GROUP_END(SRAM0)
@@ -23,6 +26,9 @@ SECTION_PROLOGUE(_ALIF_SRAM1_SECTION_NAME, (NOLOAD),)
 	{
 KEEP(*(.alif_sram1))
 KEEP(*(".alif_sram1.*"))
+#if defined(CONFIG_SYSTEM_HEAP_IN_SRAM) && (CONFIG_SYSTEM_HEAP_IN_SRAM == 1)
+KEEP(*libkernel.a:mempool.*(.noinit.kheap_buf__system_heap .noinit.*.kheap_buf__system_heap))
+#endif /* CONFIG_SYSTEM_HEAP_IN_SRAM */
 	} GROUP_LINK_IN(SRAM1)
 
 GROUP_END(SRAM1)
