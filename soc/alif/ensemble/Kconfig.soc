@@ -11,4 +11,26 @@ config NONSECURE0_REGION
 	help
 	    Provide config Non-Secure region
 
+choice SYSTEM_HEAP_LOCATION
+	prompt "System heap location"
+	default SYSTEM_HEAP_ZEPHYR_DEFAULT if SOC_FAMILY_ENSEMBLE
+	help
+		Select the SRAM region to place the system heap for Ensemble SoCs.
+		If no option is selected, the system heap will be placed in the default
+		location.
+
+config SYSTEM_HEAP_ZEPHYR_DEFAULT
+	bool "Use Zephyr default system heap location"
+	help
+		For Ensemble SoCs. If enabled, the system heap will be placed
+		in the default location instead of the specified SRAM region.
+
+config SYSTEM_HEAP_SRAM0
+	bool "Move system heap to SRAM0"
+
+config SYSTEM_HEAP_SRAM1
+	bool "Move system heap to SRAM1"
+
+endchoice
+
 rsource "*/Kconfig.soc"
