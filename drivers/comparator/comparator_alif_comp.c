@@ -42,6 +42,7 @@ struct cmp_config {
 	uint8_t positive_inp;
 	uint8_t negative_inp;
 	uint8_t hysteresis_level;
+	uint8_t lpcmp_clk_sel;
 };
 
 struct cmp_data {
@@ -166,8 +167,13 @@ enum CMP_INSTANCE {
 
 
 /* LP comparator macro */
-#define LPCOMP_CLK_SEL	         (1)
-#define LPCOMP_CLK32K_EN        (14)
+#if defined(CONFIG_ANALOG_ALIASING)
+#define LPCOMP_CLK32K_EN        BIT(0)
+#define LPCOMP_CLK_SEL_Pos      (1)
+#else
+#define LPCOMP_CLK32K_EN        BIT(14)
+#define LPCOMP_CLK_SEL_Pos      (31)
+#endif
 #define COMP_LP0_EN             (24)
 #define COMP_LP0_IN_POS_SEL_POS (25)
 #define COMP_LP0_IN_NEG_SEL_POS (27)
@@ -245,17 +251,18 @@ static void lpcmp_set_config(const struct device *dev)
 		config->negative_inp << COMP_LP0_IN_NEG_SEL_POS |
 		config->hysteresis_level << COMP_LP0_HYST_POS;
 
-	/* Enable LPCMP CLK */
-	data |= LPCMP_CTRL_CLKEN;
-
 #if defined(CONFIG_ANALOG_ALIASING)
-	sys_write32(data, regs);
-#else
-	uint32_t value = 0;
+	sys_write32(data | LPCOMP_CLK32K_EN, regs);
 
-	value = sys_read32(regs);
-	value |= data;
-	sys_write32(value, regs);
+	/* 32 kHz clock configuration */
+	sys_write32(sys_read32(regs) | (config->lpcmp_clk_sel << LPCOMP_CLK_SEL_Pos), regs);
+#else
+	/* lpcmp configuration */
+	sys_write32(sys_read32(regs) | data, regs);
+
+	/* Enable LPCMP CLK and set 32 kHz clock source */
+	sys_write32(sys_read32(ANA_VBAT_REG1) | LPCOMP_CLK32K_EN |
+		    (config->lpcmp_clk_sel << LPCOMP_CLK_SEL_Pos), ANA_VBAT_REG1);
 #endif
 }
 
@@ -584,6 +591,7 @@ static DEVICE_API(comparator, alif_comp_api) = {
 		.positive_inp = DT_INST_ENUM_IDX(inst, positive_input),                            \
 		.negative_inp = DT_INST_ENUM_IDX(inst, negative_input),                            \
 		.hysteresis_level = DT_INST_ENUM_IDX(inst, hysteresis_level),                      \
+		.lpcmp_clk_sel = DT_INST_ENUM_IDX_OR(inst, lpcmp_clk_sel, 0),                      \
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, pinctrl_0),                                 \
 			   (.pcfg = PINCTRL_DT_DEV_CONFIG_GET(DT_DRV_INST(inst)),))};              \
                                                                                                    \
