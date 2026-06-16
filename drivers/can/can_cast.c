@@ -1392,7 +1392,7 @@ void can_cast_irq_handler(const struct device *dev)
 		 * then performs below operation
 		 */
 		irq_event = CAN_SECONDARY_BUF_TX_COMPLETE_EVENT;
-		if (data->tx_queue.tail != data->tx_queue.head) {
+		while (data->tx_queue.tail != data->tx_queue.head) {
 			data->tx_queue.cb_list[data->tx_queue.tail].cb(
 				dev, 0, data->tx_queue.cb_list[data->tx_queue.tail].cb_arg);
 			QUEUE_TAIL_NEXT(data->tx_queue.tail);
