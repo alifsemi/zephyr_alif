@@ -27,7 +27,7 @@ if HAS_ALIF_BLE_ROM_IMAGE
 DT_SOC_INFO := $(dt_nodelabel_path,soc_info)
 
 config ALIF_BLE_ROM_IMAGE_V1_2
-	def_bool $(dt_node_str_prop_equals,$(DT_SOC_INFO),ble-rom-version,1.2)
+	def_bool $(dt_node_str_prop_equals,$(DT_SOC_INFO),ble-rom-version,1.2) && !ALIF_BLE_ROM_API_EXTERNAL
 	help
 	  BLE ROM version 1.2 (automatically set from device tree)
 
