@@ -351,6 +351,25 @@
 			read-enable = <0x1>;
 		};
 	};
+	pinctrl_lppdm_sleep: pinctrl_lppdm_sleep {
+		group0 {
+			pinmux = <PIN_P5_4__GPIO>,
+				<PIN_P5_5__GPIO>,
+				<PIN_P7_4__GPIO>,
+				<PIN_P7_6__GPIO>;
+			read-enable = <0x0>;
+			driver-state-control = <2>; /* pull-down */
+		};
+		group1 {
+			pinmux = <PIN_P5_6__GPIO>,
+				<PIN_P5_7__GPIO>,
+				<PIN_P7_5__GPIO>,
+				<PIN_P7_7__GPIO>;
+			read-enable = <0x1>;
+			driver-state-control = <2>; /* pull-down */
+		};
+	};
+
 
 	pinctrl_spi0: pinctrl_spi0 {
 		group0 {
