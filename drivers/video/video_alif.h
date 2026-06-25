@@ -70,6 +70,8 @@
 #define CAM_FRAME_ADDR_MASK  GENMASK(28, 0)
 #define CAM_FRAME_ADDR_SHIFT 3
 
+#define CPI_PIXEL_CLOCK 20000000
+
 /* CPI constants. */
 #define CPI_MIN_VBUF 1
 
@@ -119,6 +121,7 @@ struct video_cam_config {
 	uint32_t reserved: 7;
 
 	const struct device *clk_dev;
+	clock_control_subsys_t pixclk;
 	clock_control_subsys_t cid;
 
 	const struct device *endpoint_dev;
