@@ -35,3 +35,19 @@ properties:
     enum:
       - 0
       - 1
+
+  dmas:
+    description: |
+      Optional RX dma specifier. Each specifier will have a phandle
+      reference to the event router, the encoded channel info
+      with channel number dma group and handshake, and peripheral request number.
+      Use evtrtr2 for HE core and evtrtr0 for HP core.
+      For example dmas for RX on PDM
+        dmas = <&evtrtr2 ALIF_DMA_ENCODE(0, 0, 1) 19>;
+
+  dma-names:
+    description: |
+      Required if the dmas property exists. This should be "rxdma"
+      to match the dmas property.
+      For example
+        dma-names = "rxdma";
