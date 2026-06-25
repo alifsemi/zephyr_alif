@@ -176,7 +176,7 @@ static void pull_data(const struct device *dev)
 	const struct spi_dw_config *info = dev->config;
 	struct spi_dw_data *spi = dev->data;
 
-	while (read_rxflr(dev)) {
+	while (test_bit_sr_rfne(dev)) {
 		uint32_t data = read_dr(dev);
 
 		if (spi_context_rx_buf_on(&spi->ctx)) {
@@ -193,13 +193,17 @@ static void pull_data(const struct device *dev)
 			}
 		}
 
-		spi_context_update_rx(&spi->ctx, spi->dfs, 1);
+		if (spi_context_rx_on(&spi->ctx)) {
+			spi_context_update_rx(&spi->ctx, spi->dfs, 1);
+		}
+
 		spi->fifo_diff--;
 	}
 
-	if (!spi->ctx.rx_len && spi->ctx.tx_len < info->fifo_depth) {
+	if (!spi->ctx.rx_len && spi->ctx.tx_len &&
+	    spi->ctx.tx_len < info->fifo_depth) {
 		write_rxftlr(dev, spi->ctx.tx_len - 1);
-	} else if (read_rxftlr(dev) >= spi->ctx.rx_len) {
+	} else if (spi->ctx.rx_len && read_rxftlr(dev) >= spi->ctx.rx_len) {
 		write_rxftlr(dev, spi->ctx.rx_len - 1);
 	}
 }
@@ -608,6 +612,11 @@ static int spi_dw_configure(const struct device *dev,
 		return -EINVAL;
 	}
 
+	if (!(config->operation & SPI_OP_MODE_SLAVE) && !config->frequency) {
+		LOG_ERR("Master mode requires non-zero frequency");
+		return -EINVAL;
+	}
+
 	if (info->max_xfer_size < SPI_WORD_SIZE_GET(config->operation)) {
 		LOG_ERR("Max xfer size is %u, word size of %u not allowed",
 			info->max_xfer_size, SPI_WORD_SIZE_GET(config->operation));
@@ -830,7 +839,7 @@ static int transceive(const struct device *dev,
 
 	if (spi_dw_is_slave(spi)) {
 		if (spi->ctx.rx_len &&
-		    spi->ctx.rx_len < dw_spi_rxftlr_dflt) {
+		    spi->ctx.rx_len <= dw_spi_rxftlr_dflt) {
 			reg_data = spi->ctx.rx_len - 1;
 		}
 	} else {
@@ -860,19 +869,39 @@ static int transceive(const struct device *dev,
 	}
 #endif
 
-	write_imr(dev, reg_data);
-
 	if (!spi_dw_is_slave(spi)) {
+		write_imr(dev, reg_data);
+
 		/* if cs is not defined as gpio, use hw cs */
 		if (spi_cs_is_gpio(config)) {
 			spi_context_cs_control(&spi->ctx, true);
 		} else {
 			write_ser(dev, BIT(config->slave));
 		}
+	} else {
+		/*
+		 * In slave mode, keep interrupts masked until after SSI is
+		 * enabled and the TX FIFO is prefilled.  Some controllers fault
+		 * on DR writes while SSIENR is 0, but waiting for TXEIS leaves
+		 * a window where the master can clock an empty TX FIFO.
+		 */
+		write_imr(dev, DW_SPI_IMR_MASK);
 	}
 
 	LOG_DBG("Enabling controller");
 	set_bit_ssienr(dev);
+
+	if (spi_dw_is_slave(spi)) {
+		if (spi_context_tx_on(&spi->ctx)
+#ifdef CONFIG_SPI_DW_USE_DMA
+		    && (!info->dma_tx.enabled && !info->dma_rx.enabled)
+#endif
+		    ) {
+			push_data(dev);
+		}
+
+		write_imr(dev, reg_data);
+	}
 
 	/* Do a dummy write in case of rx only */
 	if (!spi_dw_is_slave(spi) && (!tx_bufs || !tx_bufs->buffers)) {
