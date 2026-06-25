@@ -15,6 +15,10 @@
 #define ALIF_RTC_CLK_EN_REG           0x10U
 /* end of soc specific registers */
 
+/* JPEG (VC9000E) clock */
+#define ALIF_JPEG_CLK               \
+	ALIF_CLK_CFG(CGU, CLK_ENA, 30U, 1U, 0U, 0U, 0U)
+
 /* Camera pixel clocks */
 #define ALIF_CAMERA_PIX_SYST_ACLK  \
 	ALIF_CLK_CFG(CLKCTL_PER_MST, CAMERA_PIXCLK_CTRL, 0U, 1U, 0U, 1U, 4U)
