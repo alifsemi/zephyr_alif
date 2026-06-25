@@ -83,6 +83,7 @@
 #define ANA_BASE                                 0x1A60A000
 #define ANA_VBAT_REG1                            (ANA_BASE + 0x38)
 #define ANA_VBAT_REG2                            (ANA_BASE + 0x3C)
+#define ANA_VBAT_REG3                            (ANA_BASE + 0x40)
 
 /* LPGPIO Base address for LPTIMER pin config */
 #define LPGPIO_BASE                              0x42002008
