@@ -19,6 +19,7 @@ LOG_MODULE_REGISTER(ADC);
 #include <zephyr/drivers/pinctrl.h>
 #include <soc_common.h>
 #include "analog_ctrl.h"
+#include <zephyr/pm/device.h>
 
 #define DT_DRV_COMPAT alif_adc
 
@@ -406,6 +407,14 @@ static inline void adc_mask_interrupt(uintptr_t adc, uint8_t arg)
 	data = sys_read32(adc + ADC_INTERRUPT_MASK);
 	data = (~arg) & 0xF;
 	sys_write32(data, adc + ADC_INTERRUPT_MASK);
+}
+
+static inline int adc_check_busy(uintptr_t regs)
+{
+	if (sys_read32(regs + ADC_CONTROL) & (1 << 1)) {
+		return -EBUSY;
+	}
+	return 0;
 }
 
 static inline void adc_sequencer_msk_ch_control(uintptr_t adc, uint32_t mask_channel)
@@ -933,28 +942,11 @@ static int adc_channel_select(const struct device *dev, const struct adc_channel
 	return 0;
 }
 
-static int adc_init(const struct device *dev)
+static int adc_hw_init(const struct device *dev)
 {
-	int err;
 	const struct adc_config *config = dev->config;
 	struct adc_data *data = dev->data;
-	uintptr_t regs;
-
-	DEVICE_MMIO_NAMED_MAP(dev, comp_reg, K_MEM_CACHE_NONE);
-	DEVICE_MMIO_NAMED_MAP(dev, adc_reg, K_MEM_CACHE_NONE);
-#if CONFIG_ANALOG_ALIASING
-	DEVICE_MMIO_NAMED_MAP(dev, adc_vref, K_MEM_CACHE_NONE);
-#endif
-	regs = DEVICE_MMIO_NAMED_GET(dev, adc_reg);
-
-	data->dev = dev;
-
-	adc_context_init(&data->ctx);
-
-	err = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
-	if (err != 0) {
-		return err;
-	}
+	uintptr_t regs = DEVICE_MMIO_NAMED_GET(dev, adc_reg);
 
 	/* adc clock configuration */
 	adc_clk_config();
@@ -1003,10 +995,117 @@ static int adc_init(const struct device *dev)
 	/* Install ISR handler. */
 	config->irq_config_func(dev);
 
+	return 0;
+}
+
+static int adc_init(const struct device *dev)
+{
+	int err;
+	const struct adc_config *config = dev->config;
+	struct adc_data *data = dev->data;
+	uintptr_t regs;
+
+	DEVICE_MMIO_NAMED_MAP(dev, comp_reg, K_MEM_CACHE_NONE);
+	DEVICE_MMIO_NAMED_MAP(dev, adc_reg, K_MEM_CACHE_NONE);
+#if CONFIG_ANALOG_ALIASING
+	DEVICE_MMIO_NAMED_MAP(dev, adc_vref, K_MEM_CACHE_NONE);
+#endif
+	regs = DEVICE_MMIO_NAMED_GET(dev, adc_reg);
+
+	data->dev = dev;
+
+	adc_context_init(&data->ctx);
+
+	err = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+	if (err != 0) {
+		return err;
+	}
+
+	adc_hw_init(dev);
+
 	adc_context_unlock_unconditionally(&data->ctx);
 
 	return 0;
 }
+
+#ifdef CONFIG_PM_DEVICE
+
+static int adc_suspend(const struct device *dev)
+{
+	struct adc_data *data = dev->data;
+	uintptr_t regs = DEVICE_MMIO_NAMED_GET(dev, adc_reg);
+	const struct adc_config *config = dev->config;
+	int ret = 0;
+
+	ret = adc_check_busy(regs);
+	if (ret) {
+		return ret;
+	}
+
+#if defined(CONFIG_PINCTRL)
+	if (config->pcfg != NULL) {
+		ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_SLEEP);
+		if (ret < 0 && ret != -ENOENT) {
+			return ret;
+		}
+	}
+#endif
+
+	adc_mask_interrupt(regs, data->interrupts);
+
+	if (config->conv_mode == ADC_CONV_MODE_SINGLE_SHOT) {
+		adc_disable_single_shot_conv(regs);
+	} else {
+		adc_disable_continuous_conv(regs);
+	}
+
+	return 0;
+}
+
+static int adc_resume(const struct device *dev)
+{
+	struct adc_data *data = dev->data;
+	uintptr_t regs = DEVICE_MMIO_NAMED_GET(dev, adc_reg);
+	const struct adc_config *config = dev->config;
+	int ret = 0;
+
+#if defined(CONFIG_PINCTRL)
+	if (config->pcfg != NULL) {
+		ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+		if (ret) {
+			return ret;
+		}
+	}
+#endif
+	/* Adc hardware configuration */
+	adc_hw_init(dev);
+
+	return 0;
+}
+
+static int adc_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	int ret = 0;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		ret = adc_resume(dev);
+		break;
+	case PM_DEVICE_ACTION_SUSPEND:
+		ret = adc_suspend(dev);
+		break;
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		break;
+	default:
+		ret = -ENOTSUP;
+		break;
+	}
+
+	return ret;
+}
+
+#endif /* CONFIG_PM_DEVICE */
 
 struct adc_driver_api alif_adc_api = {
 	.channel_setup = &adc_channel_select,
@@ -1060,7 +1159,9 @@ struct adc_driver_api alif_adc_api = {
 		ADC_CONTEXT_INIT_TIMER(data_##inst, ctx),                                          \
 		.interrupts = DT_INST_PROP(inst, interrupt_en),                                    \
 	};                                                                                         \
-	DEVICE_DT_INST_DEFINE(inst, adc_init, NULL, &data_##inst, &config_##inst, POST_KERNEL,     \
+	PM_DEVICE_DT_INST_DEFINE(inst, adc_pm_action);                                             \
+	DEVICE_DT_INST_DEFINE(inst, adc_init, PM_DEVICE_DT_INST_GET(inst), &data_##inst,          \
+			      &config_##inst, POST_KERNEL,                                         \
 			      CONFIG_ADC_INIT_PRIORITY, &alif_adc_api);                            \
                                                                                                    \
 	static void adc_config_func_##inst(const struct device *dev)                               \

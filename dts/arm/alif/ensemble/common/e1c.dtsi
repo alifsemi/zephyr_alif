@@ -516,7 +516,8 @@
 		/* pga_enable; */       /* This property is valid in differential mode only */
 		pga_gain		= "ADC_PGA_GAIN_0_DB";
 		pinctrl-0		= <&pinctrl_adc0>;
-		pinctrl-names		= "default";
+		pinctrl-1		= <&pinctrl_adc0_sleep>;
+		pinctrl-names		= "default", "sleep";
 		interrupts		= <151 0>,
 					  <154 0>,
 					  <157 0>,
@@ -554,7 +555,8 @@
 		/* pga_enable; */       /* This property is valid in differential mode only */
 		pga_gain		= "ADC_PGA_GAIN_0_DB";
 		pinctrl-0		= <&pinctrl_adc1>;
-		pinctrl-names		= "default";
+		pinctrl-1		= <&pinctrl_adc1_sleep>;
+		pinctrl-names		= "default", "sleep";
 		interrupts		= <152 0>,
 					  <155 0>,
 					  <158 0>,
