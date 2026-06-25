@@ -273,6 +273,10 @@ typedef struct {     /*!< (@ 0x48200000) USB Structure */
 								 >> USB_DSTS_USBLNKST_POS)
 #define USB_DSTS_DEVCTRLHLT                              BIT(22)
 #define USB_DSTS_DCNRD                                   BIT(29)
+#define USB_DSTS_MICRO_FRAME_MASK                        0x1FFF8
+#define USB_DSTS_MICRO_FRAME_POS                         3
+#define USB_DSTS_SOFFN(reg)                              (((reg) & USB_DSTS_MICRO_FRAME_MASK) \
+								>> USB_DSTS_MICRO_FRAME_POS)
 
 /* USB link state values from DSTS.USBLnkSt[21:18] and link state change event info
  * Valid in HS/FS/LS mode per DWC3 programming guide
@@ -373,6 +377,10 @@ typedef struct {     /*!< (@ 0x48200000) USB Structure */
 #define USB_DEPCMD_FORCERM                               1
 #define USB_DEPCMD_MSK                                   0xF
 #define USB_DEPCMD_CMD(x)                                ((x) & USB_DEPCMD_MSK)
+#define USB_EVENT_CMD_PARAM_MASK                         0xFFFF
+#define USB_EVENT_CMD_PARAM_POS                          16U
+#define USB_GET_EVENT_CMD_PARAM(reg)                     (((reg) >> USB_EVENT_CMD_PARAM_POS) \
+								& USB_EVENT_CMD_PARAM_MASK)
 
 /* TRB Control */
 #define USB_TRB_CTRL_HWO                                 BIT(0)
@@ -403,7 +411,7 @@ typedef struct {     /*!< (@ 0x48200000) USB Structure */
 #define USB_TRBCTL_NORMAL_ZLP                            USB_TRB_CTRL_TRBCTL(9)
 
 /* TRB Length, PCM and Status */
-
+#define USB_ISOC_MAX_MULT_VALUE                          2
 #define USB_TRB_SIZE_MASK                                (0x00FFFFFF)
 #define USB_TRB_SIZE_LENGTH(n)                           ((n) & USB_TRB_SIZE_MASK)
 #define USB_TRB_PCM1_MSK                                 0x3
