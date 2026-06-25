@@ -12,4 +12,10 @@ config NONSECURE0_REGION
 		Provide config name for Non-Secure0 region if
 		ns node defined in the device tree.
 
+config OSPI0_XIP_REGION
+	string
+	default "ospi0" if $(dt_nodelabel_enabled,ospi0)
+	help
+		Configure OSPI0 XIP memory mapped region name
+
 rsource "*/Kconfig.soc"
