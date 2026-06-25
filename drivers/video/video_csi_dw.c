@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/video.h>
+#include <zephyr/sys/util.h>
 #include "video_csi_dw.h"
 #include <zephyr/drivers/mipi_dphy/dphy_dw.h>
 #include <zephyr/drivers/video/video_alif.h>
@@ -206,6 +207,21 @@ static int csi2_dw_ipi_advanced_features(const struct device *dev)
 	return 0;
 }
 
+static uint32_t csi2_dw_ceil_f32_to_u32(float x)
+{
+	uint64_t scaled;
+	uint64_t rounded;
+
+	if (x <= 0.0f) {
+		return 0U;
+	}
+
+	scaled = (uint64_t)(x * 1000.0f);
+	rounded = ROUND_UP(scaled, 1000ULL);
+
+	return (uint32_t)(rounded / 1000ULL);
+}
+
 static int csi2_dw_ipi_set_timings(const struct device *dev)
 {
 	struct csi2_dw_data *data = dev->data;
@@ -326,16 +342,6 @@ static int csi2_dw_validate_data(const struct device *dev)
 	int ret;
 
 	bpp = data->csi_cpi_settings[data->current_sensor]->bits_per_pixel;
-	/*
-	 * When camera through-put is slower than IPI, all data is transferred
-	 * before new Horizontal Line is received. RAM only needs to store one
-	 * line.
-	 */
-	if (!((timing->hact * bpp / CSI2_HOST_IPI_DWIDTH) <= CSI2_IPI_FIFO_DEPTH)) {
-		LOG_ERR("Camera through-put is higher than IPI. "
-			"New H-Line causes corruption to stored data.");
-		return -EINVAL;
-	}
 
 	/*
 	 * Balancing bandwidth by making output bandwidth 20% more than input
@@ -345,7 +351,8 @@ static int csi2_dw_validate_data(const struct device *dev)
 	 * Balanced pixel clock for 20% more input bandwidth:
 	 * balanced pixel clock = pix_clk * 1.2
 	 */
-	pixclock = ((phy->pll_fin << 1) * phy->num_lanes * CSI2_BANDWIDTH_SCALER) / bpp;
+	pixclock = ((phy->pll_fin << 1) * phy->num_lanes * CSI2_BANDWIDTH_SCALER) /
+		bpp;
 	LOG_DBG("pll_fin - %d, Check pixclock = %d (CSI_PIXCLK_CTRL)", phy->pll_fin,
 		(uint32_t)pixclock);
 
@@ -358,24 +365,65 @@ static int csi2_dw_validate_data(const struct device *dev)
 	}
 
 	if (config->ipi_mode == CSI2_IPI_MODE_TIMINGS_CAM) {
-		/*
-		 * FV(VSYNC) comes at least 3 pixel clocks before
-		 * LV(HSYNC/DATA_EN). Hence, setting HSA as 3.
-		 */
-		timing->hsa = 3;
-		timing->hbp = 0;
+		float time_PPI_ns = (8.0 / phy->pll_fin) * 1000000000;
+		float time_IPI_ns = (1.0f / pixclock) * 1000000000;
+		float pkt2pkt_time_ns = data->pkt2pkt_time.time_ns;
+		uint32_t bytes_to_transmit = (timing->hact * bpp) / 8;
+		uint32_t mem_req_1, mem_req_2, min_memory_depth;
+		float tmp_f;
 
-		/*
-		 * HSD should be such that when the PPI interface should
-		 * collect last pixel and send to memory before IPI interface
-		 * is collecting the last pixel of Horizontal Active Area.
-		 */
-		timing->hsd = ((pixclock * bpp * timing->hact) / (phy->pll_fin << 1)) -
-			    (timing->hact + timing->hsa) + 1;
+		if (!data->pkt2pkt_time.line_sync_pkt_enable) {
+			data->pkt2pkt_time.time_ns = 0;
+			pkt2pkt_time_ns = 0;
+		}
+
+		timing->hsa = CSI2_HSA_MIN + 1;
+		tmp_f = (pkt2pkt_time_ns +
+			 (2U * CSI2_SHORT_PKT_BYTES / phy->num_lanes + 2U) *
+				 time_PPI_ns / CSI2_BYTES_PER_HS_CLK) /
+			time_IPI_ns;
+		timing->hbp = csi2_dw_ceil_f32_to_u32(tmp_f - timing->hsa) + 1U;
+		if (timing->hbp < CSI2_HBP_MIN) {
+			timing->hbp = CSI2_HBP_MIN;
+		}
+
+		tmp_f = (pkt2pkt_time_ns +
+			 (((CSI2_LONG_PKT_BYTES + bytes_to_transmit) / phy->num_lanes) *
+			  time_PPI_ns / CSI2_BYTES_PER_HS_CLK)) /
+			time_IPI_ns;
+		timing->hsd = csi2_dw_ceil_f32_to_u32(
+			tmp_f - (timing->hsa + timing->hbp + timing->hact)) + 1U;
+		if (timing->hsd < CSI2_HSD_MIN) {
+			timing->hsd = CSI2_HSD_MIN;
+		}
+
 		timing->vsa = 0;
 		timing->vbp = 0;
-		timing->vfp = 0;
+		timing->vfp  = 0;
 		timing->vact = 0;
+
+		tmp_f = ((timing->hsd + timing->hsa + timing->hbp) * time_IPI_ns -
+			 pkt2pkt_time_ns) /
+			time_PPI_ns;
+		mem_req_1 = csi2_dw_ceil_f32_to_u32(tmp_f) * phy->num_lanes *
+			CSI2_BYTES_PER_HS_CLK;
+
+		tmp_f = ((timing->hsd + timing->hsa + timing->hbp + timing->hact) *
+			 time_IPI_ns - pkt2pkt_time_ns -
+			 (((CSI2_LONG_PKT_BYTES + bytes_to_transmit) / phy->num_lanes) *
+			  time_PPI_ns)) /
+			time_PPI_ns;
+		mem_req_2 = csi2_dw_ceil_f32_to_u32(tmp_f) * phy->num_lanes *
+			CSI2_BYTES_PER_HS_CLK;
+
+		min_memory_depth = MAX(MAX(mem_req_1, mem_req_2), 32U) * 8U /
+			CSI2_HOST_IPI_DWIDTH;
+
+		if (CSI2_IPI_FIFO_DEPTH < min_memory_depth) {
+			LOG_ERR("FIFO memory in-adequate!");
+			return -EINVAL;
+		}
+		timing->hact = 0;
 	}
 	return 0;
 }
@@ -840,6 +888,11 @@ static int csi2_dw_init(const struct device *dev)
 						link_frequencies),                                 \
 					(DT_PROP_LAST(REMOTE_EP(i, 1, 0), link_frequencies)),      \
 					(DT_INST_PROP(i, rx_ddr_clk2))),                           \
+		},                                                                                 \
+                                                                                                   \
+		.pkt2pkt_time = {                                                                  \
+			.line_sync_pkt_enable = DT_INST_PROP(i, sync_pkt_enable),                  \
+			.time_ns = DT_INST_PROP_OR(i, pkt2_pkt_time, 0),                           \
 		},                                                                                 \
                                                                                                    \
 		.time[0] = {                                                                       \
