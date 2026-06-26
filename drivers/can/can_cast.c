@@ -751,6 +751,13 @@ static int can_cast_send(const struct device *dev, const struct can_frame *frame
 		return -EINVAL;
 	}
 
+	/* Returns error if CAN FD frames are sent when FD mode is not enabled */
+	if ((frame->flags & (CAN_FRAME_FDF | CAN_FRAME_BRS)) &&
+	    !(data->common.mode & CAN_MODE_FD)) {
+		LOG_ERR("FD mode not enabled");
+		return -ENOTSUP;
+	}
+
 #if CONFIG_CAN_FD_MODE
 	if (frame->dlc > CANFD_MAX_DLC) {
 		LOG_ERR("DLC is greater than max");
@@ -768,7 +775,7 @@ static int can_cast_send(const struct device *dev, const struct can_frame *frame
 	 */
 	if ((frame->dlc > CAN_MAX_DLC) && ((!(frame->flags & (CAN_FRAME_FDF | CAN_FRAME_BRS))) ||
 					   (!(data->common.mode & CAN_MODE_FD)))) {
-		LOG_ERR("FD mode OFF");
+		LOG_ERR("DLC > 8 is only valid for CAN FD frames");
 		return -EINVAL;
 	}
 
