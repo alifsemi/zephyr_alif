@@ -9,6 +9,8 @@
 #include <zephyr/device.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/drivers/video.h>
+#include <zephyr/drivers/video-controls.h>
+#include <zephyr/sys/util.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/gpio.h>
 
@@ -24,6 +26,20 @@ LOG_MODULE_REGISTER(ov5675);
 #define OV5675_REG_MODE_SELECT   0x0100
 #define OV5675_MODE_STANDBY      0x00
 #define OV5675_MODE_STREAMING    0x01
+
+#define OV5675_REG_EXPO_H        0x3500
+#define OV5675_REG_EXPO_M        0x3501
+#define OV5675_REG_EXPO_L        0x3502
+
+#define OV5675_REG_AEC_MANUAL    0x3503
+#define OV5675_REG_GAIN_H        0x3508
+#define OV5675_REG_GAIN_L        0x3509
+
+#define OV5675_EXPO_MIN          0x20U
+#define OV5675_EXPO_MAX          0x7FFFFU
+
+#define OV5675_GAIN_MIN          0x80U
+#define OV5675_GAIN_MAX          0x1FFFU
 
 struct ov5675_config {
 	const struct gpio_dt_spec reset_gpio;
@@ -307,11 +323,68 @@ static int ov5675_set_stream(const struct device *dev, bool enable)
 	return 0;
 }
 
+static int ov5675_set_exposure(const struct device *dev, uint32_t val)
+{
+	/* Exposure register stores value in 1/16 row units. expo = val << 4*/
+	uint64_t expo64 = (uint64_t)val << 4;
+	uint32_t expo = (uint32_t)CLAMP(expo64, (uint64_t)OV5675_EXPO_MIN,
+			(uint64_t)OV5675_EXPO_MAX);
+	const struct ov5675_config *cfg = dev->config;
+	int ret;
+
+	ret = ov5675_write_reg(&cfg->i2c, OV5675_REG_EXPO_H, (expo >> 16) & 0x07);
+	if (ret) {
+		return ret;
+	}
+
+	ret = ov5675_write_reg(&cfg->i2c, OV5675_REG_EXPO_M, (expo >> 8) & 0xFF);
+	if (ret) {
+		return ret;
+	}
+
+	return ov5675_write_reg(&cfg->i2c, OV5675_REG_EXPO_L, expo & 0xFF);
+}
+
+static int ov5675_set_gain(const struct device *dev, uint32_t val)
+{
+	/* val is in Q22.10 format (unity = 1024, from ISP wrapper).
+	 * OV5675 gain register uses 7 fractional bits (unity = 128).
+	 * Scale: reg_gain = val / 8  (1024 / 128 = 8)
+	 */
+	uint32_t g = CLAMP(val / 8U, OV5675_GAIN_MIN, OV5675_GAIN_MAX);
+	const struct ov5675_config *cfg = dev->config;
+	int ret;
+
+	ret = ov5675_write_reg(&cfg->i2c, OV5675_REG_GAIN_H, (g >> 8) & 0x1F);
+	if (ret) {
+		return ret;
+	}
+
+	return ov5675_write_reg(&cfg->i2c, OV5675_REG_GAIN_L, g & 0xFF);
+}
+
+static int ov5675_set_ctrl(const struct device *dev, unsigned int cid, void *value)
+{
+	uint32_t val;
+
+	val = (uint32_t)POINTER_TO_UINT(value);
+
+	switch (cid) {
+	case VIDEO_CID_EXPOSURE:
+		return ov5675_set_exposure(dev, val);
+	case VIDEO_CID_GAIN:
+		return ov5675_set_gain(dev, val);
+	default:
+		return -ENOTSUP;
+	}
+}
+
 static DEVICE_API(video, ov5675_driver_api) = {
 	.set_format = ov5675_set_fmt,
 	.get_format = ov5675_get_fmt,
 	.get_caps   = ov5675_get_caps,
 	.set_stream = ov5675_set_stream,
+	.set_ctrl   = ov5675_set_ctrl,
 };
 
 #define OV5675_DEVICE_DEFINE(i)                                                    \
