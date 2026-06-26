@@ -1196,7 +1196,6 @@ static void can_cast_handle_rx_frame(const struct device *dev)
 		if ((filter->rx_cb != NULL) &&
 		    (can_frame_matches_filter(&rx_frame, &filter->rx_filter))) {
 			filter->rx_cb(dev, &rx_frame, filter->cb_arg);
-			break;
 		}
 	}
 }
