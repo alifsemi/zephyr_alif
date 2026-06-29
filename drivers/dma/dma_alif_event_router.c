@@ -241,7 +241,7 @@ static int dma_alif_evtrtr_configure(const struct device *dev, uint32_t encoded_
 		goto unlock;
 	}
 
-	LOG_INF("%s: Configuring periph=%u, dma_group=%u, dma_ch=%u, handshake=%s",
+	LOG_DBG("%s: Configuring periph=%u, dma_group=%u, dma_ch=%u, handshake=%s",
 		dev->name, periph, dma_group, channel,
 		enable_handshake ? "enabled" : "disabled");
 
@@ -434,11 +434,11 @@ int alif_dma_evtrtr_configure_channel(const struct device *dev,
 		ctrl = EVTRTR_DMA_CTRL_ENA |
 		       (dma_group & EVTRTR_DMA_CTRL_GROUP_MASK);
 		sys_write32(ctrl, EVTRTR_DMA_CTRL_REG(reg_base, channel));
-		LOG_INF("%s: Enabled ch %u with dma_group %u", dev->name, channel, dma_group);
+		LOG_DBG("%s: Enabled ch %u with dma_group %u", dev->name, channel, dma_group);
 	} else {
 		/* Disable event router channel */
 		sys_write32(0, EVTRTR_DMA_CTRL_REG(reg_base, channel));
-		LOG_INF("%s: Disabled ch %u", dev->name, channel);
+		LOG_DBG("%s: Disabled ch %u", dev->name, channel);
 	}
 
 unlock:
