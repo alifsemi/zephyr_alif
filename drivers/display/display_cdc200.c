@@ -651,7 +651,17 @@ void cdc200_swap_fb(const struct device *dev, uint8_t idx, struct cdc200_fb_desc
 		return;
 	}
 
-	data->next_fb[idx] = fb->fb_addr;
+	if (data->curr_fb[idx] != fb->fb_addr) {
+		k_sem_reset(&data->vsync_sem);
+		data->next_fb[idx] = fb->fb_addr;
+	}
+}
+
+int cdc200_wait_vsync(const struct device *dev, k_timeout_t timeout)
+{
+	struct cdc200_data *data = dev->data;
+
+	return k_sem_take(&data->vsync_sem, timeout);
 }
 
 void restore_fb(const struct device *dev)
@@ -674,16 +684,24 @@ static void cdc200_isr(const struct device *dev)
 	if (irq_st & CDC_IRQ_LINE) {
 		cdc200_set_irq_clear(regs, CDC_IRQ_LINE);
 
+		bool swapped = false;
+
 		if (data->curr_fb[CDC_LAYER_1] != data->next_fb[CDC_LAYER_1]) {
 			sys_write32((uint32_t)data->next_fb[CDC_LAYER_1], regs + CDC_L1_CFB_ADDR);
 			data->curr_fb[CDC_LAYER_1] = data->next_fb[CDC_LAYER_1];
+			swapped = true;
 		}
 
 		if (data->curr_fb[CDC_LAYER_2] != data->next_fb[CDC_LAYER_2]) {
 			sys_write32((uint32_t)data->next_fb[CDC_LAYER_2], regs + CDC_L2_CFB_ADDR);
 			data->curr_fb[CDC_LAYER_2] = data->next_fb[CDC_LAYER_2];
+			swapped = true;
 		}
 		cdc200_shadow_reload_control(regs);
+
+		if (swapped) {
+			k_sem_give(&data->vsync_sem);
+		}
 	}
 }
 
@@ -768,6 +786,7 @@ static int cdc200_init(const struct device *dev)
 	LOG_DBG("MMIO address - 0x%x", (uint32_t)DEVICE_MMIO_GET(dev));
 
 	data->dev = dev;
+	k_sem_init(&data->vsync_sem, 0, 1);
 
 #if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
 	if (!cdc200_pixel_clock_valid(dev)) {
