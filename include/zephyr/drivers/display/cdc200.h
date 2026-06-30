@@ -7,6 +7,7 @@
 #define __ZEPHYR_INCLUDE_DRIVERS_CDC200_H__
 
 #include <zephyr/device.h>
+#include <zephyr/kernel.h>
 #include <stddef.h>
 #include <zephyr/types.h>
 #include <zephyr/drivers/display.h>
@@ -97,6 +98,12 @@ void cdc200_set_enable(const struct device *dev,
 void cdc200_swap_fb(const struct device *dev,
 		uint8_t idx,
 		struct cdc200_fb_desc *fb);
+
+/*
+ * Wait for the next vsync (LINE IRQ) that processes a pending framebuffer swap.
+ * Returns 0 on success, -EAGAIN on timeout.
+ */
+int cdc200_wait_vsync(const struct device *dev, k_timeout_t timeout);
 
 /*
  * Restore default framebuffers for CDC. The buffer change will happen at next vblank

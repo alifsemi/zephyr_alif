@@ -232,11 +232,11 @@ int lvgl_init(void)
 		return -ENODEV;
 	}
 
+	lv_init();
 #if CONFIG_LV_Z_LOG_LEVEL != 0
 	lv_log_register_print_cb(lvgl_log);
 #endif
 
-	lv_init();
 	lv_tick_set_cb(k_uptime_get_32);
 
 #ifdef CONFIG_LV_Z_USE_FILESYSTEM
