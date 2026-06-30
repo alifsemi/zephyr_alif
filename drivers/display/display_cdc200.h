@@ -7,6 +7,7 @@
 #define _DISPLAY_CDC200_H_
 
 #include <zephyr/device.h>
+#include <zephyr/kernel.h>
 #include <zephyr/drivers/clock_control.h>
 
 /* Global Registers */
@@ -333,6 +334,8 @@ struct cdc200_data {
 
 	uint8_t *curr_fb[CDC_LAYER_MAX];
 	uint8_t *next_fb[CDC_LAYER_MAX];
+
+	struct k_sem vsync_sem;
 };
 
 #endif /* _DISPLAY_CDC200_H_ */

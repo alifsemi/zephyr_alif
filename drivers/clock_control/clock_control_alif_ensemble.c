@@ -326,7 +326,7 @@ static int alif_clock_control_on(const struct device *dev,
 			clock_control_subsys_t sub_system)
 {
 	uint32_t clk_id = (uint32_t) sub_system;
-	uint32_t module_base, reg_addr;
+	uint32_t module_base = 0, reg_addr;
 #if defined(CONFIG_ENSEMBLE_GEN2)
 	uint32_t cgu_module_base;
 #endif
@@ -413,7 +413,7 @@ static int alif_clock_control_off(const struct device *dev,
 			clock_control_subsys_t sub_system)
 {
 	uint32_t clk_id = (uint32_t) sub_system;
-	uint32_t module_base, reg_addr;
+	uint32_t module_base = 0, reg_addr;
 	int32_t ret;
 
 	if (!ALIF_CLOCK_CFG_EN_MASK(clk_id)) {
@@ -518,15 +518,19 @@ static enum clock_control_status
 				clock_control_subsys_t sub_system)
 {
 	uint32_t clk_id = (uint32_t) sub_system;
-	uint32_t reg_addr, module_base;
+	uint32_t reg_addr, module_base = 0;
+	int32_t ret;
 
 	if (!ALIF_CLOCK_CFG_EN_MASK(clk_id)) {
 		LOG_ERR("ERROR: Clock status not avilable\n");
 		return CLOCK_CONTROL_STATUS_UNKNOWN;
 	}
 
-	alif_get_module_base(dev, ALIF_CLOCK_CFG_MODULE(clk_id),
+	ret = alif_get_module_base(dev, ALIF_CLOCK_CFG_MODULE(clk_id),
 					&module_base);
+	if (ret) {
+		return ret;
+	}
 	reg_addr = module_base + ALIF_CLOCK_CFG_REG(clk_id);
 
 	if (sys_test_bit(reg_addr, ALIF_CLOCK_CFG_ENABLE(clk_id)) != 0) {
