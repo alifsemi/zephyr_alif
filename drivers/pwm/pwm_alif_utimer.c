@@ -12,6 +12,8 @@
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/logging/log.h>
 
+#include <zephyr/pm/device.h>
+
 #include "utimer.h"
 #include <zephyr/dt-bindings/timer/alif_utimer.h>
 
@@ -29,7 +31,10 @@ struct pwm_alif_utimer_config {
 	const struct device *clk_dev;
 	clock_control_subsys_t clkid;
 };
-
+struct pwm_channel_state {
+	uint32_t prev_pulse;
+	bool     was_enabled;
+};
 /** PWM runtime data configuration */
 struct pwm_alif_utimer_data {
 	DEVICE_MMIO_NAMED_RAM(global);
@@ -38,6 +43,7 @@ struct pwm_alif_utimer_data {
 	uint32_t prev_pulse;
 	uint32_t frequency;
 	pwm_flags_t prev_flags;
+	struct pwm_channel_state ch[NUM_CHANNELS];
 };
 
 #define DEV_CFG(_dev) ((const struct pwm_alif_utimer_config *)(_dev)->config)
@@ -95,7 +101,21 @@ static int pwm_alif_utimer_set_cycles(const struct device *dev, uint32_t channel
 	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
 	uint32_t value;
 
-	if (channel > NUM_CHANNELS) {
+#ifdef CONFIG_PM_DEVICE
+	enum pm_device_state state;
+	int pm_ret = pm_device_state_get(dev, &state);
+
+	if (pm_ret != 0) {
+		LOG_ERR("Could not read PM state (err %d), refusing to set cycles", pm_ret);
+		return -EIO;
+	}
+	if (state != PM_DEVICE_STATE_ACTIVE) {
+		LOG_ERR("PWM device is suspended, cannot set cycles");
+		return -EBUSY;
+	}
+#endif
+
+	if (channel >= NUM_CHANNELS) {
 		LOG_ERR("Invalid channel number");
 		return -EINVAL;
 	}
@@ -112,7 +132,7 @@ static int pwm_alif_utimer_set_cycles(const struct device *dev, uint32_t channel
 			alif_utimer_set_driver_disable_val_low(timer_base, channel);
 		}
 
-		data->prev_period = 0;
+		data->ch[channel].was_enabled = false;
 		return 0;
 	}
 
@@ -132,11 +152,11 @@ static int pwm_alif_utimer_set_cycles(const struct device *dev, uint32_t channel
 	}
 
 	/* update pulse value if it as been changed */
-	if (pulse_cycles != data->prev_pulse) {
+	if (pulse_cycles != data->ch[channel].prev_pulse) {
 		/* set pulse value */
 		alif_utimer_set_compare_value(timer_base, channel, pulse_cycles);
 
-		data->prev_pulse = pulse_cycles;
+		data->ch[channel].prev_pulse = pulse_cycles;
 	}
 
 	/* enable channel if not enabled */
@@ -144,6 +164,7 @@ static int pwm_alif_utimer_set_cycles(const struct device *dev, uint32_t channel
 		alif_utimer_config_driver_output(timer_base, channel, value);
 		alif_utimer_enable_driver_output(global_base, channel, cfg->timer_id);
 		alif_utimer_enable_driver(timer_base, channel);
+		data->ch[channel].was_enabled = true;
 	}
 
 	/* enable channel compare match if not enabled */
@@ -228,6 +249,98 @@ static int pwm_alif_utimer_init(const struct device *dev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_DEVICE
+static int pwm_alif_utimer_suspend(const struct device *dev)
+{
+	const struct pwm_alif_utimer_config *cfg = DEV_CFG(dev);
+	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
+	int ret;
+
+	LOG_DBG("PM: Suspending %s", dev->name);
+
+	alif_utimer_disable_timer_clock(global_base, cfg->timer_id);
+
+	ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_SLEEP);
+	if (ret < 0 && ret != -ENOENT) {
+		LOG_ERR("pinctrl sleep failed: %d", ret);
+		return ret;
+	}
+
+	LOG_DBG("PM: Suspended %s", dev->name);
+	return 0;
+}
+
+static int pwm_alif_utimer_resume(const struct device *dev)
+{
+	const struct pwm_alif_utimer_config *cfg = DEV_CFG(dev);
+	struct pwm_alif_utimer_data *data = DEV_DATA(dev);
+	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
+	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
+	int ret;
+
+	LOG_DBG("PM: Resuming %s", dev->name);
+
+	ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_DEFAULT);
+	if (ret < 0 && ret != -ENOENT) {
+		LOG_ERR("pinctrl default failed: %d", ret);
+		return ret;
+	}
+
+	/* Re-run the same low-level bring-up sequence as init() */
+	alif_utimer_disable_timer_output(global_base, cfg->timer_id);
+	alif_utimer_enable_timer_clock(global_base, cfg->timer_id);
+	alif_utimer_enable_soft_counter_ctrl(timer_base);
+	utimer_set_direction(timer_base, cfg->counterdirection);
+	alif_utimer_enable_counter(timer_base);
+
+	if (data->prev_period != 0) {
+		alif_utimer_set_counter_reload_value(timer_base, data->prev_period);
+
+		for (uint8_t i = 0; i < NUM_CHANNELS; i++) {
+			if (!data->ch[i].was_enabled) {
+				continue;
+			}
+
+			uint32_t value = utimer_get_driver_config(cfg->counterdirection,
+								   data->prev_flags);
+
+			alif_utimer_set_compare_value(timer_base, i, data->ch[i].prev_pulse);
+			alif_utimer_config_driver_output(timer_base, i, value);
+			alif_utimer_enable_driver_output(global_base, i, cfg->timer_id);
+			alif_utimer_enable_driver(timer_base, i);
+			alif_utimer_enable_compare_match(timer_base, i);
+
+			LOG_DBG("PM: channel %d pulse=%u restored", i, data->ch[i].prev_pulse);
+		}
+
+		alif_utimer_start_counter(global_base, cfg->timer_id);
+	}
+
+	LOG_DBG("PM: Resumed %s", dev->name);
+
+	return 0;
+}
+
+static int pwm_alif_utimer_pm_action(const struct device *dev,
+				      enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		return pwm_alif_utimer_suspend(dev);
+
+	case PM_DEVICE_ACTION_RESUME:
+		return pwm_alif_utimer_resume(dev);
+
+	case PM_DEVICE_ACTION_TURN_ON:
+	case PM_DEVICE_ACTION_TURN_OFF:
+		return 0;
+
+	default:
+		return -ENOTSUP;
+	}
+}
+#endif
+
 /* Device Instantiation */
 #define PWM_ALIF_UTIMER_INIT(n)									\
 	PINCTRL_DT_INST_DEFINE(n);								\
@@ -241,10 +354,10 @@ static int pwm_alif_utimer_init(const struct device *dev)
 		.clk_dev = DEVICE_DT_GET(DT_CLOCKS_CTLR(DT_INST_PARENT(n))),			\
 		.clkid = (clock_control_subsys_t)DT_CLOCKS_CELL(DT_INST_PARENT(n), clkid),	\
 	};											\
-												\
+	PM_DEVICE_DT_INST_DEFINE(n, pwm_alif_utimer_pm_action);					\
 	DEVICE_DT_INST_DEFINE(n,								\
 			      &pwm_alif_utimer_init,						\
-			      NULL,								\
+			      PM_DEVICE_DT_INST_GET(n),						\
 			      &pwm_alif_utimer_data_##n,					\
 			      &pwm_alif_utimer_cfg_##n,						\
 			      POST_KERNEL,							\
@@ -252,3 +365,4 @@ static int pwm_alif_utimer_init(const struct device *dev)
 			      &pwm_alif_utimer_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(PWM_ALIF_UTIMER_INIT)
+
