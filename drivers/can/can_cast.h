@@ -339,9 +339,11 @@ struct can_cast_filter_t {
  *    1. Device MMIO information
  */
 struct can_cast_config {
+	struct can_driver_config common;
 	DEVICE_MMIO_NAMED_ROM(can_reg);
 	DEVICE_MMIO_NAMED_ROM(can_cnt_reg);
-	struct can_driver_config common;
+
+
 #if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
 	/* clock controller dev instance */
 	const struct device *clk_dev;
@@ -360,9 +362,9 @@ struct can_cast_config {
  * Device data structure. Includes:
  */
 struct can_cast_data {
+	struct can_driver_data common;
 	DEVICE_MMIO_NAMED_RAM(can_reg);
 	DEVICE_MMIO_NAMED_RAM(can_cnt_reg);
-	struct can_driver_data common;
 	struct k_mutex inst_mutex;
 	struct can_driver_state state;
 	struct can_cast_tx_queue_t tx_queue;
