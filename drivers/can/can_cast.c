@@ -1406,7 +1406,7 @@ void can_cast_irq_handler(const struct device *dev)
 }
 
 /* CAN Driver API structure */
-struct can_driver_api can_cast_driver_api = {
+static DEVICE_API(can, can_cast_driver_api) = {
 	.get_capabilities = can_cast_get_capabilities,
 	.start = can_cast_start,
 	.stop = can_cast_stop,
