@@ -1464,8 +1464,6 @@ static DEVICE_API(can, can_cast_driver_api) = {
 	static void can_cast_config_func_##inst(const struct device *dev);                         \
 	IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, pinctrl_0), (PINCTRL_DT_INST_DEFINE(inst)));        \
 	static const struct can_cast_config config_##inst = {                                      \
-		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(can_reg, DT_DRV_INST(inst)),                    \
-		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(can_cnt_reg, DT_DRV_INST(inst)),                \
 		.common = {                                                                        \
 			.phy = DEVICE_DT_GET_OR_NULL(DT_INST_PHANDLE(inst, phys)),                 \
 			.max_bitrate  = CAN_CAST_MAX_BITRATE(inst),                                \
@@ -1475,6 +1473,8 @@ static DEVICE_API(can, can_cast_driver_api) = {
 			(.bitrate_data = DT_INST_PROP_OR(inst, bitrate_data,                       \
 						CONFIG_CAN_DEFAULT_BITRATE_DATA),                  \
 			.sample_point_data = DT_INST_PROP_OR(inst, sample_point_data, 0)))},       \
+		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(can_reg, DT_DRV_INST(inst)),                    \
+		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(can_cnt_reg, DT_DRV_INST(inst)),                \
 		CAN_CAST_CLOCK_INIT(inst),                                                         \
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, pinctrl_0),                                 \
 		(.pcfg = PINCTRL_DT_DEV_CONFIG_GET(DT_DRV_INST(inst)))),                           \
