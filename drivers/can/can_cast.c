@@ -1020,15 +1020,15 @@ static int can_cast_get_state(const struct device *dev, enum can_state *state,
 	struct can_cast_data *data = DEV_DATA(dev);
 	uint32_t can_base;
 
-	if ((!state) || (!err_cnt)) {
-		return -EINVAL;
-	}
-
 	can_base = DEVICE_MMIO_NAMED_GET(dev, can_reg);
 
-	*state = data->err_state;
-	err_cnt->tx_err_cnt = can_cast_get_tx_error_count(can_base);
-	err_cnt->rx_err_cnt = can_cast_get_rx_error_count(can_base);
+	if (state != NULL) {
+		*state = data->err_state;
+	}
+	if (err_cnt != NULL) {
+		err_cnt->tx_err_cnt = can_cast_get_tx_error_count(can_base);
+		err_cnt->rx_err_cnt = can_cast_get_rx_error_count(can_base);
+	}
 
 	return 0;
 }
