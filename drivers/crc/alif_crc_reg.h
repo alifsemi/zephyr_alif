@@ -19,6 +19,8 @@ extern "C" {
  */
 struct crc_data {
 	uint8_t crc_algo;
+	uint32_t seed_value;
+	uint32_t polynomial;
 };
 
 /*
