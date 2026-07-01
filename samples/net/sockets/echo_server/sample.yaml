@@ -153,3 +153,16 @@ tests:
       - native_sim/native/64
     extra_args:
       - EXTRA_CONF_FILE="overlay-ws-console.conf"
+  sample.net.sockets.echo_server.usbd_ncm:
+    depends_on: usb_device
+    harness: net
+    extra_args:
+      - EXTRA_CONF_FILE="overlay-usbd_next.conf;boards/alif-cdc-ncm-common.conf"
+      - DTC_OVERLAY_FILE="boards/alif-cdc-ncm-common.overlay"
+    tags:
+      - net
+      - usb
+    platform_allow:
+      - alif_e8_dk_ae822fa0e5597xx0_rtss_hp
+      - alif_e7_dk_ae722f80f55d5xx_rtss_hp
+      - alif_b1_dk_ab1c1f4m51820ph0_rtss_he
