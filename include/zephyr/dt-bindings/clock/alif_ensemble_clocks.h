@@ -283,6 +283,8 @@
 	ALIF_CLK_CFG(M55HP_CFG, HP_CLK_ENA, 0U, 1U, 0U, 0U, 0U)
 #define ALIF_NPU_HE_CLK             \
 	ALIF_CLK_CFG(M55HE_CFG, HE_CLK_ENA, 0U, 1U, 0U, 0U, 0U)
+#define ALIF_ETHOS_U85_CLK          \
+	ALIF_CLK_CFG(CGU, CLK_ENA, 31U, 1U, 0U, 0U, 0U)
 
 /* DMA clocks */
 #define ALIF_DMA0_CLK               \
