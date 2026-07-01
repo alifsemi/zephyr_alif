@@ -1177,9 +1177,9 @@ static int arx3a0_set_ctrl(const struct device *dev, unsigned int cid, void *val
 {
 	switch (cid) {
 	case VIDEO_CID_GAIN:
-		return arx3a0_set_camera_gain(dev, *(uint32_t *)value);
+		return arx3a0_set_camera_gain(dev, (uint32_t)POINTER_TO_UINT(value));
 	case VIDEO_CID_EXPOSURE:
-		return arx3a0_set_camera_exp(dev, *(uint32_t *)value);
+		return arx3a0_set_camera_exp(dev, (uint32_t)POINTER_TO_UINT(value));
 	default:
 		return -ENOTSUP;
 	}
