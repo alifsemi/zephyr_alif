@@ -40,6 +40,7 @@
 		interrupt-parent = <&nvic>;
 		secure-enable;
 		privilege-enable;
+		clocks = <&clockctrl ALIF_ETHOS_U85_CLK>;
 		status = "disabled";
 	};
 

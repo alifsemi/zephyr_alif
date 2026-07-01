@@ -30,3 +30,8 @@ properties:
   privilege-enable:
     type: boolean
     description: Configure Ethos-U NPU to operate in privileged- or non-privileged mode
+
+  clocks:
+    description: |
+      Optional clock gate for the NPU. When present, the driver will enable
+      this clock during initialization before accessing NPU registers.

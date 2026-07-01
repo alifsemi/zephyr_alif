@@ -7,6 +7,7 @@
 #include "zephyr/sys_clock.h"
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
+#include <zephyr/drivers/clock_control.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/irq.h>
@@ -110,6 +111,8 @@ struct ethosu_dts_info {
 	bool secure_enable;
 	bool privilege_enable;
 	void (*irq_config)(void);
+	const struct device *clk_dev;
+	clock_control_subsys_t clk_id;
 };
 
 struct ethosu_data {
@@ -133,6 +136,17 @@ static int ethosu_zephyr_init(const struct device *dev)
 
 	LOG_DBG("Ethos-U DTS info. base_address=0x%p, secure_enable=%u, privilege_enable=%u",
 		config->base_addr, config->secure_enable, config->privilege_enable);
+
+	if (config->clk_dev != NULL) {
+		if (!device_is_ready(config->clk_dev)) {
+			LOG_ERR("Clock device not ready");
+			return -ENODEV;
+		}
+		if (clock_control_on(config->clk_dev, config->clk_id)) {
+			LOG_ERR("Failed to enable NPU clock");
+			return -EIO;
+		}
+	}
 
 	ethosu_get_driver_version(&version);
 
@@ -165,6 +179,10 @@ static int ethosu_zephyr_init(const struct device *dev)
 		.secure_enable = DT_INST_PROP(n, secure_enable),                                   \
 		.privilege_enable = DT_INST_PROP(n, privilege_enable),                             \
 		.irq_config = &ethosu_zephyr_irq_config_##n,                                       \
+		.clk_dev = COND_CODE_1(DT_INST_NODE_HAS_PROP(n, clocks),                           \
+			(DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n))), (NULL)),			   \
+		.clk_id = COND_CODE_1(DT_INST_NODE_HAS_PROP(n, clocks),                            \
+			((clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, clkid)), (NULL)),	   \
 	};                                                                                         \
                                                                                                    \
 	DEVICE_DT_INST_DEFINE(n, ethosu_zephyr_init, NULL, &ethosu_data_##n, &ethosu_dts_info_##n, \
