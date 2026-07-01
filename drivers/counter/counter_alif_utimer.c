@@ -10,6 +10,8 @@
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/logging/log.h>
 
+#include <zephyr/pm/device.h>
+
 #include "utimer.h"
 #include <zephyr/dt-bindings/timer/alif_utimer.h>
 
@@ -31,6 +33,7 @@ struct counter_alif_utimer_data {
 	void *top_user_data;
 	atomic_t cc_int_pending;
 	struct counter_alif_utimer_ch_data alarm[NUM_CHANNELS];
+	bool running;
 };
 
 struct counter_alif_utimer_config {
@@ -69,20 +72,24 @@ static int utimer_set_direction(uint32_t reg_base, uint8_t direction)
 static int counter_alif_utimer_start(const struct device *dev)
 {
 	const struct counter_alif_utimer_config *cfg = DEV_CFG(dev);
+	struct counter_alif_utimer_data *data = DEV_DATA(dev);
 	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
 
 	/* start the timer counter*/
 	alif_utimer_start_counter(global_base, cfg->timer_id);
+	data->running = true;
 	return 0;
 }
 
 static int counter_alif_utimer_stop(const struct device *dev)
 {
 	const struct counter_alif_utimer_config *cfg = DEV_CFG(dev);
+	struct counter_alif_utimer_data *data = DEV_DATA(dev);
 	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
 
 	/* stop the timer counter */
 	alif_utimer_stop_counter(global_base, cfg->timer_id);
+	data->running = false;
 
 	return 0;
 }
@@ -407,12 +414,14 @@ static int counter_alif_utimer_init(const struct device *dev)
 		LOG_ERR("clock controller device not ready");
 		return -ENODEV;
 	}
+
 	/* Enable clock only for lputimer instances from clock manager */
 	ret = clock_control_on(cfg->clk_dev, cfg->clkid);
 	if (ret != 0) {
 		LOG_ERR("Unable to turn on clock: err:%d", ret);
 		return ret;
 	}
+
 	/* get clock rate from clock manager */
 	ret = clock_control_get_rate(cfg->clk_dev,
 			cfg->clkid, &data->frequency);
@@ -434,8 +443,71 @@ static int counter_alif_utimer_init(const struct device *dev)
 
 	cfg->irq_config(dev);
 
+	data->running = false;
+
 	return 0;
 }
+
+#ifdef CONFIG_PM_DEVICE
+static int counter_alif_utimer_pm_suspend(const struct device *dev)
+{
+	const struct counter_alif_utimer_config *cfg = DEV_CFG(dev);
+	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
+
+	alif_utimer_disable_timer_clock(global_base, cfg->timer_id);
+
+	return 0;
+}
+
+static int counter_alif_utimer_pm_resume(const struct device *dev)
+{
+	const struct counter_alif_utimer_config *cfg = DEV_CFG(dev);
+	struct counter_alif_utimer_data *data = DEV_DATA(dev);
+	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
+	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
+	int ret;
+
+	alif_utimer_enable_timer_clock(global_base, cfg->timer_id);
+
+	ret = utimer_set_direction(timer_base, cfg->counterdirection);
+	if (ret != 0) {
+		LOG_ERR("Failed to restore counter direction: err:%d", ret);
+		return ret;
+	}
+
+	alif_utimer_enable_soft_counter_ctrl(timer_base);
+
+	if (data->top_cb) {
+		alif_utimer_enable_interrupt(timer_base, CHAN_INTERRUPT_OVER_FLOW_BIT);
+	}
+
+	cfg->irq_config(dev);
+
+	alif_utimer_enable_counter(timer_base);
+
+	if (data->running) {
+		alif_utimer_start_counter(global_base, cfg->timer_id);
+	}
+
+	return 0;
+}
+
+static int counter_alif_utimer_pm_action(const struct device *dev,
+					 enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		return counter_alif_utimer_pm_suspend(dev);
+	case PM_DEVICE_ACTION_RESUME:
+		return counter_alif_utimer_pm_resume(dev);
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		return 0;
+	default:
+		return -ENOTSUP;
+	}
+}
+#endif
 
 static DEVICE_API(counter, counter_alif_utimer_api) = {
 	.start = counter_alif_utimer_start,
@@ -511,9 +583,10 @@ static DEVICE_API(counter, counter_alif_utimer_api) = {
 		.get_irq_pending = get_irq_pending_##n,                                         \
 	};                                                                                      \
                                                                                                 \
+	PM_DEVICE_DT_INST_DEFINE(n, counter_alif_utimer_pm_action);                             \
 	DEVICE_DT_INST_DEFINE(n,                                                                \
 			      &counter_alif_utimer_init,                                        \
-			      NULL,                                                             \
+			      PM_DEVICE_DT_INST_GET(n),                                         \
 			      &counter_alif_utimer_data_##n,                                    \
 			      &counter_alif_utimer_cfg_##n,                                     \
 			      PRE_KERNEL_1,                                                     \
