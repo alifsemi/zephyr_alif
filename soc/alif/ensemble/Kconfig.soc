@@ -11,4 +11,12 @@ config NONSECURE0_REGION
 	help
 	    Provide config Non-Secure region
 
+config SYSTEM_HEAP_IN_SRAM
+	int "Move system heap to SRAM"
+	range -1 1
+	default -1
+	help
+		Move system heap to SRAM. Set to 0 for SRAM0, 1 for SRAM1,
+		or -1 to keep the default location.
+
 rsource "*/Kconfig.soc"
