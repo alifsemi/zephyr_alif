@@ -229,6 +229,9 @@ struct cdc_ncm_eth_data {
 	enum iface_state if_state;
 	uint16_t tx_seq;
 	uint16_t rx_seq;
+	uint16_t packet_filter;
+	uint16_t ntb_input_size;
+	uint16_t ntb_format;
 
 	struct k_sem sync_sem;
 
@@ -888,20 +891,62 @@ static int usbd_cdc_ncm_ctd(struct usbd_class_data *const c_data,
 {
 	if (setup->RequestType.recipient == USB_REQTYPE_RECIPIENT_INTERFACE) {
 		if (setup->bRequest == SET_ETHERNET_PACKET_FILTER) {
-			LOG_DBG("bRequest 0x%02x (%s) not implemented",
-				setup->bRequest, "SetPacketFilter");
+			const struct device *dev = usbd_class_get_private(c_data);
+			struct cdc_ncm_eth_data *data = dev->data;
+
+			LOG_DBG("bRequest 0x%02x (SetPacketFilter) wValue 0x%04x",
+				setup->bRequest, setup->wValue);
+
+			/* Store packet filter value */
+			data->packet_filter = setup->wValue;
+
+			/* Enable interface when packet filter is set */
+			if (setup->wValue != 0) {
+				atomic_set_bit(&data->state, CDC_NCM_IFACE_UP);
+				net_if_carrier_on(data->iface);
+				LOG_INF("CDC NCM interface enabled");
+				/* Directly send connection status notification */
+				(void)cdc_ncm_send_connected(dev, true);
+			} else {
+				atomic_clear_bit(&data->state, CDC_NCM_IFACE_UP);
+				net_if_carrier_off(data->iface);
+				LOG_INF("CDC NCM interface disabled");
+				/* Send disconnected status */
+				(void)cdc_ncm_send_connected(dev, false);
+			}
+
 			return 0;
 		}
 
 		if (setup->bRequest == SET_NTB_INPUT_SIZE) {
-			LOG_DBG("bRequest 0x%02x (%s) not implemented",
-				setup->bRequest, "SetNtbInputSize");
+			const struct device *dev = usbd_class_get_private(c_data);
+			struct cdc_ncm_eth_data *data = dev->data;
+			uint16_t ntb_input_size = sys_le16_to_cpu(setup->wValue);
+
+			LOG_INF("bRequest 0x%02x (SetNtbInputSize) wValue %u",
+				setup->bRequest, ntb_input_size);
+
+			/* Store NTB input size for later use */
+			data->ntb_input_size = ntb_input_size;
+
 			return 0;
 		}
 
 		if (setup->bRequest == SET_NTB_FORMAT) {
-			LOG_DBG("bRequest 0x%02x (%s) not implemented",
-				setup->bRequest, "SetNtbFormat");
+			const struct device *dev = usbd_class_get_private(c_data);
+			struct cdc_ncm_eth_data *data = dev->data;
+			uint16_t ntb_format = sys_le16_to_cpu(setup->wValue);
+
+			LOG_INF("bRequest 0x%02x (SetNtbFormat) wValue %u",
+				setup->bRequest, ntb_format);
+
+			/* Store NTB format (only NTB16 supported for now) */
+			if (ntb_format != 0x0001) {
+				LOG_WRN("Unsupported NTB format %u, only NTB16 supported",
+					ntb_format);
+			}
+			data->ntb_format = ntb_format;
+
 			return 0;
 		}
 	}
