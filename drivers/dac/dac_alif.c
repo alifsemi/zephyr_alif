@@ -127,6 +127,11 @@ static int dac_enable(const struct device *dev, const struct dac_channel_cfg *ch
 	uintptr_t regs = DEVICE_MMIO_NAMED_GET(dev, dac_reg);
 	uint32_t data;
 
+	/* Alif DAC only supports channel 0 */
+	if (channel_cfg->channel_id != 0) {
+		return -EINVAL;
+	}
+
 	if (channel_cfg->resolution != DAC12_MAX_RESOLUTION) {
 		return -ENOTSUP;
 	}
@@ -230,9 +235,31 @@ static int dac_write_data(const struct device *dev, uint8_t channel, uint32_t in
 
 	const struct dac_config *config = DEV_CFG(dev);
 
-	if (config->twoscomp_enabled != 1 &&
-	(input_value > DAC_MAX_INPUT || input_value < DAC_MIN_INPUT)) {
+	/* Alif DAC only supports channel 0 */
+	if (channel != 0) {
 		return -EINVAL;
+	}
+
+	if (config->twoscomp_enabled) {
+		/* Two's complement mode: validate signed range for 12-bit resolution
+		 * Valid range: -2048 to +2047 (0x800 to 0x7FF in two's complement)
+		 * In two's complement, values 0x000-0x7FF are positive (0 to 2047)
+		 * and 0x800-0xFFF are negative (-2048 to -1)
+		 */
+		int32_t signed_value = (int32_t)input_value;
+		const int32_t max_signed = (1 << (DAC12_MAX_RESOLUTION - 1)) - 1;  /* 2047 */
+		const int32_t min_signed = -(1 << (DAC12_MAX_RESOLUTION - 1));     /* -2048 */
+
+		if (signed_value > max_signed || signed_value < min_signed) {
+			return -EINVAL;
+		}
+	} else {
+		/* Unsigned mode: validate unsigned range for 12-bit resolution
+		 * Valid range: 0 to 4095 (0x000 to 0xFFF)
+		 */
+		if (input_value > DAC_MAX_INPUT || input_value < DAC_MIN_INPUT) {
+			return -EINVAL;
+		}
 	}
 
 	/* If bypass mode is not enabled then pass
