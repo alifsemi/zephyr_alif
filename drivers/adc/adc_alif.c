@@ -495,13 +495,13 @@ static inline void set_adc24_output_rate(const struct device *dev, uint32_t rate
 
 void adc_analog_config(const struct device *dev)
 {
+	uintptr_t comp_regs = DEVICE_MMIO_NAMED_GET(dev, comp_reg);
 
 #ifdef CONFIG_ANALOG_ALIASING
 	uintptr_t adc_vref_base = DEVICE_MMIO_NAMED_GET(dev, adc_vref);
 
-	enable_adc_ref_voltage_alias_mode(adc_vref_base);
+	enable_adc_ref_voltage_alias_mode(adc_vref_base, comp_regs + COMP_REG2_OFFSET);
 #else
-	uintptr_t comp_regs = DEVICE_MMIO_NAMED_GET(dev, comp_reg);
 
 	enable_adc_ref_voltage(comp_regs + COMP_REG2_OFFSET);
 #endif
