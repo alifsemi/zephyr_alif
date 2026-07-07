@@ -131,13 +131,6 @@ zephyr_library_sources(
     ${LVGL_DIR}/src/draw/nxp/pxp/lv_pxp_cfg.c
     ${LVGL_DIR}/src/draw/nxp/pxp/lv_pxp_osa.c
     ${LVGL_DIR}/src/draw/nxp/pxp/lv_pxp_utils.c
-    ${LVGL_DIR}/src/draw/nxp/g2d/lv_draw_g2d_img.c
-    ${LVGL_DIR}/src/draw/nxp/g2d/lv_draw_buf_g2d.c
-    ${LVGL_DIR}/src/draw/nxp/g2d/lv_draw_g2d.c
-    ${LVGL_DIR}/src/draw/nxp/g2d/lv_draw_g2d_fill.c
-    ${LVGL_DIR}/src/draw/nxp/g2d/lv_draw_g2d_img.c
-    ${LVGL_DIR}/src/draw/nxp/g2d/lv_g2d_buf_map.c
-    ${LVGL_DIR}/src/draw/nxp/g2d/lv_g2d_utils.c
 
     ${LVGL_DIR}/src/draw/opengles/lv_draw_opengles.c
 
@@ -437,7 +430,6 @@ zephyr_library_sources(
     lvgl_display_16bit.c
     lvgl_display_24bit.c
     lvgl_display_32bit.c
-    lvgl_display_mono.c
     lvgl_zephyr_osal.c
 )
 

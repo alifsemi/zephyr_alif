@@ -9,7 +9,7 @@
 #include <lvgl.h>
 #include "lvgl_display.h"
 
-void lvgl_flush_cb_16bit(lv_display_t *display, const lv_area_t *area, uint8_t *px_map)
+void lvgl_flush_cb_8bit(lv_display_t *display, const lv_area_t *area, uint8_t *px_map)
 {
 	uint16_t w = area->x2 - area->x1 + 1;
 	uint16_t h = area->y2 - area->y1 + 1;
@@ -19,8 +19,8 @@ void lvgl_flush_cb_16bit(lv_display_t *display, const lv_area_t *area, uint8_t *
 	flush.x = area->x1;
 	flush.y = area->y1;
 	flush.desc.width = w;
-	flush.desc.pitch = ROUND_UP(w * 2U, LV_DRAW_BUF_STRIDE_ALIGN) / 2U;
-	flush.desc.buf_size = flush.desc.pitch * 2U * h;
+	flush.desc.pitch = ROUND_UP(w, LV_DRAW_BUF_STRIDE_ALIGN);
+	flush.desc.buf_size = flush.desc.pitch * h;
 	flush.desc.height = h;
 	flush.buf = (void *)px_map;
 
