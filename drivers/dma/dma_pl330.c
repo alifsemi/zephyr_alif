@@ -275,7 +275,7 @@ static uint32_t dma_pl330_gen_copy_op(struct dma_pl330_ch_internal *ch_dat,
 		}
 		offset = offset + 1;
 		dma_pl330_gen_op(OP_DMA_STP(req_type), dma_exec_addr + offset,
-				((ch_dat->src_id) << 3));
+				((ch_dat->dst_id) << 3));
 		offset = offset + 2;
 	} else {
 		sys_write8(OP_DMA_LD(DMA_LDST_REQ_TYPE_FORCE),
