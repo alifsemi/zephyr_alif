@@ -18,9 +18,9 @@ void lvgl_flush_cb_32bit(lv_display_t *display, const lv_area_t *area, uint8_t *
 	flush.display = display;
 	flush.x = area->x1;
 	flush.y = area->y1;
-	flush.desc.buf_size = w * 4U * h;
 	flush.desc.width = w;
-	flush.desc.pitch = w;
+	flush.desc.pitch = ROUND_UP(w * 4U, LV_DRAW_BUF_STRIDE_ALIGN) / 4U;
+	flush.desc.buf_size = flush.desc.pitch * 4U * h;
 	flush.desc.height = h;
 	flush.buf = (void *)px_map;
 	lvgl_flush_display(&flush);
