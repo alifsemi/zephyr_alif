@@ -13,23 +13,31 @@ void lvgl_flush_cb_24bit(lv_display_t *display, const lv_area_t *area, uint8_t *
 {
 	uint16_t w = area->x2 - area->x1 + 1;
 	uint16_t h = area->y2 - area->y1 + 1;
+	/* LVGL's aligned byte stride is the source of truth; pixel pitch is derived from it */
+	uint32_t stride = ROUND_UP(w * 3U, LV_DRAW_BUF_STRIDE_ALIGN);
 	struct lvgl_display_flush flush;
 
 	flush.display = display;
 	flush.x = area->x1;
 	flush.y = area->y1;
-	flush.desc.buf_size = w * 3U * h;
 	flush.desc.width = w;
-	flush.desc.pitch = w;
+	flush.desc.pitch = DIV_ROUND_UP(stride, 3U);
+	flush.desc.buf_size = stride * h;
 	flush.desc.height = h;
 	flush.buf = (void *)px_map;
 
-	/* LVGL assumes BGR byte ordering, convert to RGB */
-	for (size_t i = 0; i < flush.desc.buf_size; i += 3) {
-		uint8_t tmp = px_map[i];
+	if (IS_ENABLED(CONFIG_LV_Z_COLOR_24_BGR_TO_RGB)) {
+		/* LVGL assumes BGR byte ordering, convert to RGB */
+		for (uint16_t row = 0; row < h; row++) {
+			uint8_t *line = px_map + (size_t)row * stride;
 
-		px_map[i] = px_map[i + 2];
-		px_map[i + 2] = tmp;
+			for (uint16_t col = 0; col < w; col++) {
+				uint8_t tmp = line[col * 3U];
+
+				line[col * 3U] = line[col * 3U + 2U];
+				line[col * 3U + 2U] = tmp;
+			}
+		}
 	}
 
 	lvgl_flush_display(&flush);

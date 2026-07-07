@@ -76,7 +76,8 @@ int set_lvgl_rendering_cb(lv_display_t *display)
 	lv_display_set_flush_wait_cb(display, lvgl_wait_cb);
 #endif
 
-	switch (data->cap.current_pixel_format) {
+	/* Cast to int: RGB_565X/L_8/AL_88 are backport-shim defines, not enum members */
+	switch ((int)data->cap.current_pixel_format) {
 	case PIXEL_FORMAT_ARGB_8888:
 		lv_display_set_color_format(display, LV_COLOR_FORMAT_ARGB8888);
 		lv_display_set_flush_cb(display, lvgl_flush_cb_32bit);
@@ -91,7 +92,20 @@ int set_lvgl_rendering_cb(lv_display_t *display)
 		break;
 	case PIXEL_FORMAT_RGB_565:
 	case PIXEL_FORMAT_BGR_565:
+	case PIXEL_FORMAT_RGB_565X:
 		lv_display_set_color_format(display, LV_COLOR_FORMAT_RGB565);
+		lv_display_set_flush_cb(display, lvgl_flush_cb_16bit);
+		lv_display_add_event_cb(display, lvgl_rounder_cb, LV_EVENT_INVALIDATE_AREA,
+					display);
+		break;
+	case PIXEL_FORMAT_L_8:
+		lv_display_set_color_format(display, LV_COLOR_FORMAT_L8);
+		lv_display_set_flush_cb(display, lvgl_flush_cb_8bit);
+		lv_display_add_event_cb(display, lvgl_rounder_cb, LV_EVENT_INVALIDATE_AREA,
+					display);
+		break;
+	case PIXEL_FORMAT_AL_88:
+		lv_display_set_color_format(display, LV_COLOR_FORMAT_AL88);
 		lv_display_set_flush_cb(display, lvgl_flush_cb_16bit);
 		lv_display_add_event_cb(display, lvgl_rounder_cb, LV_EVENT_INVALIDATE_AREA,
 					display);
