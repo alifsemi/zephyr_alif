@@ -198,11 +198,19 @@
 	ALIF_CLK(11U)
 #define ALIF_I2C1_PCLK               \
 	ALIF_CLK(12U)
+#define ALIF_I2C2_PCLK               \
+	ALIF_CLK(13U)
+#define ALIF_I2C3_PCLK               \
+	ALIF_CLK(14U)
 
 #define ALIF_I2C0_GATED_CLK               \
 	ALIF_CLK_CFG(CLKCTL_PER_SLV, I2C0_CTRL, 0U, 1U, 0U, 0U, 0U)
 #define ALIF_I2C1_GATED_CLK               \
 	ALIF_CLK_CFG(CLKCTL_PER_SLV, I2C1_CTRL, 0U, 1U, 0U, 0U, 0U)
+#define ALIF_I2C2_GATED_CLK               \
+	ALIF_CLK_CFG(CLKCTL_PER_SLV, I2C2_CTRL, 0U, 1U, 0U, 0U, 0U)
+#define ALIF_I2C3_GATED_CLK               \
+	ALIF_CLK_CFG(CLKCTL_PER_SLV, I2C3_CTRL, 0U, 1U, 0U, 0U, 0U)
 
 /* GPIO Debounce clocks */
 #define ALIF_GPIO0_DB_CLK           \

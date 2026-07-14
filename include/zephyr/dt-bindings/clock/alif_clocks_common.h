@@ -113,6 +113,8 @@
 #define ALIF_CMP_CTRL_REG              0x38U
 #define ALIF_I2C0_CTRL_REG             0x50U
 #define ALIF_I2C1_CTRL_REG             0x54U
+#define ALIF_I2C2_CTRL_REG             0x58U
+#define ALIF_I2C3_CTRL_REG             0x5CU
 #define ALIF_GPIO0_CTRL_REG            0x80U
 #define ALIF_GPIO1_CTRL_REG            0x84U
 #define ALIF_GPIO2_CTRL_REG            0x88U
