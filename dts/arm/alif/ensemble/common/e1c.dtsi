@@ -695,7 +695,7 @@
 		interrupts      = <136 0>;
 		clocks          = <&clockctrl ALIF_I3C_CLK>;
 		pinctrl-0       = <&pinctrl_i3c0>;
-		pinctrl-1       = <&pinctrl_i3c0>;
+		pinctrl-1       = <&pinctrl_i3c0_sleep>;
 		pinctrl-2       = <&pinctrl_i3c0_recovery>;
 		pinctrl-names   = "default", "sleep", "recovery";
 		i3c-scl-hz      = <10000000>;
