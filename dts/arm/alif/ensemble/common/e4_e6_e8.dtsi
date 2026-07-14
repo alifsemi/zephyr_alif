@@ -17,6 +17,14 @@
 	clocks = <&clockctrl ALIF_I2C1_GATED_CLK>;
 };
 
+&i2c2 {
+	clocks = <&clockctrl ALIF_I2C2_GATED_CLK>;
+};
+
+&i2c3 {
+	clocks = <&clockctrl ALIF_I2C3_GATED_CLK>;
+};
+
 /delete-node/ &lpcmp;
 /delete-node/ &sram1;
 

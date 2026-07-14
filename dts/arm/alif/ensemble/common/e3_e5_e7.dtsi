@@ -139,6 +139,58 @@
 		status = "disabled";
 	};
 
+	i2c2: i2c2@49012000 {
+		compatible = "snps,designware-i2c";
+		clock-frequency = <I2C_BITRATE_STANDARD>;
+		clocks = <&clockctrl ALIF_I2C2_PCLK>;
+		/*
+		 * For Standard  speed LCNT=0 and HCNT=0
+		 * For Fast      speed LCNT=31 and HCNT=31
+		 * For Fast Plus speed LCNT=12 and HCNT=12
+		 */
+		hcnt-offset = <0>;
+		lcnt-offset = <0>;
+		fs-spike-len = <5>;
+		hs-spike-len = <1>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x49012000 0x1000>;
+		pinctrl-0 = <&pinctrl_i2c2>;
+		pinctrl-1 = <&pinctrl_i2c2_sleep>;
+		pinctrl-names = "default", "sleep";
+		interrupt-parent = <&nvic>;
+		interrupts = <134 ALIF_DEFAULT_IRQ_PRIORITY>;
+		tx_threshold = <16>;
+		rx_threshold = <0>;
+		status = "disabled";
+	};
+
+	i2c3: i2c3@49013000 {
+		compatible = "snps,designware-i2c";
+		clock-frequency = <I2C_BITRATE_STANDARD>;
+		clocks = <&clockctrl ALIF_I2C3_PCLK>;
+		/*
+		 * For Standard  speed LCNT=0 and HCNT=0
+		 * For Fast      speed LCNT=31 and HCNT=31
+		 * For Fast Plus speed LCNT=12 and HCNT=12
+		 */
+		hcnt-offset = <0>;
+		lcnt-offset = <0>;
+		fs-spike-len = <5>;
+		hs-spike-len = <1>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x49013000 0x1000>;
+		pinctrl-0 = <&pinctrl_i2c3>;
+		pinctrl-1 = <&pinctrl_i2c3_sleep>;
+		pinctrl-names = "default", "sleep";
+		interrupt-parent = <&nvic>;
+		interrupts = <135 ALIF_DEFAULT_IRQ_PRIORITY>;
+		tx_threshold = <16>;
+		rx_threshold = <0>;
+		status = "disabled";
+	};
+
 	i2s2: i2s2@49016000 {
 		compatible = "snps,designware-i2s";
 		reg = <0x49016000 0x1000>;
