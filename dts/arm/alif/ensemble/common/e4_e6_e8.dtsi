@@ -203,7 +203,8 @@
 		interrupts      = <50 3>;
 		clocks          = <&clockctrl ALIF_LPI3C_CLK>;
 		pinctrl-0       = <&pinctrl_lpi3c0>;
-		pinctrl-names   = "default";
+		pinctrl-1       = <&pinctrl_lpi3c0_sleep>;
+		pinctrl-names   = "default", "sleep";
 		od-thigh-min-ns = <41>;
 		i3c-scl-hz      = <12500000>;
 		i2c-scl-hz      = <400000>;
