@@ -109,6 +109,46 @@ extern "C" {
 #define MSPI_XIP_CONFIG_DT_INST(inst) MSPI_XIP_CONFIG_DT(DT_DRV_INST(inst))
 
 /**
+ * @brief Conditionally declare an optional MSPI configuration field.
+ *
+ * @param config Kconfig symbol controlling whether the field is present.
+ * @param type Field type.
+ * @param name Field name.
+ */
+#define MSPI_OPTIONAL_CFG_STRUCT_DECLARE(config, type, name)                                      \
+	COND_CODE_1(config, (type name;), ())
+
+/**
+ * @brief Conditionally initialize an optional MSPI configuration field.
+ *
+ * @param config Kconfig symbol controlling whether the field is present.
+ * @param name Field name.
+ * @param value Field initializer.
+ */
+#define MSPI_OPTIONAL_CFG_STRUCT_INIT(config, name, value)                                        \
+	COND_CODE_1(config, (.name = value,), ())
+
+#define MSPI_XIP_CFG_STRUCT_DECLARE(name)                                                        \
+	MSPI_OPTIONAL_CFG_STRUCT_DECLARE(CONFIG_MSPI_XIP, struct mspi_xip_cfg, name)
+
+#define MSPI_XIP_BASE_ADDR_DECLARE(name)                                                         \
+	MSPI_OPTIONAL_CFG_STRUCT_DECLARE(CONFIG_MSPI_XIP, uint32_t, name)
+
+#define MSPI_XIP_BASE_ADDR_INIT(name, mspi_bus)                                                  \
+	MSPI_OPTIONAL_CFG_STRUCT_INIT(CONFIG_MSPI_XIP, name,                                      \
+		COND_CODE_1(DT_NODE_HAS_PROP(mspi_bus, xip_base_address),                         \
+			    (DT_PROP_BY_IDX(mspi_bus, xip_base_address, 0)), (0)))
+
+#define MSPI_SCRAMBLE_CFG_STRUCT_DECLARE(name)                                                   \
+	MSPI_OPTIONAL_CFG_STRUCT_DECLARE(CONFIG_MSPI_SCRAMBLE, struct mspi_scramble_cfg, name)
+
+#define MSPI_TIMING_CFG_STRUCT_DECLARE(name)                                                     \
+	MSPI_OPTIONAL_CFG_STRUCT_DECLARE(CONFIG_MSPI_TIMING, mspi_timing_cfg, name)
+
+#define MSPI_TIMING_PARAM_DECLARE(name)                                                          \
+	MSPI_OPTIONAL_CFG_STRUCT_DECLARE(CONFIG_MSPI_TIMING, mspi_timing_param, name)
+
+/**
  * @brief Structure initializer for <tt>struct mspi_scramble_cfg</tt> from devicetree
  *
  * This helper macro expands to a static initializer for a <tt>struct
