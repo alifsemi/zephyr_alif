@@ -100,15 +100,28 @@
 };
 
 &ospi0 {
+	compatible = "alif,mspi-controller", "snps,designware-ssi";
+
 	/* External Flash on OSPI */
 	ospi_flash: ospi_flash@0 {
-		compatible = "issi,xspi-flash-controller";
+		compatible = "is25xX0xx";
 		reg = <0x0>;
-		erase-value = <0xff>;
-		num-of-sector = <16384>;
-		page-size = <4096>;
-		sector-size = <4096>;
+		size = <0x20000000>;
+		mspi-max-frequency = <80000000>;
+		mspi-io-mode = "MSPI_IO_MODE_OCTAL";
+		mspi-data-rate = "MSPI_DATA_RATE_S_D_D";
+		mspi-dqs-enable;
+		mspi-hardware-ce-num = <1>;
+		mspi-cpp-mode = "MSPI_CPP_MODE_0";
+		mspi-endian = "MSPI_BIG_ENDIAN";
+		mspi-ce-polarity = "MSPI_CE_ACTIVE_LOW";
 		write-block-size = <2>;
+		rx-dummy = <16>;
+		tx-dummy = <0>;
+		read-command = <0x7c>;
+		write-command = <0x84>;
+		command-length = "INSTR_1_BYTE";
+		address-length = "ADDR_4_BYTE";
 
 		/* Flash Size 64MB */
 		#address-cells = <1>;
