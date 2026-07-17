@@ -199,23 +199,28 @@
 	};
 
 	ospi1: ospi1@83002000 {
-		compatible = "snps,designware-ospi";
+		compatible = "alif,mspi-controller", "snps,designware-ssi";
 		#address-cells = <1>;
 		#size-cells = <0>;
-		reg = <0x83002000 0x1000>;
+		reg = <0x83002000 0x1000>, <0x83003000 0x100>;
+		reg-names = "core", "aes";
 		pinctrl-0 = <&pinctrl_ospi1>;
 		pinctrl-names = "default";
 		interrupt-parent = <&nvic>;
 		interrupts = <97 ALIF_DEFAULT_IRQ_PRIORITY>;
-		aes-reg = <0x83003000 0x100>;
-		bus-speed = <100000000>;
+		packet-data-limit = <65536>;
+		fifo-depth = <128>;
+		op-mode = "MSPI_CONTROLLER";
+		duplex = "MSPI_FULL_DUPLEX";
 		clock-frequency = <400000000>;
-		cs-pin = <0>;
 		ddr-drive-edge = <1>;
 		rx-ds-delay = <11>;
+		baud2-delay = <2>;
+		rx-fifo-threshold = <0>;
 		tx-fifo-threshold = <64>;
 		xip-wait-cycles = <16>;
 		xip-base-address = <0xC0000000 0x20000000>;
+		memmap-write-support;
 		status = "disabled";
 	};
 };
