@@ -28,4 +28,34 @@ config FLASH_MSPI_ATXP032
 	select FLASH_JESD216
 	select MSPI_AMBIQ_AP3 if SOC_SERIES_APOLLO3X
 
+config FLASH_MSPI_IS25XX0XX
+	bool "MSPI IS25L/WX064/32/512/1G driver"
+	default y
+	depends on DT_HAS_IS25XX0XX_ENABLED
+	select FLASH_MSPI
+	select FLASH_HAS_PAGE_LAYOUT
+	select FLASH_HAS_EXPLICIT_ERASE
+	select FLASH_JESD216
+	select FLASH_JESD216_API
+
+config FLASH_MSPI_IS25XX0XX_INIT_PRIORITY
+	int "MSPI IS25L/WX064/032 flash init priority"
+	default 75
+	depends on FLASH_MSPI_IS25XX0XX
+	help
+	  Device initialization priority for ISSI MSPI flash. This must be
+	  greater than the MSPI controller initialization priority because
+	  the flash device is a child of the MSPI controller.
+
+if FLASH_MSPI
+
+config FLASH_MSPI_XIP_READ
+	bool "Read MSPI flash through XIP"
+	depends on MSPI_XIP
+	help
+	  Allows MSPI flash drivers to service read requests through the
+	  controller XIP mapping when the device XIP configuration is enabled.
+
+endif # FLASH_MSPI
+
 endmenu
