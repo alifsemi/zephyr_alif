@@ -51,6 +51,7 @@ struct pdm_data {
 	uint32_t slab_missed;
 	uint32_t record_data;
 	uint32_t bytes_got;
+	uint32_t overrun_count;
 	uint8_t bypass_iir_filter;
 	struct pdm_block queue_data[MAX_QUEUE_LEN];
 	uint16_t data[MAX_NUM_CHANNELS * MAX_DATA_ITEMS];
@@ -77,6 +78,8 @@ struct pdm_config {
 	uint32_t dma_channel;
 #endif
 	bool dma_enabled;
+	bool has_error_intr;
+	bool has_audio_det_intr;
 };
 
 /**
@@ -1006,10 +1009,44 @@ static int dmic_alif_pdm_read(const struct device *dev, uint8_t stream, void **b
 
 static inline void pdm_error_handler(const struct device *dev)
 {
+	struct pdm_data *pdata = DEV_DATA(dev);
 	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
+	uint32_t err = sys_read32(reg_base + PDM_ERROR_IRQ);
 
-	sys_clear_bits(reg_base + PDM_INTERRUPT_REGISTER, PDM_FIFO_OVERFLOW_IRQ);
-	(void)sys_read32(reg_base + PDM_ERROR_IRQ);
+	if ((err & PDM_FIFO_OVERFLOW_STAT) != 0U) {
+		/*
+		 * Recover from a FIFO overflow instead of just masking it. If the
+		 * warning IRQ is not serviced within the FIFO's (microsecond)
+		 * budget the FIFO overflows; previously this handler permanently
+		 * masked the overflow IRQ enable and performed no recovery, so
+		 * overflow handling was a one-shot and samples arriving after a
+		 * full FIFO were silently lost (HWRM 14.7.5.3: pre-overrun FIFO
+		 * contents remain intact, new samples are dropped). Pulse FIFO_CLR
+		 * (PDM_CTL0 bit 31) to restart from a clean FIFO and drop the
+		 * in-flight partial block (its tail is discontinuous across the
+		 * flush). The overflow IRQ enable is intentionally left set so
+		 * later overflows recover too. Reading PDM_ERROR_IRQ above already
+		 * acked the sticky status bit (read-to-clear).
+		 *
+		 * PDM_CTL0 writes need >= 4 APB transactions between them to
+		 * synchronize into the audio clock domain (HWRM 14.7.5.3.1
+		 * CAUTION); the dummy status reads provide that spacing so the
+		 * clear pulse actually lands before it is deasserted.
+		 */
+		uint32_t cfg = sys_read32(reg_base + PDM_CONFIG_REGISTER);
+		uint8_t spacer;
+
+		sys_write32(cfg | PDM_FIFO_CLEAR, reg_base + PDM_CONFIG_REGISTER);
+		for (spacer = 0U; spacer < 4U; spacer++) {
+			(void)sys_read32(reg_base + PDM_FIFO_STATUS_REGISTER);
+		}
+		sys_write32(cfg & ~PDM_FIFO_CLEAR, reg_base + PDM_CONFIG_REGISTER);
+
+		pdata->buf_index = 0;
+		pdata->overrun_count++;
+		LOG_WRN("fifo overflow — flushed and re-armed (count %u)",
+			pdata->overrun_count);
+	}
 }
 
 static inline void pdm_audio_det_handler(const struct device *dev)
@@ -1083,12 +1120,23 @@ static void alif_pdm_warning_isr(const struct device *dev)
 	intstatus = sys_read32(reg_base + PDM_WARN_IRQ);
 	num_items = sys_read32(reg_base + PDM_FIFO_STATUS_REGISTER);
 
-	/* LPPDM doesn't have separate error and audio detect isr handlers */
-	if (!DT_NODE_HAS_PROP(DT_NODELABEL(dev), error_intr)) {
+	/* Instances without dedicated error / audio-detect IRQ lines (e.g. the
+	 * LPPDM) fold that handling into this warning ISR. has_error_intr /
+	 * has_audio_det_intr are set per instance from DT_INST_IRQ_HAS_NAME so
+	 * an instance that does wire dedicated lines (its own ISRs run) is not
+	 * double-serviced here.
+	 *
+	 * Caveat: num_items is latched above BEFORE pdm_error_handler may flush
+	 * the FIFO, so the drain below can read a just-emptied FIFO after an
+	 * overflow recovery (one glitched block, recovered on the next IRQ).
+	 */
+	const struct pdm_config *cfg = DEV_CFG(dev);
+
+	if (!cfg->has_error_intr) {
 		pdm_error_handler(dev);
 	}
 
-	if (!DT_NODE_HAS_PROP(DT_NODELABEL(dev), audio_det_intr)) {
+	if (!cfg->has_audio_det_intr) {
 		pdm_audio_det_handler(dev);
 	}
 
@@ -1136,7 +1184,25 @@ static void alif_pdm_warning_isr(const struct device *dev)
 
 		pdmdata->data_buffer = get_slab(pdmdata);
 		if (pdmdata->data_buffer == NULL) {
-			sys_write32(0, reg_base + PDM_INTERRUPT_REGISTER);
+			/*
+			 * Slab exhausted (consumer momentarily starved). Previously
+			 * this wrote 0 to PDM_INTERRUPT_REGISTER, permanently
+			 * disabling every PDM interrupt: capture silently stopped
+			 * forever after a single missed allocation and the stream
+			 * appeared frozen until a full re-init. Instead, reclaim the
+			 * oldest queued block (newest-audio-wins, matching the
+			 * queue-full policy below); if none is queued, drop this
+			 * window's samples — the FIFO was already drained above, so
+			 * capture simply retries on the next warning IRQ.
+			 */
+			struct pdm_block oldest;
+
+			if (k_msgq_get(&pdmdata->buf_queue, &oldest, K_NO_WAIT) == 0) {
+				k_mem_slab_free(pdmdata->mem_slab, oldest.buf);
+				pdmdata->data_buffer = get_slab(pdmdata);
+			}
+		}
+		if (pdmdata->data_buffer == NULL) {
 			return;
 		}
 		pdmdata->buf_index = 0;
@@ -1225,6 +1291,45 @@ static int pdm_initialize(const struct device *dev)
 		}
 	}
 #endif
+
+	/*
+	 * Quiesce and soft-reset the block before configuring it. On a warm
+	 * reset that does not reset this peripheral (e.g. the HE watchdog
+	 * reset, which is CPU-subsystem-scoped), the PDM arrives here still
+	 * running with its pre-reset CTL0 intact; observed on the E8 DK
+	 * (2026-07-18) after a board-level partial reset landed mid-capture:
+	 * the decimators kept free-running desynced and delivered a
+	 * constant-DC sample stream that survived driver re-init, channel
+	 * toggles, and FIFO clears. Clear the interrupt enables, pulse
+	 * FIFO_CLR, drop every CHn_EN (the HWRM documents the 1->0 edge as
+	 * "disable and soft-clear") together with the PDM_MODE field, ack
+	 * the sticky status registers, then cycle the module clock gate
+	 * (EXPMST0_CTRL[PDM_CKEN]) as belt-and-braces — gating freezes the
+	 * audio-domain logic while the cleared CTL0 takes effect; the HWRM's
+	 * PDM chapter does not document a per-block reset, so the CHn_EN
+	 * soft-clear is the only architected state clear available here.
+	 * CTL0 writes need >= 4 APB transactions of spacing to synchronize
+	 * into the audio clock domain (HWRM 14.7.5.3.1 CAUTION).
+	 */
+	sys_write32(0U, reg_base + PDM_INTERRUPT_REGISTER);
+	sys_write32(PDM_FIFO_CLEAR, reg_base + PDM_CONFIG_REGISTER);
+	for (uint8_t spacer = 0U; spacer < 4U; spacer++) {
+		(void)sys_read32(reg_base + PDM_FIFO_STATUS_REGISTER);
+	}
+	sys_write32(0U, reg_base + PDM_CONFIG_REGISTER);
+	(void)sys_read32(reg_base + PDM_ERROR_IRQ);
+	(void)sys_read32(reg_base + PDM_WARN_IRQ);
+	(void)sys_read32(reg_base + PDM_AUDIO_DETECT_IRQ);
+
+	ret = clock_control_off(cfg->clk_dev, cfg->clkid);
+	if (ret == 0) {
+		k_busy_wait(100);
+		ret = clock_control_on(cfg->clk_dev, cfg->clkid);
+	}
+	if (ret != 0) {
+		LOG_ERR("Unable to cycle clock: err:%d", ret);
+		return ret;
+	}
 
 	cfg->irq_config();
 
@@ -1415,6 +1520,8 @@ static int pdm_pm_action(const struct device *dev, enum pm_device_action action)
 				))                                                                 \
 		.dma_enabled = IS_ENABLED(CONFIG_ALIF_PDM_USE_DMA) &&                              \
 			DT_INST_DMAS_HAS_NAME(n, rxdma),                                           \
+		.has_error_intr = DT_INST_IRQ_HAS_NAME(n, error_intr),                             \
+		.has_audio_det_intr = DT_INST_IRQ_HAS_NAME(n, audio_det_intr),                     \
 };                                                                                                 \
 	static void pdm_irq_config_##n(void)                                                       \
 	{                                                                                          \
