@@ -8,6 +8,7 @@
 
 #include <zephyr/device.h>
 #include <zephyr/drivers/clock_control.h>
+#include <zephyr/sys/atomic.h>
 
 #define DSI_VERSION		0x00 /* HW Version Register */
 #define DSI_PWR_UP		0x04 /* Power-up Control Register */
@@ -488,6 +489,16 @@ struct dsi_dw_data {
 	uint32_t pkt_size;
 
 	uint32_t mode_flags;
+
+	/* Bitmask of DSI error classes already reported by dsi_dw_irq(). A
+	 * missing or unresponsive panel raises the same error every interrupt
+	 * (e.g. an LP-RX timeout every few milliseconds), so each class is
+	 * logged once instead of flooding the console. Set from the ISR and
+	 * cleared from dsi_dw_attach() (thread context) so a fresh attach
+	 * reports again; atomic_t makes that cross-context access well-defined.
+	 * See DSI_ERR_LOGGED_* in dsi_dw.c.
+	 */
+	atomic_t err_logged;
 };
 
 #endif /* _DSI_DW_H_ */
