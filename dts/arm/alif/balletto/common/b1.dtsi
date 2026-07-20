@@ -631,6 +631,7 @@
 		positive_input	 = "CMP_POS_IN0";
 		negative_input	 = "CMP_NEG_IN0";
 		hysteresis_level = "42mV";
+		lpcmp-clk-sel = "XTAL_LFXO";
 		interrupts	 = <56 0>;
 		status = "disabled";
 	};

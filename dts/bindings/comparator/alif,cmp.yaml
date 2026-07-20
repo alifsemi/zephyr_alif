@@ -74,3 +74,12 @@ properties:
       - "30mV"
       - "36mV"
       - "42mV"
+
+  lpcmp-clk-sel:
+    type: string
+    description: |
+      Select clock source for LPCMP (only valid when driver_instance
+      is "CMP_INSTANCE_LP"). Ignored for standard comparator instances.
+    enum:
+      - "XTAL_LFXO"  # 32-kHz XTAL oscillator
+      - "RC_LFRC"    # 32-kHz RC oscillator
