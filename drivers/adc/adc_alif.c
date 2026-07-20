@@ -165,8 +165,8 @@ enum ADC_INSTANCE {
 #define ADC_VREF_BUF_RDIV_EN (0x0U << 16)
 #define ADC_VREF_BUF_EN      (0x1U << 15)
 #define ADC_VREF_CONT        (0x10U << 10)
-#define ANA_PERIPH_LDO_CONT  (0xAU << 6)
-#define ANA_PERIPH_BG_CONT   (0xAU << 1)
+#define ANA_PERIPH_LDO_CONT  (0x8U << 6)
+#define ANA_PERIPH_BG_CONT   (0x8U << 1)
 
 #ifdef CONFIG_ANALOG_ALIASING
 /* ADC reg1 position macro */
@@ -507,8 +507,9 @@ void adc_analog_config(const struct device *dev)
 
 #ifdef CONFIG_ANALOG_ALIASING
 	uintptr_t adc_vref_base = DEVICE_MMIO_NAMED_GET(dev, adc_vref);
+	uintptr_t comp_regs = DEVICE_MMIO_NAMED_GET(dev, comp_reg);
 
-	enable_adc_ref_voltage_alias_mode(adc_vref_base);
+	enable_adc_ref_voltage_alias_mode(adc_vref_base, comp_regs + COMP_REG2_OFFSET);
 #else
 	uintptr_t comp_regs = DEVICE_MMIO_NAMED_GET(dev, comp_reg);
 
