@@ -32,3 +32,10 @@ properties:
 
   pinctrl-0:
     required: true
+
+  target-mode:
+    type: boolean
+    description: |
+      Configure the DW I3C controller in target role
+      at startup, so the role is deterministic across
+      warm boots and partial resets.
