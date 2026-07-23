@@ -340,6 +340,100 @@ static int can_cast_get_capabilities(const struct device *dev, can_mode_t *cap)
 }
 
 /**
+ * @fn      static int can_cast_set_mode(const struct device *dev,
+ *                                       can_mode_t mode)
+ * @brief   Set CAN Mode
+ * @param[in]   dev  : pointer to Runtime device structure
+ * @param[in]   mode : CAN mode
+ * @return  None
+ */
+static int can_cast_set_mode(const struct device *dev, can_mode_t mode)
+{
+#if CONFIG_CAN_FD_MODE
+	const struct can_cast_config *config = DEV_CFG(dev);
+	uint32_t temp;
+#endif
+	struct can_cast_data *data = DEV_DATA(dev);
+	uint32_t can_base;
+	uint32_t base_modes = (mode & CAN_CAST_BASE_MODE_MASK);
+
+	can_base = DEVICE_MMIO_NAMED_GET(dev, can_reg);
+
+	if (data->common.started) {
+		return -EBUSY;
+	}
+
+	if (mode & CAN_MODE_3_SAMPLES) {
+		LOG_ERR("Triple Sampling mode Not Supported");
+		return -ENOTSUP;
+	}
+
+	/* Check if more than one base mode bit is set */
+	if ((base_modes != 0) && ((base_modes & (base_modes - 1)) != 0)) {
+		LOG_ERR("Only one base mode allowed, got: 0x%x", mode);
+		return -ENOTSUP;
+	}
+
+	k_mutex_lock(&data->inst_mutex, K_FOREVER);
+
+	/* Releases CAN from Reset state */
+	can_cast_reset_disable(can_base);
+
+	/* Disables and clears all interrupts */
+	can_cast_disable_tx_interrupts(can_base);
+	can_cast_disable_rx_interrupts(can_base);
+	can_cast_disable_error_interrupts(can_base);
+	can_cast_clear_interrupts(can_base);
+
+	if (mode & CAN_MODE_LOOPBACK) {
+		/* If msg transmission is happening then return Busy */
+		if (can_cast_comm_active(can_base)) {
+			LOG_ERR("Device is busy in communication");
+			k_mutex_unlock(&data->inst_mutex);
+			return -EBUSY;
+		}
+
+		/* Enables Internal Loopback Mode */
+		can_cast_enable_internal_loop_back_mode(can_base);
+	} else if (mode & CAN_MODE_LISTENONLY) {
+		/* Enables Listen Only Mode */
+		can_cast_enable_listen_only_mode(can_base);
+	} else {
+		/* Enables Normal mode */
+		can_cast_enable_normal_mode(can_base);
+	}
+
+#if CONFIG_CAN_FD_MODE
+	if (mode & CAN_MODE_FD) {
+		if (config->can_fd) {
+			temp = sys_read32(config->can_fd_ctrl_reg);
+			temp |= BIT(config->can_fd_bit);
+			sys_write32(temp, config->can_fd_ctrl_reg);
+		} else {
+			LOG_ERR("FD mode is disabled in device tree");
+			k_mutex_unlock(&data->inst_mutex);
+			return -ENOTSUP;
+		}
+
+	}
+#endif
+
+	if (mode & CAN_MODE_ONE_SHOT) {
+		can_cast_set_tx_single_shot_mode(can_base, true);
+	}
+
+	/* Sets the CAN Error and Rx buf almost full warning limits */
+	can_cast_set_err_warn_limit(can_base, CAN_ERROR_WARN_LIMIT);
+	can_cast_set_rbuf_almost_full_warn_limit(can_base, CONFIG_CAN_RBUF_AFWL);
+
+	data->common.mode = mode;
+
+	k_mutex_unlock(&data->inst_mutex);
+
+	return 0;
+}
+
+/**
  * @fn      static int can_cast_start(const struct device *dev)
  * @brief   Start CAN communication
  * @param[in] dev : pointer to Runtime device structure
@@ -364,6 +458,13 @@ static int can_cast_start(const struct device *dev)
 	CAN_STATS_RESET(dev);
 
 	can_cast_reset_disable(can_base);
+
+	/* Reapply the previously configured CAN mode */
+	if (data->common.mode) {
+		data->common.started = false;
+		can_cast_set_mode(dev, data->common.mode);
+	}
+
 	/* Enable interrupts */
 	if (!(data->common.mode & CAN_MODE_LISTENONLY)) {
 		can_cast_enable_tx_interrupts(can_base);
@@ -454,103 +555,8 @@ static int can_cast_stop(const struct device *dev)
 
 	}
 #endif
-	data->common.mode = 0U;
 	data->common.started = false;
 	data->err_state = CAN_STATE_STOPPED;
-
-	k_mutex_unlock(&data->inst_mutex);
-
-	return 0;
-}
-
-/**
- * @fn      static int can_cast_set_mode(const struct device *dev,
- *                                       can_mode_t mode)
- * @brief   Set CAN Mode
- * @param[in]   dev  : pointer to Runtime device structure
- * @param[in]   mode : CAN mode
- * @return  None
- */
-static int can_cast_set_mode(const struct device *dev, can_mode_t mode)
-{
-#if CONFIG_CAN_FD_MODE
-	const struct can_cast_config *config = DEV_CFG(dev);
-	uint32_t temp;
-#endif
-	struct can_cast_data *data = DEV_DATA(dev);
-	uint32_t can_base;
-	uint32_t base_modes = (mode & CAN_CAST_BASE_MODE_MASK);
-
-	can_base = DEVICE_MMIO_NAMED_GET(dev, can_reg);
-
-	if (data->common.started) {
-		return -EBUSY;
-	}
-
-	if (mode & CAN_MODE_3_SAMPLES) {
-		LOG_ERR("Triple Sampling mode Not Supported");
-		return -ENOTSUP;
-	}
-
-	/* Check if more than one base mode bit is set */
-	if ((base_modes != 0) && ((base_modes & (base_modes - 1)) != 0)) {
-		LOG_ERR("Only one base mode allowed, got: 0x%x", mode);
-		return -ENOTSUP;
-	}
-
-	k_mutex_lock(&data->inst_mutex, K_FOREVER);
-
-	/* Releases CAN from Reset state */
-	can_cast_reset_disable(can_base);
-
-	/* Disables and clears all interrupts */
-	can_cast_disable_tx_interrupts(can_base);
-	can_cast_disable_rx_interrupts(can_base);
-	can_cast_disable_error_interrupts(can_base);
-	can_cast_clear_interrupts(can_base);
-
-	if (mode & CAN_MODE_LOOPBACK) {
-		/* If msg transmission is happening then return Busy */
-		if (can_cast_comm_active(can_base)) {
-			LOG_ERR("Device is busy in communication");
-			k_mutex_unlock(&data->inst_mutex);
-			return -EBUSY;
-		}
-
-		/* Enables Internal Loopback Mode */
-		can_cast_enable_internal_loop_back_mode(can_base);
-	} else if (mode & CAN_MODE_LISTENONLY) {
-		/* Enables Listen Only Mode */
-		can_cast_enable_listen_only_mode(can_base);
-	} else {
-		/* Enables Normal mode */
-		can_cast_enable_normal_mode(can_base);
-	}
-
-#if CONFIG_CAN_FD_MODE
-	if (mode & CAN_MODE_FD) {
-		if (config->can_fd) {
-			temp = sys_read32(config->can_fd_ctrl_reg);
-			temp |= BIT(config->can_fd_bit);
-			sys_write32(temp, config->can_fd_ctrl_reg);
-		} else {
-			LOG_ERR("FD mode is disabled in device tree");
-			k_mutex_unlock(&data->inst_mutex);
-			return -ENOTSUP;
-		}
-
-	}
-#endif
-
-	if (mode & CAN_MODE_ONE_SHOT) {
-		can_cast_set_tx_single_shot_mode(can_base, true);
-	}
-
-	/* Sets the CAN Error and Rx buf almost full warning limits */
-	can_cast_set_err_warn_limit(can_base, CAN_ERROR_WARN_LIMIT);
-	can_cast_set_rbuf_almost_full_warn_limit(can_base, CONFIG_CAN_RBUF_AFWL);
-
-	data->common.mode = mode;
 
 	k_mutex_unlock(&data->inst_mutex);
 
