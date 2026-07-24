@@ -935,6 +935,9 @@
 		pwm0 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
+			pinctrl-0 = <&pinctrl_ut0>;
+			pinctrl-1 = <&pinctrl_ut0_sleep>;
+			pinctrl-names = "default", "sleep";
 			status = "disabled";
 		};
 
@@ -944,6 +947,9 @@
 			input-filter-enable;
 			filter-prescaler = <16>;
 			filter-taps = <1>;
+			pinctrl-0 = <&pinctrl_ut0>;
+			pinctrl-1 = <&pinctrl_ut0_sleep>;
+			pinctrl-names = "default", "sleep";
 			status = "disabled";
 		};
 	};
@@ -976,6 +982,9 @@
 		pwm1 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
+			pinctrl-0 = <&pinctrl_ut1>;
+			pinctrl-1 = <&pinctrl_ut1_sleep>;
+			pinctrl-names = "default", "sleep";
 			status = "disabled";
 		};
 
@@ -985,6 +994,9 @@
 			input-filter-enable;
 			filter-prescaler = <16>;
 			filter-taps = <1>;
+			pinctrl-0 = <&pinctrl_ut1>;
+			pinctrl-1 = <&pinctrl_ut1_sleep>;
+			pinctrl-names = "default", "sleep";
 			status = "disabled";
 		};
 	};
@@ -1017,6 +1029,9 @@
 		pwm2 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
+			pinctrl-0 = <&pinctrl_ut2>;
+			pinctrl-1 = <&pinctrl_ut2_sleep>;
+			pinctrl-names = "default", "sleep";
 			status = "disabled";
 		};
 
@@ -1026,6 +1041,9 @@
 			input-filter-enable;
 			filter-prescaler = <16>;
 			filter-taps = <1>;
+			pinctrl-0 = <&pinctrl_ut2>;
+			pinctrl-1 = <&pinctrl_ut2_sleep>;
+			pinctrl-names = "default", "sleep";
 			status = "disabled";
 		};
 	};
@@ -1058,6 +1076,9 @@
 		pwm3 {
 			compatible = "alif,pwm";
 			#pwm-cells = <3>;
+			pinctrl-0 = <&pinctrl_ut3>;
+			pinctrl-1 = <&pinctrl_ut3_sleep>;
+			pinctrl-names = "default", "sleep";
 			status = "disabled";
 		};
 
@@ -1067,6 +1088,9 @@
 			input-filter-enable;
 			filter-prescaler = <16>;
 			filter-taps = <1>;
+			pinctrl-0 = <&pinctrl_ut3>;
+			pinctrl-1 = <&pinctrl_ut3_sleep>;
+			pinctrl-names = "default", "sleep";
 			status = "disabled";
 		};
 	};
