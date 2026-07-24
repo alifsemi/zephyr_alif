@@ -709,7 +709,8 @@
 		interrupts      = <136 0>;
 		clocks          = <&clockctrl ALIF_I3C_CLK>;
 		pinctrl-0       = <&pinctrl_i3c0>;
-		pinctrl-names   = "default";
+		pinctrl-1       = <&pinctrl_i3c0_sleep>;
+		pinctrl-names   = "default", "sleep";
 		i3c-scl-hz      = <10000000>;
 		i2c-scl-hz      = <400000>;
 		status          = "disabled";

@@ -246,6 +246,14 @@
 		};
 	};
 
+	pinctrl_i3c0_sleep: pinctrl_i3c0_sleep {
+		group0 {
+			pinmux = <PIN_P7_6__GPIO>,
+				 <PIN_P7_7__GPIO>;
+			read-enable = <0x1>;
+		};
+	};
+
 	pinctrl_spi0: pinctrl_spi0 {
 		group0 {
 			pinmux = <PIN_P5_0__SPI0_MISO_B>,
