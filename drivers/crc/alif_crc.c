@@ -357,6 +357,8 @@ static int alif_crc_compute(const struct device *dev, struct crc_params *params)
 		return -EINVAL;
 	}
 
+		pm_device_busy_set(dev);
+
 	/* Initializing crc parameters  */
 	crc_params_init(dev, params);
 
@@ -424,8 +426,14 @@ static int alif_crc_compute(const struct device *dev, struct crc_params *params)
 
 	default:
 		LOG_ERR("Unsupported CRC algorithm");
+
+		pm_device_busy_clear(dev);
+
 		return -EINVAL;
 	}
+
+		pm_device_busy_clear(dev);
+
 	return 0;
 }
 
@@ -439,6 +447,7 @@ static int alif_crc_compute(const struct device *dev, struct crc_params *params)
  */
 static int alif_crc_set_seed(const struct device *dev, uint32_t seed_value)
 {
+	struct crc_data *data = dev->data;
 	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
 	uint32_t val = sys_read32(reg_base + CRC_CONTROL);
 
@@ -447,6 +456,9 @@ static int alif_crc_set_seed(const struct device *dev, uint32_t seed_value)
 	val |= CRC_INIT_BIT;
 
 	sys_write32(val, reg_base + CRC_CONTROL);
+
+	data->seed_value = seed_value;
+	data->seed_set = true;
 
 	return 0;
 }
@@ -460,6 +472,7 @@ static int alif_crc_set_seed(const struct device *dev, uint32_t seed_value)
  */
 static int alif_crc_set_polynomial(const struct device *dev, uint32_t polynomial)
 {
+	struct crc_data *data = dev->data;
 	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
 	uint32_t val = sys_read32(reg_base + CRC_CONTROL);
 
@@ -468,6 +481,9 @@ static int alif_crc_set_polynomial(const struct device *dev, uint32_t polynomial
 	val |= CRC_INIT_BIT;
 
 	sys_write32(val, reg_base + CRC_CONTROL);
+
+	data->polynomial = polynomial;
+	data->custom_poly_set = true;
 
 	return 0;
 }
@@ -485,6 +501,63 @@ static int crc_initialize(const struct device *dev)
 
 	return 0;
 }
+#ifdef CONFIG_PM_DEVICE
+
+static int crc_suspend(const struct device *dev)
+{
+	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
+	uint32_t val = sys_read32(reg_base + CRC_CONTROL);
+
+	val &= ~CRC_INIT_BIT;
+	sys_write32(val, reg_base + CRC_CONTROL);
+
+	return 0;
+}
+
+static int crc_resume(const struct device *dev)
+{
+	struct crc_data *data = dev->data;
+	uintptr_t reg_base = DEVICE_MMIO_GET(dev);
+	uint32_t val;
+
+	if (data->seed_set) {
+		sys_write32(data->seed_value, reg_base + CRC_SEED);
+	}
+
+	if (data->custom_poly_set) {
+		sys_write32(data->polynomial, reg_base + CRC_POLY_CUSTOM);
+	}
+
+	val = sys_read32(reg_base + CRC_CONTROL);
+	val |= CRC_INIT_BIT;
+	sys_write32(val, reg_base + CRC_CONTROL);
+
+	return 0;
+}
+
+static int crc_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	int ret = 0;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		ret = crc_suspend(dev);
+		break;
+	case PM_DEVICE_ACTION_RESUME:
+		ret = crc_resume(dev);
+		break;
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+
+		return 0;
+	default:
+		return -ENOTSUP;
+	}
+
+	return ret;
+}
+
+#endif /* CONFIG_PM_DEVICE */
 
 /********************** Device Definition per instance Macros. ***********************/
 
@@ -495,7 +568,8 @@ static int crc_initialize(const struct device *dev)
 	static const struct crc_config config_##n = {					\
 			DEVICE_MMIO_ROM_INIT(DT_DRV_INST(n)),				\
 	 };										\
-	DEVICE_DT_INST_DEFINE(n, crc_initialize, NULL, &data##n,			\
+	PM_DEVICE_DT_INST_DEFINE(n, crc_pm_action);					\
+	DEVICE_DT_INST_DEFINE(n, crc_initialize, PM_DEVICE_DT_INST_GET(n), &data##n,	\
 						  &config_##n, POST_KERNEL,		\
 						  CONF_CRC_INIT_PRIORITY, &crc_api_funcs);
 
