@@ -74,6 +74,7 @@ struct adc_data {
 	uint32_t channels_count;
 	uint8_t  interrupts;
 	uint8_t *comparator;
+	bool differential;
 };
 
 enum ADC_INSTANCE {
@@ -516,6 +517,19 @@ void adc_analog_config(const struct device *dev)
 #endif
 }
 
+static inline uint32_t adc_sign_extend(const struct device *dev, uint32_t value)
+{
+	const struct adc_config *config = dev->config;
+	const struct adc_data *data = dev->data;
+	uint8_t sign_bit = (config->drv_inst == ADC_INSTANCE_ADC24_0) ? 23U : 11U;
+
+	if (data->differential && (value & BIT(sign_bit))) {
+		value |= (0xFFFFFFFFU << sign_bit);
+	}
+
+	return value;
+}
+
 void adc_done0_irq_handler(const struct device *dev)
 {
 	uint32_t channel_sample_reg;
@@ -532,8 +546,9 @@ void adc_done0_irq_handler(const struct device *dev)
 		/* storing the address to be fetched for particular channels */
 		channel_sample_reg = sample_reg + sizeof(uint32_t) * channel;
 
-		/* storing the digital output to the respective buffer cells */
-		*(data->buffer + data->curr_cnt++) = sys_read32(channel_sample_reg);
+		/* store digital output in buffer indexed by channel id */
+		*(data->buffer + channel) = adc_sign_extend(dev, sys_read32(channel_sample_reg));
+		data->curr_cnt++;
 
 		/* Check if the required number of samples has been read */
 		if (data->curr_cnt >= data->channels_count) {
@@ -562,7 +577,8 @@ void adc_done1_irq_handler(const struct device *dev)
 		channel_sample_reg = sample_reg + sizeof(uint32_t) * channel;
 
 		/* storing the digital output to the respected buffer cells */
-		*(data->buffer + data->curr_cnt++) = sys_read32(channel_sample_reg);
+		*(data->buffer + data->curr_cnt++) =
+			adc_sign_extend(dev, sys_read32(channel_sample_reg));
 
 		/* Check if the required number of samples has been read */
 		if (data->curr_cnt >= data->channels_count) {
@@ -936,6 +952,11 @@ static int adc_channel_select(const struct device *dev, const struct adc_channel
 			}
 		}
 	}
+	/* store differential mode for sign extension in IRQ */
+	DEV_DATA(dev)->differential =
+		(config->drv_inst == ADC_INSTANCE_ADC24_0) ? true
+						    : channel_cf->differential;
+
 	/* set the channel to operate */
 	adc_init_channel_select(regs, channel_cf->channel_id);
 
