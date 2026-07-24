@@ -11,6 +11,8 @@
 #include <zephyr/drivers/video.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/pinctrl.h>
+#include <zephyr/pm/device.h>
 
 #define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
 #include <zephyr/logging/log.h>
@@ -29,6 +31,9 @@ struct ov5675_config {
 	const struct gpio_dt_spec reset_gpio;
 	const struct gpio_dt_spec power_gpio;
 	struct i2c_dt_spec i2c;
+#ifdef CONFIG_PINCTRL
+	const struct pinctrl_dev_config *pcfg;
+#endif
 };
 
 struct ov5675_data {
@@ -351,6 +356,16 @@ static int ov5675_init(const struct device *dev)
 	uint16_t chip_id;
 	int ret;
 
+#ifdef CONFIG_PINCTRL
+	if (cfg->pcfg) {
+		ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_DEFAULT);
+		if (ret < 0 && ret != -ENOENT) {
+			LOG_ERR("Failed to apply default pinctrl state: %d", ret);
+			return ret;
+		}
+	}
+#endif
+
 	if (!device_is_ready(cfg->i2c.bus)) {
 		LOG_ERR("I2C bus not ready");
 		return -ENODEV;
@@ -523,17 +538,129 @@ static DEVICE_API(video, ov5675_driver_api) = {
 	.set_stream = ov5675_set_stream,
 };
 
+#if defined(CONFIG_PM_DEVICE)
+
+/** OV5675 Camera: Suspend */
+static int ov5675_suspend(const struct device *dev)
+{
+	const struct ov5675_config *cfg = dev->config;
+	struct ov5675_data *data = dev->data;
+	int ret;
+
+	/* Stop streaming if active */
+	if (data->is_streaming) {
+		ret = ov5675_set_stream(dev, false);
+		if (ret) {
+			LOG_ERR("Failed to stop stream during suspend: %d", ret);
+			return ret;
+		}
+	}
+
+	/* Put camera in low power mode via reset GPIO */
+	if (cfg->reset_gpio.port) {
+		gpio_pin_set_dt(&cfg->reset_gpio, 0);
+	}
+
+	/* Power down camera if power GPIO available */
+	if (cfg->power_gpio.port) {
+		gpio_pin_set_dt(&cfg->power_gpio, 0);
+	}
+
+#ifdef CONFIG_PINCTRL
+	/* Apply sleep pin configuration if available */
+	if (cfg->pcfg) {
+		ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_SLEEP);
+		if (ret < 0 && ret != -ENOENT) {
+			LOG_ERR("Failed to apply sleep pinctrl state: %d", ret);
+			return ret;
+		}
+	}
+#endif
+
+	LOG_INF("PM: Suspended %s", dev->name);
+
+	return 0;
+}
+
+/** OV5675 Camera: Resume */
+static int ov5675_resume(const struct device *dev)
+{
+	const struct ov5675_config *cfg = dev->config;
+	struct ov5675_data *data = dev->data;
+	int ret;
+
+#ifdef CONFIG_PINCTRL
+	if (cfg->pcfg) {
+		ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_DEFAULT);
+		if (ret < 0 && ret != -ENOENT) {
+			LOG_ERR("Failed to apply default pinctrl state: %d", ret);
+			return ret;
+		}
+	}
+#endif
+
+	/* Re-initialize camera hardware */
+	ret = ov5675_hard_reset(dev);
+	if (ret) {
+		LOG_ERR("Failed to hard-reset sensor on resume: %d", ret);
+		return ret;
+	}
+
+	/* Put sensor in standby mode */
+	ret = ov5675_write_reg(&cfg->i2c, OV5675_REG_MODE_SELECT, OV5675_MODE_STANDBY);
+	if (ret) {
+		LOG_ERR("Failed to set standby mode on resume: %d", ret);
+		return ret;
+	}
+
+	data->is_streaming = false;
+	memset(&data->fmt, 0, sizeof(data->fmt));
+
+	LOG_DBG("PM: Resumed %s", dev->name);
+
+	return 0;
+}
+
+static int ov5675_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		return ov5675_resume(dev);
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		return ov5675_suspend(dev);
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		return 0;
+
+	default:
+		return -ENOTSUP;
+	}
+}
+#endif /* CONFIG_PM_DEVICE */
+
+#define OV5675_PINCTRL_DEFINE(i) \
+	IF_ENABLED(DT_INST_NODE_HAS_PROP(i, pinctrl_0), (PINCTRL_DT_INST_DEFINE(i);))
+
+#define OV5675_PINCTRL_CONFIG(i) \
+	IF_ENABLED(DT_INST_NODE_HAS_PROP(i, pinctrl_0), \
+		(.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(i),))
+
 #define OV5675_DEVICE_DEFINE(i)                                                    \
 	static const struct ov5675_config ov5675_cfg_##i = {                       \
 		.i2c        = I2C_DT_SPEC_INST_GET(i),                            \
 		.reset_gpio = GPIO_DT_SPEC_INST_GET_OR(i, reset_gpios, {}),       \
 		.power_gpio = GPIO_DT_SPEC_INST_GET_OR(i, power_gpios, {}),       \
+		OV5675_PINCTRL_CONFIG(i)					  \
 	};                                                                         \
                                                                                    \
 	static struct ov5675_data ov5675_data_##i;                                 \
                                                                                    \
-	DEVICE_DT_INST_DEFINE(i, &ov5675_init, NULL, &ov5675_data_##i,            \
-			      &ov5675_cfg_##i, POST_KERNEL,                        \
-			      CONFIG_VIDEO_INIT_PRIORITY, &ov5675_driver_api);
+	PM_DEVICE_DT_INST_DEFINE(i, ov5675_pm_action);				   \
+                                                                                   \
+	DEVICE_DT_INST_DEFINE(i, &ov5675_init, PM_DEVICE_DT_INST_GET(i),	   \
+			&ov5675_data_##i, &ov5675_cfg_##i, POST_KERNEL,		   \
+			CONFIG_VIDEO_INIT_PRIORITY, &ov5675_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(OV5675_DEVICE_DEFINE)
