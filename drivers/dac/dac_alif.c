@@ -127,6 +127,11 @@ static int dac_enable(const struct device *dev, const struct dac_channel_cfg *ch
 	uintptr_t regs = DEVICE_MMIO_NAMED_GET(dev, dac_reg);
 	uint32_t data;
 
+	/* Alif DAC only supports channel 0 */
+	if (channel_cfg->channel_id != 0) {
+		return -EINVAL;
+	}
+
 	if (channel_cfg->resolution != DAC12_MAX_RESOLUTION) {
 		return -ENOTSUP;
 	}
@@ -230,8 +235,13 @@ static int dac_write_data(const struct device *dev, uint8_t channel, uint32_t in
 
 	const struct dac_config *config = DEV_CFG(dev);
 
-	if (config->twoscomp_enabled != 1 &&
-	(input_value > DAC_MAX_INPUT || input_value < DAC_MIN_INPUT)) {
+	/* Alif DAC only supports channel 0 */
+	if (channel != 0) {
+		return -EINVAL;
+	}
+
+	/* Validate 12-bit input value */
+	if (input_value > DAC_MAX_INPUT) {
 		return -EINVAL;
 	}
 
