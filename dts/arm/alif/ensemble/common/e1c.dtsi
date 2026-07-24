@@ -757,7 +757,8 @@
 		interrupts = <49 ALIF_DEFAULT_IRQ_PRIORITY>;
 		interrupt-names = "warning_intr";
 		pinctrl-0 = <&pinctrl_lppdm>;
-		pinctrl-names = "default";
+		pinctrl-1 = <&pinctrl_lppdm_sleep>;
+		pinctrl-names = "default", "sleep";
 		clocks = <&clockctrl ALIF_LPPDM_76M8_CLK>;
 		fifo_watermark = <5>;
 		bypass_iir_filter = <1>;

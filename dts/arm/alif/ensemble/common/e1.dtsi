@@ -1291,7 +1291,8 @@
 				  "error_intr",
 				  "audio_det_intr";
 		pinctrl-0 = <&pinctrl_pdm0>;
-		pinctrl-names = "default";
+		pinctrl-1 = <&pinctrl_pdm0_sleep>;
+		pinctrl-names = "default", "sleep";
 		clocks = <&clockctrl ALIF_PDM_76M8_CLK>;
 		fifo_watermark = <5>;
 		bypass_iir_filter = <1>;
