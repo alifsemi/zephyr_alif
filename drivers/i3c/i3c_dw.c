@@ -194,6 +194,7 @@ LOG_MODULE_REGISTER(i3c_dw, CONFIG_I3C_DW_LOG_LEVEL);
 #define SLV_CHAR_CTRL_IBI_REQUEST_CAPABLE  BIT(1)
 #define SLV_CHAR_CTRL_IBI_PAYLOAD          BIT(2)
 #define SLV_CHAR_CTRL_BCR_MASK             GENMASK(7, 0)
+#define SLV_CHAR_CTRL_DEVICE_ROLE_MASTER   (BIT(6) & GENMASK(7, 6))
 #define SLV_CHAR_CTRL_BCR(x)               ((x) & SLV_CHAR_CTRL_BCR_MASK)
 #define SLV_CHAR_CTRL_DCR_MASK             GENMASK(15, 8)
 #define SLV_CHAR_CTRL_DCR(x)               (((x) & SLV_CHAR_CTRL_DCR_MASK) >> 8)
@@ -240,7 +241,9 @@ LOG_MODULE_REGISTER(i3c_dw, CONFIG_I3C_DW_LOG_LEVEL);
 #define SLV_NACK_REQ_NACK_REQ_NACK 0x01
 
 #define DEVICE_CTRL_EXTENDED                           0xb0
-#define DEVICE_CTRL_EXTENDED_DEV_OPERATION_MODE(x)     ((x) & GENMASK(1, 0))
+#define DEVICE_CTRL_EXTENDED_DEV_OPERATION_MODE_MASK   GENMASK(1, 0)
+#define DEVICE_CTRL_EXTENDED_DEV_OPERATION_MODE(x)     \
+	((x) & DEVICE_CTRL_EXTENDED_DEV_OPERATION_MODE_MASK)
 #define DEVICE_CTRL_EXTENDED_DEV_OPERATION_MODE_MASTER 0
 #define DEVICE_CTRL_EXTENDED_DEV_OPERATION_MODE_SLAVE  1
 
@@ -366,6 +369,8 @@ struct dw_i3c_config {
 	const struct pinctrl_dev_config *pcfg;
 
 	void (*irq_config_func)();
+
+	bool target_mode;
 };
 
 struct dw_i3c_data {
@@ -2235,6 +2240,7 @@ static int dw_i3c_init(const struct device *dev)
 	uint32_t hw_capabilities;
 	uint32_t queue_capability;
 	uint32_t device_ctrl_ext;
+	uint32_t device_char_ctrl;
 
 	if (!device_is_ready(config->clock)) {
 		return -ENODEV;
@@ -2291,14 +2297,21 @@ static int dw_i3c_init(const struct device *dev)
 		ctrl_config->supported_hdr |= I3C_MSG_HDR_DDR;
 	}
 
-	/* if the boot condition starts as a target, then it's a secondary controller */
-	device_ctrl_ext = sys_read32(config->regs + DEVICE_CTRL_EXTENDED);
-	if (DEVICE_CTRL_EXTENDED_DEV_OPERATION_MODE(device_ctrl_ext) &
-	    DEVICE_CTRL_EXTENDED_DEV_OPERATION_MODE_SLAVE) {
+	/* Set the controller's role Master/Secondary (Slave) */
+	device_ctrl_ext  = sys_read32(config->regs + DEVICE_CTRL_EXTENDED);
+	device_ctrl_ext &= ~DEVICE_CTRL_EXTENDED_DEV_OPERATION_MODE_MASK;
+	device_char_ctrl = sys_read32(config->regs + SLV_CHAR_CTRL);
+	if (config->target_mode) {
+		device_ctrl_ext  |= DEVICE_CTRL_EXTENDED_DEV_OPERATION_MODE_SLAVE;
+		device_char_ctrl &= ~SLV_CHAR_CTRL_DEVICE_ROLE_MASTER;
 		ctrl_config->is_secondary = true;
 	} else {
+		device_ctrl_ext |= DEVICE_CTRL_EXTENDED_DEV_OPERATION_MODE_MASTER;
+		device_char_ctrl |= SLV_CHAR_CTRL_DEVICE_ROLE_MASTER;
 		ctrl_config->is_secondary = false;
 	}
+	sys_write32(device_ctrl_ext, config->regs + DEVICE_CTRL_EXTENDED);
+	sys_write32(device_char_ctrl, config->regs + SLV_CHAR_CTRL);
 
 	ret = dw_i3c_init_scl_timing(dev, ctrl_config);
 	if (ret != 0) {
@@ -2406,6 +2419,7 @@ static DEVICE_API(i3c, dw_i3c_api) = {
 		.common.dev_list.num_i3c = ARRAY_SIZE(dw_i3c_device_array_##n),                    \
 		.common.dev_list.i2c = dw_i3c_i2c_device_array_##n,                                \
 		.common.dev_list.num_i2c = ARRAY_SIZE(dw_i3c_i2c_device_array_##n),                \
+		.target_mode = DT_INST_PROP(n, target_mode),                                 \
 	};                                                                                         \
 	DEVICE_DT_INST_DEFINE(n, dw_i3c_init, NULL, &dw_i3c_data_##n, &dw_i3c_cfg_##n,             \
 			      POST_KERNEL, CONFIG_I3C_CONTROLLER_INIT_PRIORITY, &dw_i3c_api);
