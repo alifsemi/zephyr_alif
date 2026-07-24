@@ -1233,20 +1233,23 @@
 	};
 
 	ospi0: ospi0@83000000 {
-		compatible = "snps,designware-ospi";
+		compatible = "alif,mspi-controller", "snps,designware-ssi";
 		#address-cells = <1>;
 		#size-cells = <0>;
-		reg = <0x83000000 0x1000>;
+		reg = <0x83000000 0x1000>, <0x83001000 0x100>;
+		reg-names = "core", "aes";
 		pinctrl-0 = <&pinctrl_ospi0>;
 		pinctrl-names = "default";
 		interrupt-parent = <&nvic>;
 		interrupts = <96 ALIF_DEFAULT_IRQ_PRIORITY>;
-		aes-reg = <0x83001000 0x100>;
-		bus-speed = <80000000>;
+		packet-data-limit = <65536>;
+		fifo-depth = <128>;
+		op-mode = "MSPI_CONTROLLER";
+		duplex = "MSPI_FULL_DUPLEX";
 		clock-frequency = <160000000>;
-		cs-pin = <1>;
 		ddr-drive-edge = <1>;
 		rx-ds-delay = <11>;
+		baud2-delay = <1>;
 		tx-fifo-threshold = <64>;
 		xip-rxds-vl-en;
 		xip-wait-cycles = <15>;

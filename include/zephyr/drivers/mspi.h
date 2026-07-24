@@ -41,6 +41,10 @@ enum mspi_op_mode {
 	MSPI_OP_MODE_PERIPHERAL     = 1,
 };
 
+/* Compatibility aliases for devicetree string tokens. */
+#define MSPI_CONTROLLER  MSPI_OP_MODE_CONTROLLER
+#define MSPI_PERIPHERAL  MSPI_OP_MODE_PERIPHERAL
+
 /**
  * @brief MSPI duplex mode
  */
@@ -124,6 +128,7 @@ enum mspi_bus_event {
 	MSPI_BUS_RESET              = 0,
 	MSPI_BUS_ERROR              = 1,
 	MSPI_BUS_XFER_COMPLETE      = 2,
+	MSPI_BUS_TIMEOUT            = 3,
 	MSPI_BUS_EVENT_MAX,
 };
 
@@ -137,6 +142,7 @@ enum mspi_bus_event_cb_mask {
 	MSPI_BUS_RESET_CB           = BIT(0),
 	MSPI_BUS_ERROR_CB           = BIT(1),
 	MSPI_BUS_XFER_COMPLETE_CB   = BIT(2),
+	MSPI_BUS_TIMEOUT_CB         = BIT(3),
 };
 
 /**

@@ -1,0 +1,51 @@
+# Copyright (c) 2026 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Alif MSPI controller with Synopsys DesignWare SSI core
+
+compatible: "alif,mspi-controller"
+
+include: "snps,designware-ssi.yaml"
+
+properties:
+  reg-names:
+    required: true
+    description: |
+      Register space names. The core region contains the DesignWare SSI
+      registers and the aes region contains the AES wrapper registers.
+
+  ddr-drive-edge:
+    type: int
+    default: 1
+    description: TXD drive edge setting for DDR operation.
+
+  rx-ds-delay:
+    type: int
+    default: 16
+    description: Receive data strobe delay.
+
+  baud2-delay:
+    type: int
+    default: 2
+    enum:
+      - 0
+      - 1
+      - 2
+    description: BAUD2 delay control used by the Alif OSPI/MSPI wrapper.
+
+  xip-wait-cycles:
+    type: int
+    default: 16
+    description: Wait cycles for XiP transactions.
+
+  xip-rxds-vl-en:
+    type: boolean
+    description: Enable RXDS variable latency on XiP transactions.
+
+  xip-base-address:
+    type: array
+    description: XiP memory address range.
+
+  memmap-write-support:
+    type: boolean
+    description: Controller supports memory-mapped write/XiP write registers.
