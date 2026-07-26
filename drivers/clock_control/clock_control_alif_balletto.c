@@ -9,6 +9,10 @@
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/dt-bindings/clock/alif_balletto_clocks.h>
+#if IS_ENABLED(CONFIG_PM)
+#include <string.h>
+#include <zephyr/pm/pm.h>
+#endif
 #include <soc_common.h>
 
 LOG_MODULE_REGISTER(alif_clock_control, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
@@ -21,6 +25,18 @@ struct clock_control_alif_config {
 	uint32_t vbat_base;
 	uint32_t m55he_cfg_base;
 };
+
+struct balletto_clk_data {
+	uint32_t axi_freq;
+	uint32_t ahb_freq;
+	uint32_t apb_freq;
+	uint32_t sysref_freq;
+	uint32_t hfosc_freq;
+	uint32_t extsys0_freq;
+	uint32_t extsys1_freq;
+};
+
+static struct balletto_clk_data balletto_clk;
 
 #define ALIF_CAMERA_PIX_CLK_DIV_MASK BIT_MASK(9U)
 #define ALIF_CAMERA_PIX_CLK_DIV_POS  16U
@@ -110,21 +126,33 @@ static uint32_t get_syspll_clk_freq(void)
 	return get_osc_ctrl_clk_freq();
 }
 
-static uint32_t get_syst_refclk_freq(void)
+static uint32_t get_syst_refclk_freq(const struct device *dev)
 {
+	struct balletto_clk_data *data = dev->data;
+
+	if (data->sysref_freq != 0U) {
+		return data->sysref_freq;
+	}
+
 	const uint32_t base_clk = (sys_read32(CGU_PLL_CLK_SEL) & CGU_PLL_CLK_SEL_SYSREF)
 					  ? (PLL_CLOCK1_SRC_FREQ / 2)
 					  : get_osc_ctrl_clk_freq();
 	const uint32_t reg_val = sys_read32(CGU_ESCLK_SEL);
 	const uint32_t divider = (reg_val & BIT(27)) ? ((reg_val >> 16) & 0x7ff) : 0;
 
-	return base_clk / (!divider ? 1 : divider);
+	data->sysref_freq = base_clk / (!divider ? 1 : divider);
+	return data->sysref_freq;
 }
 
-static uint32_t get_syst_aclk_freq(void)
+static uint32_t get_syst_aclk_freq(const struct device *dev)
 {
 #define SYST_ACLK_CTRL 0x820
 #define SYST_ACLK_DIV0 0x824
+	struct balletto_clk_data *data = dev->data;
+
+	if (data->axi_freq != 0U) {
+		return data->axi_freq;
+	}
 
 	const uint32_t clkselect = (sys_read32(HOST_BASE_SYS_CTRL + SYST_ACLK_CTRL) >> 8) & 0xFF;
 
@@ -134,35 +162,51 @@ static uint32_t get_syst_aclk_freq(void)
 	}
 
 	if (clkselect == 1) {
-		return get_syst_refclk_freq();
+		data->axi_freq = get_syst_refclk_freq(dev);
+		return data->axi_freq;
 	}
 
 	/* Read current divider value */
 	const uint32_t divider = (sys_read32(HOST_BASE_SYS_CTRL + SYST_ACLK_DIV0) >> 16) & 0xF;
 
-	return (get_syspll_clk_freq() >> divider);
+	data->axi_freq = (get_syspll_clk_freq() >> divider);
+	return data->axi_freq;
 }
 
-uint32_t get_syst_hclk_freq(void)
+static uint32_t get_syst_hclk_freq(const struct device *dev)
 {
+	struct balletto_clk_data *data = dev->data;
+
+	if (data->ahb_freq != 0U) {
+		return data->ahb_freq;
+	}
+
 	uint32_t divider = (sys_read32(AON_BUS_CLK_DIV) >> 8) & 0x3;
 
 	if (divider > 1) {
 		/* 2 or 3 == divide by 4 */
 		divider = 2;
 	}
-	return (get_syspll_clk_freq() >> divider);
+	data->ahb_freq = (get_syspll_clk_freq() >> divider);
+	return data->ahb_freq;
 }
 
-static uint32_t get_syst_pclk_freq(void)
+static uint32_t get_syst_pclk_freq(const struct device *dev)
 {
+	struct balletto_clk_data *data = dev->data;
+
+	if (data->apb_freq != 0U) {
+		return data->apb_freq;
+	}
+
 	uint32_t divider = (sys_read32(AON_BUS_CLK_DIV)) & 0x3;
 
 	if (divider > 1) {
 		/* 2 or 3 == divide by 4 */
 		divider = 2;
 	}
-	return (get_syspll_clk_freq() >> divider);
+	data->apb_freq = (get_syspll_clk_freq() >> divider);
+	return data->apb_freq;
 }
 
 static uint32_t get_hfxo_divided_clk_freq(void)
@@ -197,62 +241,85 @@ static uint32_t get_hfxo_divided_clk_freq(void)
 	return ALIF_CLOCK_HFOSC_CLK_FREQ;
 }
 
-static uint32_t get_hfosc_clk_freq(void)
+static uint32_t get_hfosc_clk_freq(const struct device *dev)
 {
+	struct balletto_clk_data *data = dev->data;
+
+	if (data->hfosc_freq != 0U) {
+		return data->hfosc_freq;
+	}
+
 	/* Check oscillator clock source for HFOSC_CLK */
 	if (sys_read32(CGU_OSC_CTRL) & BIT(4)) {
 		/* HFXO selected */
-		return get_hfxo_divided_clk_freq();
+		data->hfosc_freq = get_hfxo_divided_clk_freq();
+	} else {
+		data->hfosc_freq = (get_hfrc_clk_freq() / 2);
 	}
-
-	return (get_hfrc_clk_freq() / 2);
+	return data->hfosc_freq;
 }
 
-static uint32_t get_he_clock_freq(void)
+static uint32_t get_he_clock_freq(const struct device *dev)
 {
+	struct balletto_clk_data *data = dev->data;
+
+	if (data->extsys1_freq != 0U) {
+		return data->extsys1_freq;
+	}
+
 	if (sys_read32(CGU_PLL_CLK_SEL) & CGU_PLL_CLK_SEL_ES1) {
 		switch ((sys_read32(CGU_ESCLK_SEL) >> HE_PLL_DIV_POS) & HE_PLL_DIV_MASK) {
 		case 0:
-			return (PLL_CLOCK2_SRC_FREQ / 2);
+			data->extsys1_freq = (PLL_CLOCK2_SRC_FREQ / 2);
+			break;
 		case 1:
-			return (PLL_CLOCK1_SRC_FREQ / 2);
+			data->extsys1_freq = (PLL_CLOCK1_SRC_FREQ / 2);
+			break;
 		case 2:
-			return PLL_CLOCK2_SRC_FREQ;
+			data->extsys1_freq = PLL_CLOCK2_SRC_FREQ;
+			break;
 		case 3:
 		default:
-			return PLL_CLOCK1_SRC_FREQ;
+			data->extsys1_freq = PLL_CLOCK1_SRC_FREQ;
+			break;
 		}
+		return data->extsys1_freq;
 	}
 
 	const uint32_t es1_osc = (sys_read32(CGU_ESCLK_SEL) >> HE_OSC_DIV_POS) & HE_OSC_DIV_MASK;
 
 	switch (es1_osc) {
 	case 0:
-		return get_hfrc_clk_freq();
+		data->extsys1_freq = get_hfrc_clk_freq();
+		break;
 	case 1:
-		return get_hfrc_clk_freq() / 2;
+		data->extsys1_freq = get_hfrc_clk_freq() / 2;
+		break;
 	case 2:
-		return ALIF_CLOCK_76M8_CLK_FREQ;
+		data->extsys1_freq = ALIF_CLOCK_76M8_CLK_FREQ;
+		break;
 	case 3:
 	default:
-		return get_hfxo_divided_clk_freq();
+		data->extsys1_freq = get_hfxo_divided_clk_freq();
+		break;
 	};
+	return data->extsys1_freq;
 }
 
-static uint32_t alif_get_input_clock(uint32_t const clock_name)
+static uint32_t alif_get_input_clock(const struct device *dev, uint32_t const clock_name)
 {
 	switch (clock_name) {
 	case ALIF_CDC200_PIX_SYST_ACLK:
 	case ALIF_OSPI_CLK:
 	case ALIF_UTIMER_CLK:
 	case ALIF_I3C_CLK:
-		return get_syst_aclk_freq();
+		return get_syst_aclk_freq(dev);
 	case ALIF_CANFD0_HFOSC_CLK:
 	case ALIF_CANFD1_HFOSC_CLK:
-		return get_hfosc_clk_freq();
+		return get_hfosc_clk_freq(dev);
 	case ALIF_CANFD0_160M_CLK:
 	case ALIF_CANFD1_160M_CLK:
-		return get_he_clock_freq();
+		return get_he_clock_freq(dev);
 	case ALIF_I2S0_76M8_CLK:
 	case ALIF_I2S1_76M8_CLK:
 	case ALIF_LPI2S_76M8_CLK:
@@ -289,20 +356,20 @@ static uint32_t alif_get_input_clock(uint32_t const clock_name)
 	case ALIF_UART5_SYST_PCLK:
 	case ALIF_I2C0_GATED_CLK:
 	case ALIF_I2C1_GATED_CLK:
-		return get_syst_pclk_freq();
+		return get_syst_pclk_freq(dev);
 	case ALIF_UART0_38M4_CLK:
 	case ALIF_UART1_38M4_CLK:
 	case ALIF_UART2_38M4_CLK:
 	case ALIF_UART3_38M4_CLK:
 	case ALIF_UART4_38M4_CLK:
 	case ALIF_UART5_38M4_CLK:
-		return get_hfosc_clk_freq();
+		return get_hfosc_clk_freq(dev);
 	case ALIF_LPUART_CLK:
 	case ALIF_HCI_AHI_CLK:
 	case ALIF_LPSPI_CLK:
-		return get_he_clock_freq();
+		return get_he_clock_freq(dev);
 	case ALIF_SPI_CLK:
-		return get_syst_hclk_freq();
+		return get_syst_hclk_freq(dev);
 	default:
 		break;
 	}
@@ -509,7 +576,7 @@ static int alif_clock_control_get_rate(const struct device *dev, clock_control_s
 	uint32_t div_mask, freq_div, div_pos;
 	int32_t ret;
 
-	clk_freq = alif_get_input_clock(clk_id);
+	clk_freq = alif_get_input_clock(dev, clk_id);
 	if (!clk_freq) {
 		return -ENOTSUP;
 	}
@@ -551,7 +618,7 @@ static int alif_clock_control_set_rate(const struct device *dev, clock_control_s
 		return 0;
 	}
 
-	clk_freq = alif_get_input_clock(clk_id);
+	clk_freq = alif_get_input_clock(dev, clk_id);
 
 	ret = alif_get_module_base(dev, ALIF_CLOCK_CFG_MODULE(clk_id), &module_base);
 	if (ret) {
@@ -625,6 +692,20 @@ static inline int alif_clock_control_configure(const struct device *dev,
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_PM)
+static void balletto_clk_pre_device_resume(enum pm_state state)
+{
+	if (state == PM_STATE_RUNTIME_IDLE || state == PM_STATE_SUSPEND_TO_IDLE) {
+		return;
+	}
+	memset(&balletto_clk, 0, sizeof(balletto_clk));
+}
+
+static struct pm_notifier balletto_clk_pm_notifier = {
+	.pre_device_resume = balletto_clk_pre_device_resume,
+};
+#endif /* CONFIG_PM */
+
 static int clockctrl_init(const struct device *dev)
 {
 	uint32_t cgu_mask = 0;
@@ -657,6 +738,10 @@ static int clockctrl_init(const struct device *dev)
 		sys_set_bits(cgu_module_base + ALIF_CLK_ENA_REG, cgu_mask);
 	}
 
+#if IS_ENABLED(CONFIG_PM)
+	pm_notifier_register(&balletto_clk_pm_notifier);
+#endif
+
 	return 0;
 }
 
@@ -677,5 +762,5 @@ static const struct clock_control_alif_config config = {
 	.m55he_cfg_base = DT_INST_REG_ADDR_BY_NAME(0, m55he_cfg),
 };
 
-DEVICE_DT_DEFINE(DT_NODELABEL(clockctrl), clockctrl_init, NULL, NULL, &config, PRE_KERNEL_1,
-		 CONFIG_CLOCK_CONTROL_INIT_PRIORITY, &alif_clock_control_driver_api);
+DEVICE_DT_DEFINE(DT_NODELABEL(clockctrl), clockctrl_init, NULL, &balletto_clk, &config,
+		 PRE_KERNEL_1, CONFIG_CLOCK_CONTROL_INIT_PRIORITY, &alif_clock_control_driver_api);
