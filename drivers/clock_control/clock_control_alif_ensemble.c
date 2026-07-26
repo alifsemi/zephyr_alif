@@ -11,6 +11,10 @@
 #include <zephyr/dt-bindings/clock/alif_ensemble_clocks.h>
 #ifdef CONFIG_HAS_ALIF_SE_SERVICES
 #include <se_service.h>
+#if IS_ENABLED(CONFIG_PM)
+#include <string.h>
+#include <zephyr/pm/pm.h>
+#endif
 #endif
 #include "soc_common.h"
 
@@ -717,6 +721,20 @@ static inline int alif_clock_control_configure(const struct device *dev,
 	return 0;
 }
 
+#if defined(CONFIG_HAS_ALIF_SE_SERVICES) && IS_ENABLED(CONFIG_PM)
+static void ensemble_clk_pre_device_resume(enum pm_state state)
+{
+	if (state == PM_STATE_RUNTIME_IDLE || state == PM_STATE_SUSPEND_TO_IDLE) {
+		return;
+	}
+	memset(&ensemble_clk, 0, sizeof(ensemble_clk));
+}
+
+static struct pm_notifier ensemble_clk_pm_notifier = {
+	.pre_device_resume = ensemble_clk_pre_device_resume,
+};
+#endif /* CONFIG_HAS_ALIF_SE_SERVICES && CONFIG_PM */
+
 static int clockctrl_init(const struct device *dev)
 {
 	uint32_t cgu_mask = 0;
@@ -761,6 +779,10 @@ static int clockctrl_init(const struct device *dev)
 
 		sys_set_bits(cgu_module_base + ALIF_CLK_ENA_REG, cgu_mask);
 	}
+
+#if defined(CONFIG_HAS_ALIF_SE_SERVICES) && IS_ENABLED(CONFIG_PM)
+	pm_notifier_register(&ensemble_clk_pm_notifier);
+#endif
 
 	return 0;
 }
