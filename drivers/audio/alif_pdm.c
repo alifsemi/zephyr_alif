@@ -80,7 +80,7 @@ struct pdm_config {
 };
 
 /**
- * @fn		void *get_slab(struct pdata *pdm_data)
+ * @fn		void *get_slab(struct pdm_data *pdata)
  * @brief	Allocates a memory block from the slab for PCM data.
  * @param[in]	pdata Pointer to the PDM data structure
  *			containing the memory slab.
@@ -401,17 +401,17 @@ static bool pdm_emit_phase2(struct dma_pl330_opcode_buf *ob,
 }
 
 /**
- * @fn		static bool pdm_build_mcode(struct pdm_data *pdata,
- *					    uintptr_t reg_base,
- *					    uint8_t *dst,
- *					    uint32_t n_samples,
- *					    uint8_t periph_id,
- *					    uint8_t dma_channel,
- *					    uint8_t channel_map)
- * @brief	Builds the PL330 DMA microcode sequence to transfer audio
- *		samples from PDM channel pair registers to a destination
- *		buffer. Waits for FIFO on the first active pair and
- *		reads all active pairs per sample iteration.
+ * @fn		static int pdm_build_mcode(struct pdm_data *pdata,
+ *					   uintptr_t reg_base,
+ *					   uint8_t *dst,
+ *					   uint32_t n_samples,
+ *					   uint8_t periph_id,
+ *					   uint8_t dma_channel,
+ *					   uint8_t channel_map)
+ * @brief	Builds the two-phase PL330 DMA microcode sequence: Phase 1
+ *		captures raw channel-pair registers into the destination
+ *		buffer, Phase 2 compacts the buffer in place to only the
+ *		active channels' samples.
  * @param[in]	pdata       : Pointer to the PDM driver data structure.
  * @param[in]	reg_base    : MMIO base address of the PDM peripheral.
  * @param[in]	dst         : Pointer to the destination PCM data buffer.
@@ -419,8 +419,9 @@ static bool pdm_emit_phase2(struct dma_pl330_opcode_buf *ob,
  * @param[in]	periph_id   : DMA peripheral request ID for PDM FIFO.
  * @param[in]	dma_channel : DMA channel number used to send completion event.
  * @param[in]	channel_map : Bitmask of active PDM channels.
- * @return	true on success, false if mcode buffer overflows or
- *		no active channel pairs found.
+ * @return	0 on success, -EINVAL if no active channel pairs or
+ *		n_samples cannot be factored, -ENOMEM if the microcode
+ *		buffer overflows.
  */
 static int pdm_build_mcode(struct pdm_data *pdata,
 		uintptr_t reg_base,
@@ -1258,9 +1259,16 @@ static const struct _dmic_ops dmic_alif_pdm_api = {
 static int pdm_suspend(const struct device *dev)
 {
 	const struct pdm_config *cfg = DEV_CFG(dev);
+	struct pdm_data *pdata = DEV_DATA(dev);
 	int ret;
 
+	pdata->record_data = 0;
 	disable_interrupt(dev);
+	#ifdef CONFIG_ALIF_PDM_USE_DMA
+		if (cfg->dma_enabled) {
+			dma_stop(cfg->dma_dev, cfg->dma_channel);
+		}
+	#endif
 	/* Disable PDM clock from clock manager */
 	if (cfg->clk_dev != NULL) {
 		ret = clock_control_off(cfg->clk_dev, cfg->clkid);
@@ -1315,10 +1323,20 @@ static int pdm_resume(const struct device *dev)
 			return ret;
 		}
 	}
-	/* Enable the Bypass IIR Filter */
-	sys_write32(pdata->bypass_iir_filter << PDM_BYPASS_IIR, reg_base + PDM_CTL_REGISTER);
 
-	sys_write32(cfg->fifo_watermark, reg_base + PDM_THRESHOLD_REGISTER);
+	uint32_t regdata = pdata->bypass_iir_filter << PDM_BYPASS_IIR;
+
+	#ifdef CONFIG_ALIF_PDM_USE_DMA
+		if (cfg->dma_enabled) {
+			regdata |= PDM_USE_DMA_HANDSHAKE;
+		}
+	#endif
+		/* Enable the Bypass IIR Filter */
+		sys_write32(regdata, reg_base + PDM_CTL_REGISTER);
+		/* DMA needs watermark 1; else use configured watermark */
+		uint32_t watermark = cfg->dma_enabled ? 1U : cfg->fifo_watermark;
+
+		sys_write32(watermark, reg_base + PDM_THRESHOLD_REGISTER);
 
 	LOG_DBG("alif pdm driver resume okay");
 
