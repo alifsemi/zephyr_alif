@@ -52,3 +52,19 @@ properties:
   memmap-write-support:
     type: boolean
     description: Controller supports memory-mapped write/XiP write registers.
+
+  hyperbus-mode:
+    type: boolean
+    description: |
+      Configure the memory-mapped read and write paths for the HyperBus
+      protocol. This mode is intended for a controller instance connected
+      to a HyperRAM device.
+
+  hyperbus-dfs:
+    type: int
+    default: 16
+    enum:
+      - 16
+      - 32
+    description: |
+      Data frame size in bits used for memory-mapped HyperBus transfers.
