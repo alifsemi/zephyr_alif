@@ -31,6 +31,8 @@ struct alif_mspi_vendor_data {
 	uint8_t ddr_drive_edge;
 	uint8_t rx_ds_delay;
 	uint8_t baud2_delay;
+	uint8_t hyperbus_dfs;
+	bool hyperbus_mode;
 };
 
 #define ALIF_SPECIFIC_DATA_DEFINE(inst)						\
@@ -39,6 +41,8 @@ struct alif_mspi_vendor_data {
 		.ddr_drive_edge = DT_INST_PROP_OR(inst, ddr_drive_edge, 0),		\
 		.rx_ds_delay = DT_INST_PROP_OR(inst, rx_ds_delay, 0),			\
 		.baud2_delay = DT_INST_PROP_OR(inst, baud2_delay, 0),			\
+		.hyperbus_dfs = DT_INST_PROP_OR(inst, hyperbus_dfs, 16),			\
+		.hyperbus_mode = DT_INST_PROP(inst, hyperbus_mode),			\
 	}
 
 #define ALIF_SPECIFIC_DATA_GET(inst) ((void *)&mspi_dw_alif_##inst##_vendor_data)
@@ -118,11 +122,70 @@ static inline uint8_t alif_ddr_drive_edge(const struct device *dev)
 	return 0U;
 }
 
+static inline int alif_validate_dev_config(const struct device *dev,
+					   enum mspi_dev_cfg_mask param_mask,
+					   const struct mspi_dev_cfg *cfg)
+{
+	const struct alif_mspi_vendor_data *data = alif_vendor_data_get(dev);
+
+	if (data == NULL || !data->hyperbus_mode) {
+		return 0;
+	}
+
+	if ((param_mask & MSPI_DEVICE_CONFIG_IO_MODE) &&
+	    cfg->io_mode != MSPI_IO_MODE_OCTAL) {
+		LOG_ERR("Alif HyperBus supports only Octal I/O mode");
+		return -ENOTSUP;
+	}
+
+	if ((param_mask & MSPI_DEVICE_CONFIG_DATA_RATE) &&
+	    cfg->data_rate != MSPI_DATA_RATE_DUAL) {
+		LOG_ERR("Alif HyperBus supports only dual data rate");
+		return -ENOTSUP;
+	}
+
+	if ((param_mask & MSPI_DEVICE_CONFIG_DQS) && !cfg->dqs_enable) {
+		LOG_ERR("Alif HyperBus requires RWDS");
+		return -ENOTSUP;
+	}
+
+	return 0;
+}
+
 #if defined(CONFIG_MSPI_XIP)
 static inline void alif_xip_update_ctrl(const struct device *dev, struct xip_ctrl *ctrl,
 					const struct mspi_xip_cfg *cfg)
 {
-	const struct mspi_dw_data *dev_data = dev->data;
+	struct mspi_dw_data *dev_data = dev->data;
+	const struct alif_mspi_vendor_data *data = alif_vendor_data_get(dev);
+
+	if (data->hyperbus_mode) {
+		uint32_t dfs = data->hyperbus_dfs - 1U;
+
+		/* HyperBus generates its command/address phase from the mapped address. */
+		ctrl->read = (ctrl->read & XIP_CTRL_WAIT_CYCLES_MASK) |
+			     XIP_CTRL_XIP_HYBERBUS_EN_BIT |
+			     XIP_CTRL_RXDS_SIG_EN_BIT |
+			     XIP_CTRL_DFS_HC_BIT |
+			     FIELD_PREP(XIP_CTRL_TRANS_TYPE_MASK,
+					XIP_CTRL_TRANS_TYPE_TT2);
+		ctrl->write = (ctrl->write & XIP_WRITE_CTRL_WAIT_CYCLES_MASK) |
+			      XIP_WRITE_CTRL_DFS_HC_BIT |
+			      XIP_WRITE_CTRL_DM_EN_BIT |
+			      XIP_WRITE_CTRL_RXDS_SIG_EN_BIT |
+			      XIP_WRITE_CTRL_HYBERBUS_EN_BIT |
+			      FIELD_PREP(XIP_WRITE_CTRL_TRANS_TYPE_MASK,
+					 XIP_WRITE_CTRL_TRANS_TYPE_TT2);
+
+		dev_data->ctrlr0 &= ~(CTRLR0_TMOD_MASK |
+				      CTRLR0_DFS_MASK |
+				      CTRLR0_DFS32_MASK);
+		dev_data->ctrlr0 |= FIELD_PREP(CTRLR0_DFS_MASK, dfs) |
+				   FIELD_PREP(CTRLR0_DFS32_MASK, dfs) |
+				   FIELD_PREP(CTRLR0_TMOD_MASK, CTRLR0_TMOD_RX);
+		dev_data->spi_ctrlr0 = SPI_CTRLR0_SPI_DM_EN_BIT;
+		return;
+	}
 
 	ctrl->read |= XIP_CTRL_DFS_HC_BIT;
 

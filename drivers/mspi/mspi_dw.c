@@ -877,6 +877,14 @@ static int _api_dev_config(const struct device *dev,
 	const struct mspi_dw_config *dev_config = dev->config;
 	struct mspi_dw_data *dev_data = dev->data;
 
+#if DT_HAS_COMPAT_STATUS_OKAY(alif_mspi_controller)
+	int rc = alif_validate_dev_config(dev, param_mask, cfg);
+
+	if (rc < 0) {
+		return rc;
+	}
+#endif
+
 	if (param_mask & MSPI_DEVICE_CONFIG_ENDIAN) {
 		if (cfg->endian != MSPI_XFER_BIG_ENDIAN) {
 			LOG_ERR("Only big endian transfers are supported.");
@@ -1930,6 +1938,7 @@ static int _api_xip_config(const struct device *dev,
 		 * non-XIP transfers have not been performed yet.
 		 */
 		write_ctrlr0(dev, dev_data->ctrlr0);
+		write_spi_ctrlr0(dev, dev_data->spi_ctrlr0);
 		write_baudr(dev, dev_data->baudr);
 		apply_timing_config(dev);
 
@@ -1976,6 +1985,8 @@ static int _api_xip_config(const struct device *dev,
 	write_xip_ser(dev, BIT(dev_id->dev_idx));
 #endif
 
+	/* Memory-mapped accesses do not use the indirect-transfer interrupts. */
+	write_imr(dev, 0);
 	write_ssienr(dev, SSIENR_SSIC_EN_BIT);
 
 	dev_data->xip_enabled |= BIT(dev_id->dev_idx);
