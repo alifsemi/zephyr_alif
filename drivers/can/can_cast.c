@@ -364,6 +364,8 @@ static int can_cast_start(const struct device *dev)
 	CAN_STATS_RESET(dev);
 
 	can_cast_reset_disable(can_base);
+	can_cast_clear_interrupts(can_base);
+
 	/* Enable interrupts */
 	if (!(data->common.mode & CAN_MODE_LISTENONLY)) {
 		can_cast_enable_tx_interrupts(can_base);
