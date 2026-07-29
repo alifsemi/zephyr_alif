@@ -1,0 +1,17 @@
+# Copyright (c) 2026 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: ISSI IS66/67WVH HyperRAM on an MSPI bus
+
+compatible: "issi,is66wvh"
+
+include: mspi-device.yaml
+
+properties:
+  size:
+    type: int
+    required: true
+    description: HyperRAM capacity in bytes.
+
+  xip-config:
+    required: true
