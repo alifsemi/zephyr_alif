@@ -118,4 +118,76 @@ static inline uint8_t alif_ddr_drive_edge(const struct device *dev)
 	return 0U;
 }
 
+#if defined(CONFIG_MSPI_XIP)
+static inline void alif_xip_update_ctrl(const struct device *dev, struct xip_ctrl *ctrl,
+					const struct mspi_xip_cfg *cfg)
+{
+	const struct mspi_dw_data *dev_data = dev->data;
+
+	ctrl->read |= XIP_CTRL_DFS_HC_BIT;
+
+	if (dev_data->spi_ctrlr0 & SPI_CTRLR0_SPI_DDR_EN_BIT) {
+		ctrl->read |= XIP_CTRL_DDR_EN_BIT;
+	}
+
+	if (dev_data->spi_ctrlr0 & SPI_CTRLR0_INST_DDR_EN_BIT) {
+		ctrl->read |= XIP_CTRL_INST_DDR_EN_BIT;
+	}
+
+	if (dev_data->spi_ctrlr0 & SPI_CTRLR0_SPI_RXDS_EN_BIT) {
+		ctrl->read |= XIP_CTRL_RXDS_EN_BIT;
+	}
+
+	/* TODO: XiP write support ? */
+	if (cfg->permission == MSPI_XIP_READ_WRITE) {
+		ctrl->write |= XIP_WRITE_CTRL_DFS_HC_BIT;
+
+		if (dev_data->spi_ctrlr0 & SPI_CTRLR0_SPI_DDR_EN_BIT) {
+			ctrl->write |= XIP_WRITE_CTRL_SPI_DDR_EN_BIT;
+		}
+
+		if (dev_data->spi_ctrlr0 & SPI_CTRLR0_INST_DDR_EN_BIT) {
+			ctrl->write |= XIP_WRITE_CTRL_INST_DDR_EN_BIT;
+		}
+	}
+}
+
+static inline int alif_xip_enable(const struct device *dev,
+				  const struct mspi_dev_id *dev_id,
+				  const struct mspi_xip_cfg *cfg)
+{
+	const struct alif_mspi_vendor_data *data = alif_vendor_data_get(dev);
+
+	ARG_UNUSED(dev_id);
+	ARG_UNUSED(cfg);
+
+	if (data == NULL || data->aes_regs == NULL) {
+		return -ENODEV;
+	}
+
+	data->aes_regs->aes_ctrl |= ALIF_AES_CTRL_XIP_EN;
+	return 0;
+}
+
+static inline int alif_xip_disable(const struct device *dev,
+				   const struct mspi_dev_id *dev_id,
+				   const struct mspi_xip_cfg *cfg)
+{
+	struct mspi_dw_data *dev_data = dev->data;
+	const struct alif_mspi_vendor_data *data = alif_vendor_data_get(dev);
+
+	ARG_UNUSED(cfg);
+
+	if (data == NULL || data->aes_regs == NULL) {
+		return -ENODEV;
+	}
+
+	if ((dev_data->xip_enabled & ~BIT(dev_id->dev_idx)) == 0U) {
+		data->aes_regs->aes_ctrl &= ~ALIF_AES_CTRL_XIP_EN;
+	}
+
+	return 0;
+}
+#endif /* CONFIG_MSPI_XIP */
+
 #endif /* _MSPI_DW_ALIF_SPECIFIC_H_ */
