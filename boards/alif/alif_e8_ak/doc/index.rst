@@ -7,13 +7,30 @@ Overview
 ********
 
 The Alif E8 Application Kit is a development board featuring the Alif Semiconductor
-Ensemble E8 SoC with dual Arm Cortex-M55 processors, Ethos-U55 NPU, and Ethos-U85 NPU.
+Ensemble E8 SoC with dual Arm Cortex-M55 processors, an Arm Cortex-A32 application
+processor, Ethos-U55 NPU, and Ethos-U85 NPU.
+
+Board Identifiers
+*****************
+
+The following board qualifiers are supported:
+
++----------------------------------------------+----------+------------------+
+| Board Identifier                             | SoC      | Core             |
++==============================================+==========+==================+
+| ``alif_e8_ak/ae822fa0e5597xx0/rtss_he``      | E8       | RTSS-HE          |
++----------------------------------------------+----------+------------------+
+| ``alif_e8_ak/ae822fa0e5597xx0/rtss_hp``      | E8       | RTSS-HP          |
++----------------------------------------------+----------+------------------+
+| ``alif_e8_ak/ae822fa0e5597xx0/apss``         | E8       | APSS             |
++----------------------------------------------+----------+------------------+
 
 Hardware
 ********
 
 - Alif Ensemble E8 SoC
 - Dual Arm Cortex-M55 processors (High-Performance + High-Efficiency)
+- Arm Cortex-A32 application processor (APSS)
 - 1× Arm Ethos-U85 NPU for Generative AI (256 MAC/cycle, up to 204 GOPS)
 - 2× Arm Ethos-U55 NPUs (256 MAC/cycle + 128 MAC/cycle)
 - Integrated MRAM (on-chip non-volatile memory)
@@ -21,8 +38,8 @@ Hardware
 - Multiple GPIO, I2C, SPI, UART interfaces
 
 .. note::
-   The E8 supports both RTSS-HE (High-Efficiency) and RTSS-HP (High-Performance)
-   Cortex-M55 core targets.
+   The E8 supports the RTSS-HE (High-Efficiency) and RTSS-HP (High-Performance)
+   Cortex-M55 core targets, as well as the APSS core target.
 
 Serial Port
 ***********
@@ -31,6 +48,7 @@ The default console UART varies by core:
 
 - RTSS-HE (High-Efficiency): UART2 at 115200 baud, 8N1
 - RTSS-HP (High-Performance): UART4 at 115200 baud, 8N1
+- APSS : UART2 at 115200 baud, 8N1
 
 Supported Features
 ==================
@@ -73,6 +91,13 @@ For the High-Performance core:
    :zephyr-app: samples/hello_world
    :board: alif_e8_ak/ae822fa0e5597xx0/rtss_hp
    :goals: build flash
+
+For the APSS core:
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/hello_world
+   :board: alif_e8_ak/ae822fa0e5597xx0/apss
+   :goals: build
 
 Debugging
 =========
