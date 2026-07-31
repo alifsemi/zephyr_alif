@@ -1923,12 +1923,15 @@ static int _api_xip_config(const struct device *dev,
 		ctrl.write |= FIELD_PREP(XIP_WRITE_CTRL_WAIT_CYCLES_MASK,
 					 params->tx_dummy);
 
+		vendor_specific_xip_update_ctrl(dev, &ctrl, cfg);
+
 		/* Make sure the baud rate and serial clock phase/polarity
 		 * registers are configured properly. They may not be if
 		 * non-XIP transfers have not been performed yet.
 		 */
 		write_ctrlr0(dev, dev_data->ctrlr0);
 		write_baudr(dev, dev_data->baudr);
+		apply_timing_config(dev);
 
 		write_xip_incr_inst(dev, params->read_cmd);
 		write_xip_wrap_inst(dev, params->read_cmd);
