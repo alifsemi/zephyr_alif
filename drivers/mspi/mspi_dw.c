@@ -1154,6 +1154,7 @@ static int start_next_packet(const struct device *dev)
 	uint32_t data_frames;
 	uint32_t imr = 0;
 	int rc = 0;
+	bool ser_selected = false;
 
 	if (data_only_packet && packet->num_bytes == 0) {
 		return 0;
@@ -1311,6 +1312,8 @@ static int start_next_packet(const struct device *dev)
 	write_baudr(dev, dev_data->baudr);
 	apply_timing_config(dev);
 
+	ser_selected = vendor_specific_device_select(dev);
+
 	if (xip_enabled) {
 		write_ssienr(dev, SSIENR_SSIC_EN_BIT);
 		irq_unlock(key);
@@ -1456,7 +1459,9 @@ static int start_next_packet(const struct device *dev)
 #endif
 
 	/* Write SER to start transfer */
-	write_ser(dev, BIT(dev_data->dev_id->dev_idx));
+	if (!ser_selected) {
+		write_ser(dev, BIT(dev_data->dev_id->dev_idx));
+	}
 
 #if defined(CONFIG_MULTITHREADING)
 	/* For async transfer, exit after starting the timeout timer. */
