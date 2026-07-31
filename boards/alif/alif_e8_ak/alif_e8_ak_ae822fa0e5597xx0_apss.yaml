@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+identifier: alif_e8_ak/ae822fa0e5597xx0/apss
+name: Alif AppKit Ensemble E8 AE822FA0E5597XX0 APSS MPU
+type: mcu
+arch: arm
+vendor: alif
+toolchain:
+  - zephyr
