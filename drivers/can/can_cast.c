@@ -926,7 +926,7 @@ static void can_cast_remove_rx_filter(const struct device *dev, int filter_id)
 	uint32_t can_base;
 
 	/* Invalid Filter ID */
-	if (filter_id >= CAN_MAX_ACCEPTANCE_FILTERS) {
+	if (filter_id >= CONFIG_CAN_MAX_FILTER) {
 		return;
 	}
 
@@ -1107,7 +1107,7 @@ static int can_cast_get_max_filters(const struct device *dev, bool ide)
 	ARG_UNUSED(dev);
 	ARG_UNUSED(ide);
 
-	return CAN_MAX_ACCEPTANCE_FILTERS;
+	return CONFIG_CAN_MAX_FILTER;
 }
 
 /**
