@@ -579,13 +579,13 @@ static inline void can_cast_disable_error_interrupts(uint32_t can_base)
  */
 static inline void can_cast_clear_interrupts(uint32_t can_base)
 {
+	/* Clears data and error interrupt flags */
 	uint8_t temp = sys_read8(can_base + CAN_ERRINT);
 
-	temp &= ~CAN_ERRINT_REG_Msk;
+	temp |= CAN_ERRINT_REG_Msk;
 	sys_write8(temp, (can_base + CAN_ERRINT));
 
-	/* Clears data and error interrupts */
-	sys_write8(0x0, (can_base + CAN_RTIF));
+	sys_write8(CAN_RTIF_REG_Msk, (can_base + CAN_RTIF));
 }
 
 /**
