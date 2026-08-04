@@ -129,9 +129,13 @@ void pm_system_resume(void)
 		/*
 		 * Notify applications before devices are resumed.
 		 * This allows restoring system configuration (e.g., clock frequencies)
-		 * before peripherals resume and reconfigure.
+		 * before peripherals resume and reconfigure. Skip when devices were
+		 * not suspended for this state.
 		 */
-		pm_state_notify_pre_resume();
+		if ((z_cpus_pm_state[id].state != PM_STATE_RUNTIME_IDLE) &&
+				!z_cpus_pm_state[id].pm_device_disabled) {
+			pm_state_notify_pre_resume();
+		}
 
 #ifdef CONFIG_PM_DEVICE_SYSTEM_MANAGED
 		if (atomic_add(&_cpus_active, 1) == 0) {
