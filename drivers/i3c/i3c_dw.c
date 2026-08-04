@@ -11,6 +11,9 @@
 #include <zephyr/sys/util.h>
 #include <assert.h>
 #include <zephyr/drivers/pinctrl.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/device_runtime.h>
+#include <zephyr/pm/policy.h>
 
 #define NANO_SEC        1000000000ULL
 #define BYTES_PER_DWORD 4
@@ -354,6 +357,39 @@ struct dw_i3c_xfer {
 	struct dw_i3c_cmd cmds[DW_I3C_MAX_CMD_BUF_SIZE];
 };
 
+#if defined(CONFIG_PM_DEVICE)
+/**
+ * @brief Snapshot of DW I3C controller programmable state.
+ *
+ * Captured before suspend so that the controller can be restored to the same
+ * logical state after a power-gated resume.
+ */
+struct dw_i3c_pm_ctx {
+	/* Common (controller + target) */
+	uint32_t device_ctrl;
+	uint32_t device_addr;
+	uint32_t device_ctrl_extended;
+	uint32_t ibi_sir_req_reject;
+	uint32_t ibi_mr_req_reject;
+	uint32_t intr_status_en;
+	uint32_t intr_signal_en;
+	uint32_t queue_thld_ctrl;
+	uint32_t data_buffer_thld_ctrl;
+	/* Controller-only: Device Address Table */
+	uint32_t dat[DW_I3C_MAX_DEVS];
+	/* Target/slave-only programmable state */
+	uint32_t slv_event_status;
+	uint32_t slv_mipi_id_value;
+	uint32_t slv_pid_value;
+	uint32_t slv_char_ctrl;
+	uint32_t slv_max_len;
+	uint32_t max_read_turnaround;
+
+	/* flag for validting if the context is saved or not */
+	bool valid;
+};
+#endif /* CONFIG_PM_DEVICE */
+
 struct dw_i3c_config {
 	struct i3c_driver_config common;
 	const struct device *clock;
@@ -398,6 +434,10 @@ struct dw_i3c_data {
 	struct dw_i3c_xfer xfer;
 
 	struct dw_i3c_i2c_dev_data dw_i3c_i2c_priv_data[DW_I3C_MAX_DEVS];
+
+#if defined(CONFIG_PM_DEVICE)
+	struct dw_i3c_pm_ctx pm_ctx;
+#endif
 };
 
 static uint8_t get_free_pos(uint32_t free_pos)
@@ -2342,6 +2382,256 @@ static int dw_i3c_init(const struct device *dev)
 	return 0;
 }
 
+#if defined(CONFIG_PM_DEVICE)
+/**
+ * @brief Snapshot the DW I3C controller programmable state.
+ *
+ * Captures the registers that influence behavior across a power-gated
+ * suspend/resume cycle. Called before disabling the controller.
+ *
+ * @param dev Pointer to controller device.
+ */
+static void dw_i3c_save_ctx(const struct device *dev)
+{
+	const struct dw_i3c_config *config = dev->config;
+	struct dw_i3c_data *data           = dev->data;
+	struct dw_i3c_pm_ctx *ctx          = &data->pm_ctx;
+	uint32_t iter;
+
+	/* Common state (must be captured for every role). */
+	ctx->device_ctrl           = sys_read32(config->regs + DEVICE_CTRL);
+
+	ctx->device_ctrl          &= ~(DEV_CTRL_ENABLE | DEV_CTRL_RESUME);
+	ctx->device_addr           = sys_read32(config->regs + DEVICE_ADDR);
+	ctx->device_ctrl_extended  = sys_read32(config->regs + DEVICE_CTRL_EXTENDED);
+	ctx->intr_status_en        = sys_read32(config->regs + INTR_STATUS_EN);
+	ctx->intr_signal_en        = sys_read32(config->regs + INTR_SIGNAL_EN);
+	ctx->queue_thld_ctrl       = sys_read32(config->regs + QUEUE_THLD_CTRL);
+	ctx->data_buffer_thld_ctrl = sys_read32(config->regs + DATA_BUFFER_THLD_CTRL);
+
+	if (!data->common.ctrl_config.is_secondary) {
+		/* Master-only: IBI policy and per-target DAT. */
+		ctx->ibi_sir_req_reject = sys_read32(config->regs + IBI_SIR_REQ_REJECT);
+		ctx->ibi_mr_req_reject  = sys_read32(config->regs + IBI_MR_REQ_REJECT);
+		for (iter = 0; iter < data->maxdevs && iter < ARRAY_SIZE(ctx->dat); iter++) {
+			ctx->dat[iter] = sys_read32(config->regs +
+						 DEV_ADDR_TABLE_LOC(data->datstartaddr, iter));
+		}
+	} else {
+		/* Slave/target-only: MIPI/PID identity, BCR/DCR/HDR caps,
+		 * MRL/MWL, and MRT. All can be mutated at runtime by the
+		 * active controller via CCCs, so must survive suspend.
+		 */
+		ctx->slv_event_status    = sys_read32(config->regs + SLV_EVENT_STATUS);
+		ctx->slv_mipi_id_value   = sys_read32(config->regs + SLV_MIPI_ID_VALUE);
+		ctx->slv_pid_value       = sys_read32(config->regs + SLV_PID_VALUE);
+		ctx->slv_char_ctrl       = sys_read32(config->regs + SLV_CHAR_CTRL);
+		ctx->slv_max_len         = sys_read32(config->regs + SLV_MAX_LEN);
+		ctx->max_read_turnaround = sys_read32(config->regs + MAX_READ_TURNAROUND);
+	}
+	ctx->valid = true;
+}
+
+/**
+ * @brief Restore previously snapshotted DW I3C controller state.
+ *
+ * Replays the saved DAT entries and policy registers but leaves the controller
+ * disabled; the caller is responsible for the final controller enable so that
+ * timing/interrupt programming completes first.
+ *
+ * @param dev Pointer to controller device.
+ */
+static void dw_i3c_restore_ctx(const struct device *dev)
+{
+	const struct dw_i3c_config *config = dev->config;
+	struct dw_i3c_data *data = dev->data;
+	const struct dw_i3c_pm_ctx *ctx = &data->pm_ctx;
+	uint32_t iter;
+
+	if (!ctx->valid) {
+		return;
+	}
+
+	/* Restore DEVICE_CTRL_EXTENDED first so that OPERATION_MODE
+	 * matches the role the rest of the snapshot was taken in before
+	 * any role-specific register is written.
+	 */
+	sys_write32(ctx->device_ctrl_extended,  config->regs + DEVICE_CTRL_EXTENDED);
+
+	/* Common state (own address, thresholds). */
+	sys_write32(ctx->device_addr,           config->regs + DEVICE_ADDR);
+	sys_write32(ctx->queue_thld_ctrl,       config->regs + QUEUE_THLD_CTRL);
+	sys_write32(ctx->data_buffer_thld_ctrl, config->regs + DATA_BUFFER_THLD_CTRL);
+
+	if (!data->common.ctrl_config.is_secondary) {
+		/* Master-only: IBI reject policy and DAT (per-target
+		 * dynamic+static address, IBI-with-data, legacy-I2C flag).
+		 */
+		sys_write32(ctx->ibi_sir_req_reject, config->regs + IBI_SIR_REQ_REJECT);
+		sys_write32(ctx->ibi_mr_req_reject,  config->regs + IBI_MR_REQ_REJECT);
+		for (iter = 0; iter < data->maxdevs && iter < ARRAY_SIZE(ctx->dat); iter++) {
+			sys_write32(ctx->dat[iter],
+				    config->regs +
+				    DEV_ADDR_TABLE_LOC(data->datstartaddr, iter));
+		}
+	} else {
+		/* Slave/target-only: MIPI/PID identity, BCR/DCR/HDR caps,
+		 * MRL/MWL, MRT. SLV_EVENT_STATUS restored last so any
+		 * pre-existing event bits do not fire until identity is set.
+		 */
+		sys_write32(ctx->slv_mipi_id_value,   config->regs + SLV_MIPI_ID_VALUE);
+		sys_write32(ctx->slv_pid_value,       config->regs + SLV_PID_VALUE);
+		sys_write32(ctx->slv_char_ctrl,       config->regs + SLV_CHAR_CTRL);
+		sys_write32(ctx->slv_max_len,         config->regs + SLV_MAX_LEN);
+		sys_write32(ctx->max_read_turnaround, config->regs + MAX_READ_TURNAROUND);
+		sys_write32(ctx->slv_event_status,    config->regs + SLV_EVENT_STATUS);
+	}
+
+	/* Re-arm interrupt enables last so that no stale event is delivered
+	 * before the controller is fully reprogrammed.
+	 */
+	sys_write32(0u, config->regs + INTR_SIGNAL_EN);
+	sys_write32(0u, config->regs + INTR_STATUS_EN);
+	sys_write32(INTR_ALL, config->regs + INTR_STATUS);
+	sys_write32(ctx->intr_status_en, config->regs + INTR_STATUS_EN);
+	sys_write32(ctx->intr_signal_en, config->regs + INTR_SIGNAL_EN);
+
+	/* Apply non-enable bits of DEVICE_CTRL (HJ-NACK, IBA, etc.). */
+	sys_write32(ctx->device_ctrl, config->regs + DEVICE_CTRL);
+}
+/**
+ * @brief Quiesce the DW I3C controller in preparation for power down.
+ *
+ * Refuses to suspend if a transfer is currently in flight (mutex contended)
+ * so that callers may retry. Otherwise masks all interrupts, snapshots state,
+ * disables the controller, gates the input clock, and parks pins in their
+ * low-power state.
+ *
+ * @param dev Pointer to controller device.
+ */
+static int dw_i3c_suspend(const struct device *dev)
+{
+	const struct dw_i3c_config *config = dev->config;
+	struct dw_i3c_data *data = dev->data;
+	int ret;
+
+	if (k_mutex_lock(&data->mt, K_NO_WAIT) != 0) {
+		return -EBUSY;
+	}
+
+	/* Save the context */
+	dw_i3c_save_ctx(dev);
+
+	/* Mask all interrupts so no event races the power-down sequence. */
+	sys_write32(0u, config->regs + INTR_SIGNAL_EN);
+	sys_write32(0u, config->regs + INTR_STATUS_EN);
+
+	/* Ack any latched status so it does not resurface after resume. */
+	sys_write32(INTR_ALL, config->regs + INTR_STATUS);
+
+	/* Reject any IBI/MR while powered down to avoid stale events on resume. */
+	sys_write32(IBI_REQ_REJECT_ALL, config->regs + IBI_SIR_REQ_REJECT);
+	sys_write32(IBI_REQ_REJECT_ALL, config->regs + IBI_MR_REQ_REJECT);
+
+	dw_i3c_enable_controller(config, false);
+
+	k_mutex_unlock(&data->mt);
+
+	ret = clock_control_off(config->clock, config->clock_subsys);
+	if (ret < 0 && ret != -EALREADY && ret != -ENOSYS) {
+		return ret;
+	}
+	ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_SLEEP);
+	if (ret < 0 && ret != -ENOENT) {
+		return ret;
+	}
+	return 0;
+}
+
+/**
+ * @brief Bring the DW I3C controller back to operational state.
+ *
+ * Re-applies pin config and clocks, reprograms SCL timings, restores the
+ * previously saved DAT and policy registers, then enables the controller.
+ *
+ * @param dev Pointer to controller device.
+ */
+static int dw_i3c_resume(const struct device *dev)
+{
+	const struct dw_i3c_config *config = dev->config;
+	struct dw_i3c_data *data = dev->data;
+	struct i3c_config_controller *ctrl_config = &data->common.ctrl_config;
+	int ret;
+
+	ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+	if (ret < 0) {
+		return ret;
+	}
+	ret = clock_control_on(config->clock, config->clock_subsys);
+	if (ret < 0 && ret != -EALREADY) {
+		return ret;
+	}
+
+	/* Recompute SCL timings from cached controller config. */
+	ret = dw_i3c_init_scl_timing(dev, ctrl_config);
+	if (ret != 0) {
+		return ret;
+	}
+
+	if (data->pm_ctx.valid) {
+		dw_i3c_restore_ctx(dev);
+	} else {
+		/* First-ever resume with no prior suspend snapshot (e.g. the
+		 * device was turned ON but never used). Re-apply only the
+		 * register-level portion of enable_interrupts(); do NOT re-run
+		 * irq_config_func() because IRQ_CONNECT() must remain a
+		 * one-shot static binding.
+		 */
+		uint32_t thld_ctrl;
+
+		thld_ctrl = sys_read32(config->regs + QUEUE_THLD_CTRL);
+		thld_ctrl &= (~QUEUE_THLD_CTRL_RESP_BUF_MASK & ~QUEUE_THLD_CTRL_IBI_STS_MASK);
+		sys_write32(thld_ctrl, config->regs + QUEUE_THLD_CTRL);
+		thld_ctrl = sys_read32(config->regs + DATA_BUFFER_THLD_CTRL);
+		thld_ctrl &= ~DATA_BUFFER_THLD_CTRL_RX_BUF;
+		sys_write32(thld_ctrl, config->regs + DATA_BUFFER_THLD_CTRL);
+		sys_write32(INTR_ALL, config->regs + INTR_STATUS);
+		sys_write32(INTR_SLAVE_MASK | INTR_MASTER_MASK,
+			    config->regs + INTR_STATUS_EN);
+		sys_write32(INTR_SLAVE_MASK | INTR_MASTER_MASK,
+			    config->regs + INTR_SIGNAL_EN);
+		sys_write32(IBI_REQ_REJECT_ALL, config->regs + IBI_SIR_REQ_REJECT);
+		sys_write32(IBI_REQ_REJECT_ALL, config->regs + IBI_MR_REQ_REJECT);
+	}
+
+	dw_i3c_enable_controller(config, true);
+
+	return 0;
+}
+
+/**
+ * @brief PM device-action callback.
+ *
+ * @param dev    Pointer to controller device.
+ * @param action power management action.
+ */
+static int dw_i3c_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		return dw_i3c_resume(dev);
+	case PM_DEVICE_ACTION_SUSPEND:
+		return dw_i3c_suspend(dev);
+	case PM_DEVICE_ACTION_TURN_ON:
+	case PM_DEVICE_ACTION_TURN_OFF:
+		/* Power domain framework drives physical power gating. */
+		return 0;
+	default:
+		return -ENOTSUP;
+	}
+}
+#endif /* CONFIG_PM_DEVICE */
+
 static DEVICE_API(i3c, dw_i3c_api) = {
 	.i2c_api.transfer = dw_i3c_i2c_api_transfer,
 
@@ -2407,7 +2697,9 @@ static DEVICE_API(i3c, dw_i3c_api) = {
 		.common.dev_list.i2c = dw_i3c_i2c_device_array_##n,                                \
 		.common.dev_list.num_i2c = ARRAY_SIZE(dw_i3c_i2c_device_array_##n),                \
 	};                                                                                         \
-	DEVICE_DT_INST_DEFINE(n, dw_i3c_init, NULL, &dw_i3c_data_##n, &dw_i3c_cfg_##n,             \
+	PM_DEVICE_DT_INST_DEFINE(n, dw_i3c_pm_action);                                             \
+	DEVICE_DT_INST_DEFINE(n, dw_i3c_init, PM_DEVICE_DT_INST_GET(n),                            \
+			      &dw_i3c_data_##n, &dw_i3c_cfg_##n,                                   \
 			      POST_KERNEL, CONFIG_I3C_CONTROLLER_INIT_PRIORITY, &dw_i3c_api);
 
 #define DT_DRV_COMPAT snps_designware_i3c
