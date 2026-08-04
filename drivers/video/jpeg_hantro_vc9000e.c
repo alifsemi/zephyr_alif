@@ -53,6 +53,14 @@ struct jpeg_hantro_vc9000e_data {
 	int      encoding_error;
 	uint32_t header_size;
 	struct jpeg_header_info header_info;
+	/*
+	 * Storage for the single discrete capability reported on the
+	 * compressed output endpoint (VIDEO_EP_OUT). It is filled at query
+	 * time from the currently configured encoding resolution so that
+	 * consumers (e.g. the UVC class) advertise the exact frame size the
+	 * encoder will actually produce. Index 1 is the list terminator.
+	 */
+	struct video_format_cap out_caps[2];
 };
 
 /**
@@ -193,7 +201,12 @@ static int jpeg_hantro_vc9000e_set_format(const struct device *dev,
 {
 	struct jpeg_hantro_vc9000e_data *data = dev->data;
 
-	if (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL) {
+	/*
+	 * The uncompressed frame is presented on the input endpoint and the
+	 * compressed JPEG stream leaves on the output endpoint. Accept either,
+	 * as well as the wildcard, so a single set_format() configures both.
+	 */
+	if (ep != VIDEO_EP_IN && ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL) {
 		return -EINVAL;
 	}
 
@@ -643,7 +656,15 @@ static const struct video_format_cap jpeg_hantro_vc9000e_format_caps[] = {
 /**
  * @brief Get the encoder capabilities.
  *
- * Returns the list of supported pixel formats and resolution ranges.
+ * The encoder exposes two kinds of capability depending on the endpoint:
+ *
+ * - VIDEO_EP_IN (or the wildcard) lists the uncompressed input pixel formats
+ *   the encoder accepts (NV12 / NV21) over the full supported size range.
+ * - VIDEO_EP_OUT lists the compressed output as a single discrete MJPEG frame
+ *   whose size matches the currently configured encoding resolution, so that
+ *   downstream consumers (such as the UVC class) advertise the exact frame
+ *   size the encoder will produce. Before any format has been set it falls
+ *   back to the minimum supported size.
  *
  * @param dev Pointer to the device structure.
  * @param ep Video endpoint identifier.
@@ -655,12 +676,34 @@ static int jpeg_hantro_vc9000e_get_caps(const struct device *dev,
 					 enum video_endpoint_id ep,
 					 struct video_caps *caps)
 {
-	if (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL) {
-		return -EINVAL;
+	struct jpeg_hantro_vc9000e_data *data = dev->data;
+
+	if (ep == VIDEO_EP_IN || ep == VIDEO_EP_ALL) {
+		caps->format_caps = jpeg_hantro_vc9000e_format_caps;
+		return 0;
 	}
 
-	caps->format_caps = jpeg_hantro_vc9000e_format_caps;
-	return 0;
+	if (ep == VIDEO_EP_OUT) {
+		uint32_t width = data->fmt.width ? data->fmt.width
+						 : CONFIG_VIDEO_JPEG_HANTRO_VC9000E_MIN_SIZE;
+		uint32_t height = data->fmt.height ? data->fmt.height
+						   : CONFIG_VIDEO_JPEG_HANTRO_VC9000E_MIN_SIZE;
+
+		data->out_caps[0] = (struct video_format_cap){
+			.pixelformat = VIDEO_PIX_FMT_JPEG,
+			.width_min   = width,
+			.width_max   = width,
+			.height_min  = height,
+			.height_max  = height,
+			.width_step  = 0,
+			.height_step = 0,
+		};
+		data->out_caps[1] = (struct video_format_cap){0};
+		caps->format_caps = data->out_caps;
+		return 0;
+	}
+
+	return -EINVAL;
 }
 
 /**
