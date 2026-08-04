@@ -13,6 +13,8 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/clock_control.h>
 
+#include <zephyr/pm/device.h>
+
 #include "utimer.h"
 
 LOG_MODULE_REGISTER(qdec_alif_utimer, CONFIG_SENSOR_LOG_LEVEL);
@@ -123,6 +125,83 @@ static int qdec_alif_utimer_init(const struct device *dev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_DEVICE
+
+static int qdec_alif_utimer_suspend(const struct device *dev)
+{
+	const struct qdec_alif_utimer_config *cfg = DEV_CFG(dev);
+	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
+	int ret;
+
+	if (pm_device_is_busy(dev)) {
+		LOG_DBG("qdec in use, refusing suspend");
+		return -EBUSY;
+	}
+
+	alif_utimer_disable_timer_clock(global_base, cfg->timer_id);
+
+	ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_SLEEP);
+	if (ret < 0 && ret != -ENOENT) {
+		LOG_ERR("pinctrl sleep failed: %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int qdec_alif_utimer_resume(const struct device *dev)
+{
+	const struct qdec_alif_utimer_config *cfg = DEV_CFG(dev);
+	uintptr_t timer_base = DEVICE_MMIO_NAMED_GET(dev, timer);
+	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
+	int ret;
+
+	ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_DEFAULT);
+	if (ret < 0) {
+		return ret;
+	}
+
+	alif_utimer_enable_timer_clock(global_base, cfg->timer_id);
+
+	alif_utimer_disable_soft_counter_ctrl(timer_base);
+	alif_utimer_set_up_counter(timer_base);
+	alif_utimer_set_counter_reload_value(timer_base, cfg->counts_per_revolution - 1);
+
+	if (cfg->filter_enable) {
+		alif_utimer_enable_filter(timer_base, cfg->filter_prescaler, cfg->filter_taps);
+	}
+
+	alif_utimer_config_qdec_triggers(timer_base);
+	alif_utimer_enable_counter(timer_base);
+
+	return 0;
+}
+
+static int qdec_alif_utimer_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	int ret;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		ret = qdec_alif_utimer_suspend(dev);
+		break;
+	case PM_DEVICE_ACTION_RESUME:
+		ret = qdec_alif_utimer_resume(dev);
+		break;
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Power domain handling is automatic via PM framework,
+		 */
+		ret = 0;
+		break;
+	default:
+		ret = -ENOTSUP;
+	}
+
+	return ret;
+}
+#endif /* CONFIG_PM_DEVICE */
+
 #define CHECK_FILTER_PARAM_VALUES(n)								\
 	BUILD_ASSERT((DT_INST_PROP(n, filter_prescaler) < CHAN_FILTER_CTRL_FILTER_PRESCALER_Msk),\
 		"UTIMER QDEC filter prescaler value exceeds maximum of "			\
@@ -148,10 +227,10 @@ static int qdec_alif_utimer_init(const struct device *dev)
 		.filter_prescaler = DT_INST_PROP(n, filter_prescaler),				\
 		.filter_taps = DT_INST_PROP(n, filter_taps)), ())				\
 	};											\
-												\
+	PM_DEVICE_DT_INST_DEFINE(n, qdec_alif_utimer_pm_action);				\
 	SENSOR_DEVICE_DT_INST_DEFINE(n,								\
 				     qdec_alif_utimer_init,					\
-				     NULL,							\
+				     PM_DEVICE_DT_INST_GET(n),					\
 				     &qdec_alif_utimer_data_##n,				\
 				     &qdec_alif_utimer_cfg_##n,					\
 				     POST_KERNEL,						\
