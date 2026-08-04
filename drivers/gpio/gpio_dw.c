@@ -25,6 +25,9 @@
 #ifdef CONFIG_IOAPIC
 #include <zephyr/drivers/interrupt_controller/ioapic.h>
 #endif
+#ifdef CONFIG_PINCTRL_ALIF
+#include <zephyr/drivers/pinctrl.h>
+#endif
 
 static int gpio_dw_port_set_bits_raw(const struct device *port, uint32_t mask);
 static int gpio_dw_port_clear_bits_raw(const struct device *port,
@@ -275,6 +278,7 @@ static inline int gpio_dw_config(const struct device *port,
 				 gpio_flags_t flags)
 {
 	const struct gpio_dw_config *config = port->config;
+	struct gpio_dw_runtime *context = port->data;
 	uint32_t io_flags;
 
 	/* Check for invalid pin number */
@@ -296,10 +300,38 @@ static inline int gpio_dw_config(const struct device *port,
 		return -ENOTSUP;
 	}
 
+#if CONFIG_PINCTRL_ALIF
+	uint32_t port_pin_value = (GPIO_PORT_FROM_ADDRESS(context->base_addr) << 3U) | (pin & 0x7U);
+	uint32_t pinctrl_data;
+	uint32_t *pinctrl_addr;
+
+	if (LPGPIO_PINCTRL_BASE && (GET_PINMUX_PORT(port_pin_value) == LPGPIO_PORT)) {
+		pinctrl_addr = (uint32_t *)LPGPIO_PINMUX_ADDR(port_pin_value);
+		pinctrl_data = sys_read32(pinctrl_addr) << 16U;
+	} else {
+		pinctrl_addr = (uint32_t *)PINMUX_ADDR(port_pin_value);
+		pinctrl_data = sys_read32(pinctrl_addr);
+	}
+	pinctrl_soc_pin_t pinctrl_value = pinctrl_data | port_pin_value;
+	/* Clear out the dsc pad config bits. */
+	pinctrl_value &= ~PAD_CONF_DSC(TWO_BIT_FIELD_MASK);
+	if (flags & GPIO_PULL_UP) {
+		pinctrl_value |= PAD_CONF_DSC(DSC_PULL_UP);
+	} else if (flags & GPIO_PULL_DOWN) {
+		pinctrl_value |= PAD_CONF_DSC(DSC_PULL_DOWN);
+	} else {
+		pinctrl_value |= PAD_CONF_DSC(DSC_HIGH_Z);
+	}
+	/* Configure pinctrl pulls. */
+	if (pinctrl_configure_pins(&pinctrl_value, 1, PINCTRL_REG_NONE) != 0U) {
+		return -EINVAL;
+	}
+#else
 	/* Does not support pull-up/pull-down */
 	if ((flags & (GPIO_PULL_UP | GPIO_PULL_DOWN)) != 0U) {
 		return -ENOTSUP;
 	}
+#endif  /* CONFIG_PINCTRL_ALIF */
 
 	dw_pin_config(port, pin, flags);
 
