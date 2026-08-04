@@ -798,6 +798,9 @@ static int dsi_dw_attach(const struct device *dev,
 	phy->num_lanes = mdev->data_lanes;
 	data->mode_flags = mdev->mode_flags;
 
+	/* Fresh attach: allow each DSI error class to be reported once again. */
+	atomic_clear(&data->err_logged);
+
 	LOG_DBG("Number of lanes: %d", data->phy.num_lanes);
 	LOG_DBG("DSI mode_flags: 0x%x", data->mode_flags);
 
@@ -1094,9 +1097,52 @@ static ssize_t dsi_dw_transfer(const struct device *dev,
 	return 0;
 }
 
+/* One bit per error class reported by dsi_dw_irq(), tracked in
+ * dsi_dw_data.err_logged so each class is logged only once. When no panel is
+ * attached the controller raises the same error on every interrupt (typically
+ * an LP-RX timeout, DSI_INT_1_TO_LP_RX), which otherwise floods the console
+ * every few milliseconds.
+ */
+#define DSI_ERR_LOGGED_ACK	BIT(0)
+#define DSI_ERR_LOGGED_DPHY	BIT(1)
+#define DSI_ERR_LOGGED_PKT	BIT(2)
+#define DSI_ERR_LOGGED_DPI	BIT(3)
+
+/* Log a DSI error class the first time it is seen, then suppress it. The first
+ * error of any class also emits a single short advisory, since a missing or
+ * unresponsive display raises the same interrupt continuously. Messages are
+ * kept short and separate so each is a self-contained, prefixed log line.
+ */
+static void dsi_dw_log_err_once(struct dsi_dw_data *data, uint32_t bit,
+				const char *what, const char *reg, uint32_t irq_st)
+{
+	atomic_val_t prev;
+
+	if ((atomic_get(&data->err_logged) & (atomic_val_t)bit) != 0) {
+		return;
+	}
+
+	/* atomic_or makes the ISR set and the dsi_dw_attach() clear race-free.
+	 * prev holds the mask before this class was set: prev already having
+	 * the bit means another context logged it first; prev == 0 means this
+	 * is the very first error of any class, which gets the one advisory.
+	 */
+	prev = atomic_or(&data->err_logged, (atomic_val_t)bit);
+	if ((prev & (atomic_val_t)bit) != 0) {
+		return;
+	}
+
+	if (prev == 0) {
+		LOG_ERR("DSI error detected; if no panel is attached, this is expected");
+	}
+
+	LOG_ERR("%s %s=0x%x (further occurrences suppressed)", what, reg, irq_st);
+}
+
 /* ISR Function */
 static void dsi_dw_irq(const struct device *dev)
 {
+	struct dsi_dw_data *data = dev->data;
 	uintptr_t regs = DEVICE_MMIO_GET(dev);
 	uint32_t irq_st0;
 	uint32_t irq_st1;
@@ -1114,26 +1160,27 @@ static void dsi_dw_irq(const struct device *dev)
 		DSI_INT_0_ACK_WITH_ERR_3 | DSI_INT_0_ACK_WITH_ERR_2 |
 		DSI_INT_0_ACK_WITH_ERR_1 | DSI_INT_0_ACK_WITH_ERR_0;
 	if (irq_st0 & mask)
-		LOG_ERR("ACK Error. irq_st0 - 0x%x", irq_st0);
+		dsi_dw_log_err_once(data, DSI_ERR_LOGGED_ACK, "ACK Error.", "irq_st0", irq_st0);
 
 	mask = DSI_INT_0_DPHY_ERR_4 | DSI_INT_0_DPHY_ERR_3 |
 		DSI_INT_0_DPHY_ERR_2 | DSI_INT_0_DPHY_ERR_1 |
 		DSI_INT_0_DPHY_ERR_0;
 	if (irq_st0 & mask)
-		LOG_ERR("D-PHY Error. irq_st0 - 0x%x", irq_st0);
+		dsi_dw_log_err_once(data, DSI_ERR_LOGGED_DPHY, "D-PHY Error.", "irq_st0", irq_st0);
 
 	mask = DSI_INT_1_TO_HP_TX | DSI_INT_1_TO_LP_RX |
 		DSI_INT_1_ECC_SINGLE_ERR | DSI_INT_1_ECC_MULTI_ERR |
 		DSI_INT_1_CRC_ERR | DSI_INT_1_PKT_SIZE_ERR | DSI_INT_1_EOTP_ERR;
 	if (irq_st1 & mask)
-		LOG_ERR("DSI PKT Error. irq_st1 - 0x%x", irq_st1);
+		dsi_dw_log_err_once(data, DSI_ERR_LOGGED_PKT, "DSI PKT Error.", "irq_st1", irq_st1);
 
 	mask = DSI_INT_1_DPI_PLD_WR_ERR | DSI_INT_1_GEN_CMD_WR_ERR |
 		DSI_INT_1_GEN_PLD_WR_ERR | DSI_INT_1_GEN_PLD_SEND_ERR |
 		DSI_INT_1_GEN_PLD_RD_ERR | DSI_INT_1_GEN_PLD_RECEV_ERR |
 		DSI_INT_1_DPI_BUFF_PLD_UNDER;
 	if (irq_st1 & mask)
-		LOG_ERR("DSI DPI Error Event. irq_st1 - 0x%x", irq_st1);
+		dsi_dw_log_err_once(data, DSI_ERR_LOGGED_DPI,
+				    "DSI DPI Error Event.", "irq_st1", irq_st1);
 }
 
 #if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
