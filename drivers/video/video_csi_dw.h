@@ -314,9 +314,15 @@
 #define CSI_SCRAMBLING_SEED_LANE_N_SHIFT 0
 
 /* CSI constants */
-#define CSI2_HOST_IPI_DWIDTH  64
-#define CSI2_IPI_FIFO_DEPTH   1024
-#define CSI2_BANDWIDTH_SCALER (1.2)
+#define CSI2_HOST_IPI_DWIDTH			64
+#define CSI2_IPI_FIFO_DEPTH			1024
+#define CSI2_BANDWIDTH_SCALER			(1.2)
+#define CSI2_HSD_MIN				1
+#define CSI2_HSA_MIN				2
+#define CSI2_HBP_MIN				10
+#define CSI2_SHORT_PKT_BYTES			4
+#define CSI2_LONG_PKT_BYTES			6
+#define CSI2_BYTES_PER_HS_CLK			1
 
 #define CSI2_NUM_SENSORS 2
 
@@ -355,6 +361,11 @@ struct timings {
 	uint16_t hact;
 };
 
+struct csi_pkt2pkt_time {
+	bool line_sync_pkt_enable;
+	float time_ns;
+};
+
 struct csi2_dw_data {
 	DEVICE_MMIO_RAM;
 
@@ -363,6 +374,7 @@ struct csi2_dw_data {
 	uint32_t sensors_map;
 	uint32_t streaming_map;
 	struct timings time[CSI2_NUM_SENSORS];
+	struct csi_pkt2pkt_time pkt2pkt_time;
 
 	const struct cpi_csi2_mode_settings *csi_cpi_settings[CSI2_NUM_SENSORS];
 	struct dphy_csi2_settings phy[CSI2_NUM_SENSORS];
