@@ -15,6 +15,7 @@
 #include <zephyr/drivers/video/video_alif.h>
 #include <soc_memory_map.h>
 #include <zephyr/cache.h>
+#include <zephyr/pm/device.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(CPI, CONFIG_VIDEO_LOG_LEVEL);
@@ -414,8 +415,10 @@ done:
 		}
 #endif /* defined(CONFIG_POLL) */
 	} else {
-		/* Restart video capture. */
-		hw_cam_start_video_capture(dev);
+		/* Restart video capture only if still streaming. */
+		if (data->is_streaming) {
+			hw_cam_start_video_capture(dev);
+		}
 	}
 }
 
@@ -520,6 +523,9 @@ static int alif_cam_stream_start(const struct device *dev)
 	struct k_work_sync sync;
 
 	k_work_cancel_sync(&data->cb_work, &sync);
+
+	/* Apply soft reset to clear BUSY flag and leave CPI in clean state */
+	hw_cam_soft_reset(regs);
 
 	if (data->is_streaming) {
 		LOG_DBG("Already streaming.");
@@ -980,6 +986,21 @@ static int alif_video_cam_init(const struct device *dev)
 	struct video_cam_data *data = dev->data;
 	int ret = 0;
 
+	if (config->pixclk) {
+		ret = clock_control_on(config->clk_dev, config->pixclk);
+		if (ret) {
+			return ret;
+		}
+
+		/* XVCLK = SYST_ACLK (400 MHz) / 20 = 20 MHz */
+		ret = clock_control_set_rate(config->clk_dev, config->pixclk,
+					      (clock_control_subsys_rate_t)CPI_PIXEL_CLOCK);
+		if (ret) {
+			LOG_ERR("Failed to set XVCLK rate! ret - %d", ret);
+			return ret;
+		}
+	}
+
 	/*
 	 * In-case there is no sensor device or CSI controller attached to the
 	 * CPI controller, we need to abort.
@@ -1092,11 +1113,144 @@ static int alif_video_cam_init(const struct device *dev)
 	return 0;
 }
 
+#if defined(CONFIG_PM_DEVICE)
+
+/**
+ * @brief CPI/CAM suspend handler
+ *
+ * Stops video capture and saves state for resume.
+ *
+ * @param dev CPI device struct
+ * @return 0 if successful, negative errno otherwise
+ */
+static int alif_cam_suspend(const struct device *dev)
+{
+	const struct video_cam_config *config = dev->config;
+	struct video_cam_data *data = dev->data;
+	int ret;
+
+	/* Stop streaming if active */
+	if (data->is_streaming) {
+		ret = alif_cam_stream_stop(dev);
+		if (ret) {
+			LOG_ERR("Failed to stop CPI stream during suspend: %d", ret);
+			return ret;
+		}
+	}
+
+	/* Disable CPI clock (re-enabled on resume) */
+	clock_control_off(config->clk_dev, config->cid);
+
+#ifdef CONFIG_PINCTRL
+	/* Apply sleep pin configuration if available */
+	if (config->pcfg != NULL) {
+		ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_SLEEP);
+		if (ret < 0 && ret != -ENOENT) {
+			LOG_ERR("Failed to apply sleep pinctrl state: %d", ret);
+			return ret;
+		}
+	}
+#endif
+
+	LOG_DBG("PM: Suspended %s", dev->name);
+
+	return 0;
+}
+
+/**
+ * @brief CPI/CAM resume handler
+ *
+ * Restores CPI state and restarts streaming if it was active before suspend.
+ *
+ * @param dev CPI device struct
+ * @return 0 if successful, negative errno otherwise
+ */
+static int alif_cam_resume(const struct device *dev)
+{
+	const struct video_cam_config *config = dev->config;
+	int ret;
+
+#ifdef CONFIG_PINCTRL
+	/* Apply default pin configuration */
+	if (config->pcfg != NULL) {
+		ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+		if (ret < 0 && ret != -ENOENT) {
+			LOG_ERR("Failed to apply default pinctrl state: %d", ret);
+			return ret;
+		}
+	}
+#endif
+
+	if (config->pixclk) {
+		ret = clock_control_on(config->clk_dev, config->pixclk);
+		if (ret) {
+			return ret;
+		}
+
+		/* XVCLK = SYST_ACLK (400 MHz) / 20 = 20 MHz */
+		ret = clock_control_set_rate(config->clk_dev, config->pixclk,
+					      (clock_control_subsys_rate_t)CPI_PIXEL_CLOCK);
+		if (ret) {
+			LOG_ERR("Failed to set XVCLK rate! ret - %d", ret);
+			return ret;
+		}
+	}
+
+	/* Re-enable CPI clock lost during deep sleep (STOP mode) */
+	ret = alif_cam_enable_clocks(dev);
+	if (ret) {
+		LOG_ERR("Failed to enable CPI clock on resume: %d", ret);
+		return ret;
+	}
+
+	/* Re-setup the CPI controller hardware config */
+	ret = alif_video_cam_setup(dev);
+	if (ret) {
+		LOG_ERR("Failed to re-setup CPI controller on resume: %d", ret);
+		return ret;
+	}
+
+	LOG_DBG("PM: Resumed %s", dev->name);
+
+	return 0;
+}
+
+/**
+ * @brief CPI/CAM PM device action handler
+ *
+ * Handles power management state transitions for the CPI device.
+ *
+ * @param dev CPI device struct
+ * @param action PM device action
+ * @return 0 if successful, negative errno otherwise
+ */
+static int alif_cam_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		return alif_cam_resume(dev);
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		return alif_cam_suspend(dev);
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Power domain handling is automatic via PM framework */
+		return 0;
+
+	default:
+		return -ENOTSUP;
+	}
+}
+#endif /* CONFIG_PM_DEVICE */
+
 #define CAM_GET_CLK(i)                                                         \
-	IF_ENABLED(DT_INST_NODE_HAS_PROP(i, clocks),                           \
-		(.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(i)),             \
-		 .cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i, \
-			 cam_clk, clkid),))
+	IF_ENABLED(DT_INST_NODE_HAS_PROP(i, clocks),                               \
+		(.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(i)),                     \
+		.cid = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,         \
+			cam_clk, clkid),                                                  \
+		.pixclk = (clock_control_subsys_t)DT_INST_CLOCKS_CELL_BY_NAME(i,      \
+			pix_clk, clkid),))
 
 #define REMOTE_DEVICE(i, id) \
 	DT_NODE_REMOTE_DEVICE(DT_INST_ENDPOINT_BY_ID(i, id, 0))
@@ -1142,7 +1296,9 @@ static int alif_video_cam_init(const struct device *dev)
 	};                                                                                         \
                                                                                                    \
 	static struct video_cam_data data_##i;                                                     \
-	DEVICE_DT_INST_DEFINE(i, &alif_video_cam_init, NULL, &data_##i, &config_##i,               \
+	PM_DEVICE_DT_INST_DEFINE(i, alif_cam_pm_action);                                           \
+	DEVICE_DT_INST_DEFINE(i, &alif_video_cam_init, PM_DEVICE_DT_INST_GET(i),                   \
+			      &data_##i, &config_##i,                                              \
 			      POST_KERNEL, CONFIG_VIDEO_ALIF_CAM_INIT_PRIORITY, &cam_driver_api);  \
                                                                                                    \
 	static void cam_config_func_##i(const struct device *dev)                                  \

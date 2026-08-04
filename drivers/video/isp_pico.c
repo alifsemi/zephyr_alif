@@ -8,6 +8,11 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(ISP, CONFIG_VIDEO_LOG_LEVEL);
 
+int log_level(void)
+{
+	return CONFIG_VIDEO_LOG_LEVEL;
+}
+
 #include <zephyr/drivers/video.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/device_mmio.h>
@@ -17,6 +22,7 @@ LOG_MODULE_REGISTER(ISP, CONFIG_VIDEO_LOG_LEVEL);
 #include <zephyr/drivers/video/video_alif.h>
 #include <soc_memory_map.h>
 #include <zephyr/cache.h>
+#include <zephyr/pm/device.h>
 
 #define WORKQ_STACK_SIZE 4096
 #define WORKQ_PRIORITY   7
@@ -540,6 +546,9 @@ static int isp_stream_start(const struct device *dev)
 	/* Cancel any stale work from previous session before starting */
 	struct k_work_sync sync;
 
+	/* Ensure MI frame-end interrupt is unmasked (may have been cleared by flush) */
+	sys_set_bits(regs + ISP_MI_IMSC, MI_INTR_MP_FRAME_END);
+
 	k_work_cancel_sync(&data->cb_work, &sync);
 
 	if (data->is_streaming) {
@@ -998,7 +1007,6 @@ int video_isp_init(const struct device *dev)
 
 	DEVICE_MMIO_MAP(dev, K_MEM_CACHE_NONE);
 	LOG_DBG("MMIO Address: 0x%x", (uint32_t) DEVICE_MMIO_GET(dev));
-
 	/*
 	 * Setup the ISR callback work.
 	 */
@@ -1057,6 +1065,91 @@ int video_isp_init(const struct device *dev)
 	return 0;
 }
 
+#if defined(CONFIG_PM_DEVICE)
+
+static int isp_pico_suspend(const struct device *dev)
+{
+	const struct isp_config *config = dev->config;
+	struct isp_data *data = dev->data;
+	struct k_work_sync sync;
+	int ret;
+
+	/* 1. Stop streaming first (needs IRQs for clean stop) */
+	if (data->is_streaming) {
+		ret = isp_stream_stop(dev);
+	if (ret) {
+		LOG_ERR("Failed to stop ISP stream during suspend: %d", ret);
+		return ret;
+		}
+	}
+
+	/* 2. Disable IRQs after stream is stopped */
+	irq_disable(config->irqn);
+	irq_disable(config->mi_irqn);
+
+	/* 3. Cancel any pending bottom-half work */
+	k_work_cancel_sync(&data->cb_work, &sync);
+
+	/* 4. Properly uninit the ISP library */
+	isp_vsi_uninit(&data->init_cfg);
+
+	/* 5. Drain FIFOs to prevent stale buffer state */
+	while (k_fifo_get(&data->fifo_in, K_NO_WAIT)) {
+		/* drain */
+	}
+	while (k_fifo_get(&data->fifo_out, K_NO_WAIT)) {
+		/* drain */
+	}
+
+	/* 6. Reset driver state */
+	data->is_streaming = false;
+	data->curr_vid_buf = 0;
+
+	LOG_INF("PM: Suspended %s", dev->name);
+	return 0;
+}
+
+static int isp_pico_resume(const struct device *dev)
+{
+	const struct isp_config *config = dev->config;
+	struct isp_data *data = dev->data;
+	int ret;
+
+	/* 1. Clear cached formats to force full pipeline re-config */
+	memset(&data->init_cfg.port.port_fmt, 0, sizeof(data->init_cfg.port.port_fmt));
+	memset(&data->init_cfg.channel.output_fmt, 0, sizeof(data->init_cfg.channel.output_fmt));
+
+	/* 2. Re-init ISP (clean init since uninit was called in suspend) */
+	ret = isp_configure(dev);
+	if (ret) {
+		LOG_ERR("Failed to reconfigure ISP on resume: %d", ret);
+		return ret;
+	}
+
+	/* 3. Re-enable IRQs */
+	irq_enable(config->irqn);
+	irq_enable(config->mi_irqn);
+
+	LOG_INF("PM: Resumed %s", dev->name);
+	return 0;
+}
+
+static int isp_pico_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		return isp_pico_resume(dev);
+	case PM_DEVICE_ACTION_SUSPEND:
+		return isp_pico_suspend(dev);
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		return 0;
+	default:
+		return -ENOTSUP;
+	}
+}
+#endif /* CONFIG_PM_DEVICE */
+
 #define REMOTE_DEVICE(i, idx)	                                           \
 	DT_NODE_REMOTE_DEVICE(DT_INST_ENDPOINT_BY_ID(i, idx, 0))
 
@@ -1100,15 +1193,17 @@ int video_isp_init(const struct device *dev)
 			},                                                                    \
 		},                                                                            \
 	};                                                                                    \
+	PM_DEVICE_DT_INST_DEFINE(i, isp_pico_pm_action);                                      \
                                                                                               \
 	DEVICE_DT_INST_DEFINE(i,                                                              \
 		video_isp_init,                                                               \
-		NULL,                                                                         \
+		PM_DEVICE_DT_INST_GET(i),                                                     \
 		&isp_data_##i,                                                                \
 		&isp_config_##i,                                                              \
 		POST_KERNEL,                                                                  \
 		CONFIG_KERNEL_INIT_PRIORITY_DEVICE,                                           \
 		&isp_driver_api);                                                             \
+                                                                                              \
 		                                                                              \
 	static void isp_config_func_##i(const struct device *dev)                             \
 	{                                                                                     \
