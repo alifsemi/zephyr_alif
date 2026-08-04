@@ -275,7 +275,7 @@ static uint32_t dma_pl330_gen_copy_op(struct dma_pl330_ch_internal *ch_dat,
 		}
 		offset = offset + 1;
 		dma_pl330_gen_op(OP_DMA_STP(req_type), dma_exec_addr + offset,
-				((ch_dat->src_id) << 3));
+				((ch_dat->dst_id) << 3));
 		offset = offset + 2;
 	} else {
 		sys_write8(OP_DMA_LD(DMA_LDST_REQ_TYPE_FORCE),
@@ -1041,12 +1041,25 @@ static int dma_pl330_get_status(const struct device *dev, uint32_t channel,
 
 	stat->busy = atomic_get(&channel_cfg->channel_is_active) != DMA_CHANNEL_IS_FREE;
 	stat->dir = channel_cfg->direction;
-	/* Pending length is calculated based on the loop counters.
-	 * Two possible loops LC0 and LC1 are used.
+	/*
+	 * Calculate pending_length from the hardware address registers.
+	 * For MEM_TO_PERIPH: SAR tracks bytes loaded from source memory.
+	 * For PERIPH_TO_MEM: DAR tracks bytes stored to destination memory.
+	 * This is more accurate than the loop counters which have an
+	 * off-by-one at transfer completion (LC0=0 gives pending=1 not 0).
 	 */
-	stat->pending_length =
-		sys_read32(reg_base + DMA_PL330_LC1_n(channel)) * (channel_cfg->loop_counter0 + 1) +
-		sys_read32(reg_base + DMA_PL330_LC0_n(channel)) + 1;
+	if (channel_cfg->direction == MEMORY_TO_PERIPHERAL ||
+	    channel_cfg->direction == MEMORY_TO_MEMORY) {
+		uint32_t sar = sys_read32(reg_base + DMA_PL330_SARn(channel));
+		uint32_t done = sar - (uint32_t)channel_cfg->internal.src_addr;
+
+		stat->pending_length = channel_cfg->internal.trans_size - done;
+	} else {
+		uint32_t dar = sys_read32(reg_base + DMA_PL330_DARn(channel));
+		uint32_t done = dar - (uint32_t)channel_cfg->internal.dst_addr;
+
+		stat->pending_length = channel_cfg->internal.trans_size - done;
+	}
 	/* TODO: add rest when needed... */
 	stat->free = 0;
 	stat->write_position = 0;
