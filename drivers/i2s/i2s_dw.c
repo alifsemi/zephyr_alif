@@ -2,183 +2,548 @@
  * Copyright (C) 2025 Alif Semiconductor.
  * SPDX-License-Identifier: Apache-2.0
  */
+
 #define DT_DRV_COMPAT snps_designware_i2s
 
 #include <string.h>
-#include <zephyr/drivers/dma.h>
-#include <zephyr/drivers/i2s.h>
-#include <soc.h>
-#include <zephyr/drivers/pinctrl.h>
-#include <zephyr/logging/log.h>
-#include <zephyr/irq.h>
-#include <zephyr/drivers/clock_control.h>
 
+#include <zephyr/drivers/i2s.h>
+#include <zephyr/drivers/pinctrl.h>
+#include <zephyr/drivers/clock_control.h>
+#include <zephyr/irq.h>
+#include <zephyr/logging/log.h>
 #include <zephyr/pm/device.h>
 #include <zephyr/pm/policy.h>
+#include <zephyr/sys/util.h>
 
 #include "i2s_dw.h"
 
-#define WSS_LEN			2
-#define EXT_CLK_SRC_ENABLE	0
-#define TX_FIFO_TRG_LVL		8
-#define RX_FIFO_TRG_LVL		8
+LOG_MODULE_REGISTER(i2s_dw, CONFIG_I2S_LOG_LEVEL);
 
-LOG_MODULE_REGISTER(i2s_dw);
+/* WSS cycles lookup table indexed by enum i2s_dw_wss */
+static const uint32_t wss_cycles[] = {16, 24, 32};
 
-#define DMA_NUM_CHANNELS	8
-
-struct queue_item {
-	void *mem_block;
-	size_t size;
-};
-
-/* Minimal ring buffer implementation */
-struct dw_ring_buf {
-	struct queue_item *buf;
-	uint16_t len;
-	uint16_t head;
-	uint16_t tail;
-};
-
-struct stream {
-	int32_t   state;
-	struct    k_sem sem;
-	uint32_t  dma_channel;
-	struct dma_config dma_cfg;
-	uint8_t   priority;
-	bool      src_addr_increment;
-	bool      dst_addr_increment;
-	uint8_t   fifo_threshold;
-	struct    i2s_config cfg;
-	struct dw_ring_buf mem_block_queue;
-	void      *mem_block;
-	uint32_t  mem_block_size;
-	uint32_t  mem_block_offset;
-	bool      last_block;
-	bool      master;
-	int (*stream_start)(struct stream *strm, const struct device *dev);
-	void (*stream_disable)(struct stream *strm, const struct device *dev);
-	void (*queue_drop)(struct stream *strm);
-};
-
-/* Device run time data */
-struct i2s_dw_data {
-	uint32_t irq_mask_cache;
-	enum i2s_dir dir;
-	struct stream rx;
-	struct stream tx;
-};
-
-#define MODULO_INC(val, max) { val = (++val < max) ? val : 0; }
-
-static int32_t i2s_configure_clocksource(bool enable,
-					const struct i2s_dw_cfg *i2s,
-					uint32_t sample_rate)
+/* Register access helpers */
+static inline uint32_t i2s_reg_read(const struct device *dev, uint32_t reg)
 {
-	int32_t ret = 0;
-	uint32_t sclk = 0;
-	const uint32_t clock_cycles[WSS_CLOCK_CYCLES_MAX] = {16, 24, 32};
+	return sys_read32(DEVICE_MMIO_GET(dev) + reg);
+}
 
-	if (enable) {
-		if (!sample_rate) {
-			return -1;
+static inline void i2s_reg_write(const struct device *dev, uint32_t reg,
+				 uint32_t val)
+{
+	sys_write32(val, DEVICE_MMIO_GET(dev) + reg);
+}
+
+static inline void i2s_reg_update(const struct device *dev, uint32_t reg,
+				  uint32_t mask, uint32_t val)
+{
+	uint32_t tmp = i2s_reg_read(dev, reg);
+
+	tmp = (tmp & ~mask) | (val & mask);
+	i2s_reg_write(dev, reg, tmp);
+}
+
+/* Convert word_size (bits) to WLEN register value */
+static inline enum i2s_dw_wlen i2s_dw_word_size_to_wlen(uint32_t word_size)
+{
+	switch (word_size) {
+	case 12: return I2S_DW_WLEN_12BIT;
+	case 16: return I2S_DW_WLEN_16BIT;
+	case 20: return I2S_DW_WLEN_20BIT;
+	case 24: return I2S_DW_WLEN_24BIT;
+	case 32: return I2S_DW_WLEN_32BIT;
+	default: return I2S_DW_WLEN_IGNORE;
+	}
+}
+
+/* Message queue helpers (replaces custom ring buffer) */
+static int queue_get(struct k_msgq *msgq, void **mem_block, size_t *size)
+{
+	struct i2s_dw_queue_item item;
+	int ret;
+
+	ret = k_msgq_get(msgq, &item, K_NO_WAIT);
+	if (ret == 0) {
+		*mem_block = item.mem_block;
+		*size = item.size;
+	}
+	return ret;
+}
+
+static int queue_put(struct k_msgq *msgq, void *mem_block, size_t size)
+{
+	struct i2s_dw_queue_item item = {
+		.mem_block = mem_block,
+		.size = size,
+	};
+
+	return k_msgq_put(msgq, &item, K_NO_WAIT);
+}
+
+/* Clock configuration */
+static int i2s_dw_set_clock_rate(const struct i2s_dw_cfg *cfg,
+				 uint32_t sample_rate)
+{
+	uint32_t sclk;
+
+	if (!sample_rate) {
+		return -EINVAL;
+	}
+
+	/* sclk = 2 * WSS_cycles * sample_rate */
+	sclk = 2 * wss_cycles[cfg->wss_len] * sample_rate;
+
+	return clock_control_set_rate(cfg->clk_dev, cfg->clkid,
+				      (clock_control_subsys_rate_t)sclk);
+}
+
+static void i2s_dw_enable_controller(const struct device *dev)
+{
+	const struct i2s_dw_cfg *cfg = dev->config;
+
+	/* Global enable */
+	i2s_reg_write(dev, I2S_DW_IER, I2S_DW_IER_IEN);
+
+	/* Configure WSS and SCLKG */
+	i2s_reg_write(dev, I2S_DW_CCR,
+		      (cfg->sclkg & I2S_DW_CCR_SCLKG_MASK) |
+		      ((cfg->wss_len << I2S_DW_CCR_WSS_SHIFT) &
+		       I2S_DW_CCR_WSS_MASK));
+
+	/* Enable clock */
+	i2s_reg_write(dev, I2S_DW_CER, I2S_DW_CER_CLKEN);
+}
+
+/* Interrupt mask helpers */
+static void i2s_dw_disable_tx_irq(const struct device *dev)
+{
+	i2s_reg_update(dev, I2S_DW_IMR,
+		       I2S_DW_IMR_TXFEM | I2S_DW_IMR_TXFOM,
+		       I2S_DW_IMR_TXFEM | I2S_DW_IMR_TXFOM);
+}
+
+static void i2s_dw_enable_tx_irq(const struct device *dev)
+{
+	i2s_reg_update(dev, I2S_DW_IMR,
+		       I2S_DW_IMR_TXFEM | I2S_DW_IMR_TXFOM, 0);
+}
+
+static void i2s_dw_disable_rx_irq(const struct device *dev)
+{
+	i2s_reg_update(dev, I2S_DW_IMR,
+		       I2S_DW_IMR_RXDAM | I2S_DW_IMR_RXFOM,
+		       I2S_DW_IMR_RXDAM | I2S_DW_IMR_RXFOM);
+}
+
+static void i2s_dw_enable_rx_irq(const struct device *dev)
+{
+	i2s_reg_update(dev, I2S_DW_IMR,
+		       I2S_DW_IMR_RXDAM | I2S_DW_IMR_RXFOM, 0);
+}
+
+static void i2s_dw_disable_rx_fo_irq(const struct device *dev)
+{
+	i2s_reg_update(dev, I2S_DW_IMR, I2S_DW_IMR_RXFOM, I2S_DW_IMR_RXFOM);
+}
+
+/* Stream start / disable / queue drop */
+static void rx_stream_disable(const struct device *dev,
+			      struct i2s_dw_stream *stream)
+{
+	if (stream->mem_block != NULL) {
+		k_mem_slab_free(stream->cfg.mem_slab, stream->mem_block);
+		stream->mem_block = NULL;
+	}
+
+	i2s_reg_write(dev, I2S_DW_RER, 0);
+	i2s_reg_write(dev, I2S_DW_IRER, 0);
+	i2s_dw_disable_rx_irq(dev);
+	i2s_reg_write(dev, I2S_DW_CER, 0);
+}
+
+static void tx_stream_disable(const struct device *dev,
+			      struct i2s_dw_stream *stream)
+{
+	if (stream->mem_block != NULL) {
+		k_mem_slab_free(stream->cfg.mem_slab, stream->mem_block);
+		stream->mem_block = NULL;
+	}
+
+	i2s_reg_write(dev, I2S_DW_TER, 0);
+	i2s_reg_write(dev, I2S_DW_ITER, 0);
+	i2s_dw_disable_tx_irq(dev);
+	i2s_reg_write(dev, I2S_DW_CER, 0);
+}
+
+static void rx_queue_drop(const struct device *dev,
+			  struct i2s_dw_stream *stream)
+{
+	struct i2s_dw_queue_item item;
+
+	while (k_msgq_get(&stream->msgq, &item, K_NO_WAIT) == 0) {
+		k_mem_slab_free(stream->cfg.mem_slab, item.mem_block);
+	}
+	k_sem_reset(&stream->sem);
+}
+
+static void tx_queue_drop(const struct device *dev,
+			  struct i2s_dw_stream *stream)
+{
+	struct i2s_dw_queue_item item;
+	unsigned int n = 0U;
+
+	while (k_msgq_get(&stream->msgq, &item, K_NO_WAIT) == 0) {
+		k_mem_slab_free(stream->cfg.mem_slab, item.mem_block);
+		n++;
+	}
+	for (; n > 0; n--) {
+		k_sem_give(&stream->sem);
+	}
+}
+
+static int rx_stream_start(const struct device *dev,
+			   struct i2s_dw_stream *stream)
+{
+	const struct i2s_dw_cfg *cfg = dev->config;
+	int ret;
+
+	ret = k_mem_slab_alloc(stream->cfg.mem_slab, &stream->mem_block,
+			       K_NO_WAIT);
+	if (ret < 0) {
+		return ret;
+	}
+	stream->mem_block_offset = 0;
+
+	/* Set clock rate */
+	ret = i2s_dw_set_clock_rate(cfg, stream->cfg.frame_clk_freq);
+	if (ret) {
+		LOG_ERR("Failed to set clock rate: %d", ret);
+		k_mem_slab_free(stream->cfg.mem_slab, stream->mem_block);
+		stream->mem_block = NULL;
+		return ret;
+	}
+
+	/* Reset Rx FIFO */
+	i2s_reg_write(dev, I2S_DW_RFF, I2S_DW_FIFO_RST);
+
+	/* Set word length */
+	i2s_reg_write(dev, I2S_DW_RCR,
+		      i2s_dw_word_size_to_wlen(stream->cfg.word_size));
+
+	/* Configure clock */
+	i2s_dw_enable_controller(dev);
+
+	/* Disable Tx channel */
+	i2s_reg_write(dev, I2S_DW_TER, 0);
+
+	/* Clear overrun */
+	(void)i2s_reg_read(dev, I2S_DW_ROR);
+
+	/* Enable Rx channel, interrupts, and block */
+	i2s_reg_write(dev, I2S_DW_RER, I2S_DW_RER_RXCHEN);
+	i2s_dw_enable_rx_irq(dev);
+	i2s_reg_write(dev, I2S_DW_IRER, I2S_DW_IRER_RXEN);
+
+	return 0;
+}
+
+static int tx_stream_start(const struct device *dev,
+			   struct i2s_dw_stream *stream)
+{
+	const struct i2s_dw_cfg *cfg = dev->config;
+	int ret;
+
+	ret = queue_get(&stream->msgq, &stream->mem_block,
+			&stream->mem_block_size);
+	if (ret < 0) {
+		return ret;
+	}
+	k_sem_give(&stream->sem);
+	stream->mem_block_offset = 0;
+
+	/* Set clock rate */
+	ret = i2s_dw_set_clock_rate(cfg, stream->cfg.frame_clk_freq);
+	if (ret) {
+		LOG_ERR("Failed to set clock rate: %d", ret);
+		k_mem_slab_free(stream->cfg.mem_slab, stream->mem_block);
+		stream->mem_block = NULL;
+		stream->mem_block_size = 0;
+		return ret;
+	}
+
+	/* Reset Tx FIFO */
+	i2s_reg_write(dev, I2S_DW_TFF, I2S_DW_FIFO_RST);
+
+	/* Set word length */
+	i2s_reg_write(dev, I2S_DW_TCR,
+		      i2s_dw_word_size_to_wlen(stream->cfg.word_size));
+
+	/* Configure clock */
+	i2s_dw_enable_controller(dev);
+
+	/* Disable Rx channel */
+	i2s_reg_write(dev, I2S_DW_RER, 0);
+
+	/* Clear overrun */
+	(void)i2s_reg_read(dev, I2S_DW_TOR);
+
+	/* Enable Tx channel, interrupts, and block */
+	i2s_reg_write(dev, I2S_DW_TER, I2S_DW_TER_TXCHEN);
+	i2s_dw_enable_tx_irq(dev);
+	i2s_reg_write(dev, I2S_DW_ITER, I2S_DW_ITER_TXEN);
+
+	return 0;
+}
+
+/* IRQ handlers */
+static void i2s_dw_tx_isr(const struct device *dev)
+{
+	const struct i2s_dw_cfg *cfg = dev->config;
+	struct i2s_dw_data *data = dev->data;
+	struct i2s_dw_stream *stream = &data->tx;
+	const uint32_t num_ch = (stream->cfg.format & I2S_FMT_DATA_FORMAT_MASK)
+				? 2U : stream->cfg.channels;
+	uint32_t tx_avail = I2S_DW_FIFO_DEPTH - cfg->tx_fifo_trg_lvl;
+	const uint8_t *buf = stream->mem_block;
+	uint32_t offset = stream->mem_block_offset;
+	uint32_t size = stream->mem_block_size;
+	uint8_t bytes, frames, cnt;
+	bool last_lap = false;
+	int ret;
+
+	if (stream->state == I2S_STATE_ERROR) {
+		goto tx_disable;
+	}
+
+	if (stream->last_block) {
+		stream->state = I2S_STATE_READY;
+		pm_device_busy_clear(dev);
+		goto tx_disable;
+	}
+
+	bytes = (stream->cfg.word_size <= 16) ? I2S_DW_16BIT_SAMPLE_BYTES
+					      : I2S_DW_32BIT_SAMPLE_BYTES;
+
+	if ((offset + (2 * tx_avail * bytes)) > size) {
+		frames = (size - offset) / (2 * bytes);
+		last_lap = true;
+	} else {
+		frames = tx_avail;
+	}
+
+	for (cnt = 0; cnt < frames; cnt++) {
+		if (bytes == I2S_DW_16BIT_SAMPLE_BYTES) {
+			i2s_reg_write(dev, I2S_DW_LRBR,
+				      (uint32_t)(*(uint16_t *)(buf + offset)));
+			if (num_ch == 1) {
+				i2s_reg_write(dev, I2S_DW_RRBR, 0);
+				offset += I2S_DW_16BIT_SAMPLE_BYTES;
+			} else {
+				i2s_reg_write(dev, I2S_DW_RRBR,
+					(uint32_t)(*(uint16_t *)(buf + offset +
+					I2S_DW_16BIT_SAMPLE_BYTES)));
+				offset += 2 * I2S_DW_16BIT_SAMPLE_BYTES;
+			}
+		} else {
+			i2s_reg_write(dev, I2S_DW_LRBR,
+				      *(uint32_t *)(buf + offset));
+			if (num_ch == 1) {
+				i2s_reg_write(dev, I2S_DW_RRBR, 0);
+				offset += I2S_DW_32BIT_SAMPLE_BYTES;
+			} else {
+				i2s_reg_write(dev, I2S_DW_RRBR,
+					*(uint32_t *)(buf + offset +
+					I2S_DW_32BIT_SAMPLE_BYTES));
+				offset += 2 * I2S_DW_32BIT_SAMPLE_BYTES;
+			}
 		}
+	}
 
-		/* Calculate sclk = 2* WSS * Sample Rate*/
-		/* WSS = 32 */
-		sclk = 2 * clock_cycles[i2s->cfg.wss_len] * (sample_rate);
+	if (last_lap && (offset < size)) {
+		if (bytes == I2S_DW_16BIT_SAMPLE_BYTES) {
+			i2s_reg_write(dev, I2S_DW_LRBR,
+				      (uint32_t)(*(uint16_t *)(buf + offset)));
+			offset += I2S_DW_16BIT_SAMPLE_BYTES;
+		} else {
+			i2s_reg_write(dev, I2S_DW_LRBR,
+				      *(uint32_t *)(buf + offset));
+			offset += I2S_DW_32BIT_SAMPLE_BYTES;
+		}
+		i2s_reg_write(dev, I2S_DW_RRBR, 0);
+	}
 
-		ret = clock_control_set_rate(i2s->clk_dev,
-				i2s->clkid, (clock_control_subsys_rate_t)sclk);
-		if (ret != 0) {
-			LOG_ERR("Unable to set desired frequency : err:%d", ret);
-			return ret;
+	stream->mem_block_offset = offset;
+
+	if (offset >= size) {
+		k_mem_slab_free(stream->cfg.mem_slab, stream->mem_block);
+		stream->mem_block = NULL;
+		stream->mem_block_offset = 0;
+
+		ret = queue_get(&stream->msgq, &stream->mem_block,
+				&stream->mem_block_size);
+		if (ret < 0) {
+			if (stream->state == I2S_STATE_STOPPING) {
+				stream->state = I2S_STATE_READY;
+				pm_device_busy_clear(dev);
+			} else {
+				stream->state = I2S_STATE_ERROR;
+			}
+			goto tx_disable;
+		}
+		k_sem_give(&stream->sem);
+	}
+	return;
+
+tx_disable:
+	tx_stream_disable(dev, stream);
+}
+
+static void i2s_dw_rx_isr(const struct device *dev)
+{
+	const struct i2s_dw_cfg *cfg = dev->config;
+	struct i2s_dw_data *data = dev->data;
+	struct i2s_dw_stream *stream = &data->rx;
+	const uint32_t num_ch = (stream->cfg.format & I2S_FMT_DATA_FORMAT_MASK)
+				? 2U : stream->cfg.channels;
+	uint32_t rx_avail = cfg->rx_fifo_trg_lvl;
+	uint8_t *buf = stream->mem_block;
+	uint32_t offset = stream->mem_block_offset;
+	uint32_t size = stream->cfg.block_size;
+	uint8_t bytes, frames, cnt;
+	bool last_lap = false;
+	void *mblk_tmp;
+	int ret;
+
+	if (stream->state == I2S_STATE_ERROR) {
+		goto rx_disable;
+	}
+
+	if (stream->state == I2S_STATE_STOPPING) {
+		stream->state = I2S_STATE_READY;
+		pm_device_busy_clear(dev);
+		goto rx_disable;
+	}
+
+	bytes = (stream->cfg.word_size <= 16) ? I2S_DW_16BIT_SAMPLE_BYTES
+					      : I2S_DW_32BIT_SAMPLE_BYTES;
+
+	if ((offset + (2 * rx_avail * bytes)) > size) {
+		frames = (size - offset) / (2 * bytes);
+		last_lap = true;
+	} else {
+		frames = rx_avail;
+	}
+
+	for (cnt = 0; cnt < frames; cnt++) {
+		if (bytes == I2S_DW_16BIT_SAMPLE_BYTES) {
+			*(uint16_t *)(buf + offset) =
+				(uint16_t)i2s_reg_read(dev, I2S_DW_LRBR);
+			if (num_ch == 1) {
+				(void)i2s_reg_read(dev, I2S_DW_RRBR);
+				offset += I2S_DW_16BIT_SAMPLE_BYTES;
+			} else {
+				*(uint16_t *)(buf + offset +
+					I2S_DW_16BIT_SAMPLE_BYTES) =
+					(uint16_t)i2s_reg_read(dev,
+							       I2S_DW_RRBR);
+				offset += 2 * I2S_DW_16BIT_SAMPLE_BYTES;
+			}
+		} else {
+			*(uint32_t *)(buf + offset) =
+				i2s_reg_read(dev, I2S_DW_LRBR);
+			if (num_ch == 1) {
+				(void)i2s_reg_read(dev, I2S_DW_RRBR);
+				offset += I2S_DW_32BIT_SAMPLE_BYTES;
+			} else {
+				*(uint32_t *)(buf + offset +
+					I2S_DW_32BIT_SAMPLE_BYTES) =
+					i2s_reg_read(dev, I2S_DW_RRBR);
+				offset += 2 * I2S_DW_32BIT_SAMPLE_BYTES;
+			}
 		}
 	}
 
-	return 0;
-}
-
-/*
- * Get data from the queue
- */
-static int queue_get(struct dw_ring_buf *rb, void **mem_block, size_t *size)
-{
-	unsigned int key;
-
-	key = irq_lock();
-
-	if (rb->tail == rb->head) {
-		/* Ring buffer is empty */
-		irq_unlock(key);
-		return -ENOMEM;
+	if (last_lap && (offset < size)) {
+		if (bytes == I2S_DW_16BIT_SAMPLE_BYTES) {
+			*(uint16_t *)(buf + offset) =
+				(uint16_t)i2s_reg_read(dev, I2S_DW_LRBR);
+			offset += I2S_DW_16BIT_SAMPLE_BYTES;
+		} else {
+			*(uint32_t *)(buf + offset) =
+				i2s_reg_read(dev, I2S_DW_LRBR);
+			offset += I2S_DW_32BIT_SAMPLE_BYTES;
+		}
+		(void)i2s_reg_read(dev, I2S_DW_RRBR);
 	}
 
-	*mem_block = rb->buf[rb->tail].mem_block;
-	*size = rb->buf[rb->tail].size;
-	MODULO_INC(rb->tail, rb->len);
+	stream->mem_block_offset = offset;
 
-	irq_unlock(key);
+	if (offset >= size) {
+		mblk_tmp = stream->mem_block;
 
-	return 0;
+		ret = k_mem_slab_alloc(stream->cfg.mem_slab,
+				       &stream->mem_block, K_NO_WAIT);
+		if (ret < 0) {
+			stream->state = I2S_STATE_ERROR;
+			goto rx_disable;
+		}
+		stream->mem_block_offset = 0;
+
+		ret = queue_put(&stream->msgq, mblk_tmp,
+				stream->cfg.block_size);
+		if (ret < 0) {
+			k_mem_slab_free(stream->cfg.mem_slab, mblk_tmp);
+			stream->state = I2S_STATE_ERROR;
+			goto rx_disable;
+		}
+		k_sem_give(&stream->sem);
+	}
+	return;
+
+rx_disable:
+	rx_stream_disable(dev, stream);
 }
 
-/*
- * Put data in the queue
- */
-static int queue_put(struct dw_ring_buf *rb, void *mem_block, size_t size)
+static void i2s_dw_isr(const struct device *dev)
 {
-	uint16_t head_next;
-	unsigned int key;
+	struct i2s_dw_data *data = dev->data;
+	uint32_t isr = i2s_reg_read(dev, I2S_DW_ISR);
 
-	key = irq_lock();
-
-	head_next = rb->head;
-	MODULO_INC(head_next, rb->len);
-
-	if (head_next == rb->tail) {
-		/* Ring buffer is full */
-		irq_unlock(key);
-		return -ENOMEM;
+	if ((data->dir == I2S_DIR_TX) && (isr & I2S_DW_ISR_TXFE)) {
+		i2s_dw_tx_isr(dev);
 	}
 
-	rb->buf[rb->head].mem_block = mem_block;
-	rb->buf[rb->head].size = size;
-	rb->head = head_next;
+	if ((data->dir == I2S_DIR_RX) && (isr & I2S_DW_ISR_RXDA)) {
+		i2s_dw_rx_isr(dev);
+	}
 
-	irq_unlock(key);
+	if (isr & I2S_DW_ISR_TXFO) {
+		(void)i2s_reg_read(dev, I2S_DW_TOR);
+	}
 
-	return 0;
+	if (isr & I2S_DW_ISR_RXFO) {
+		(void)i2s_reg_read(dev, I2S_DW_ROR);
+		i2s_dw_disable_rx_fo_irq(dev);
+	}
 }
 
-static void i2s_enable_controller(const struct device *dev)
-{
-	const struct i2s_dw_cfg *i2s = dev->config;
-
-	/* Enable I2S */
-	i2s_global_enable(i2s);
-
-	/* Enable Master Clock */
-	i2s_configure_clock(i2s);
-	i2s_clock_enable(i2s);
-}
-
+/* Zephyr I2S API */
 static int i2s_dw_configure(const struct device *dev, enum i2s_dir dir,
-			       const struct i2s_config *i2s_cfg)
+			    const struct i2s_config *i2s_cfg)
 {
-	const struct i2s_dw_cfg *i2s = dev->config;
-	struct i2s_dw_data *const dev_data = dev->data;
+	const struct i2s_dw_cfg *cfg = dev->config;
+	struct i2s_dw_data *data = dev->data;
+	struct i2s_dw_stream *stream;
 
-	struct stream *stream;
-
-	dev_data->dir = dir;
+	data->dir = dir;
 
 	switch (dir) {
 	case I2S_DIR_RX:
-		stream = &dev_data->rx;
+		stream = &data->rx;
 		break;
 	case I2S_DIR_TX:
-		stream = &dev_data->tx;
+		stream = &data->tx;
 		break;
 	case I2S_DIR_BOTH:
 		return -ENOSYS;
@@ -200,7 +565,11 @@ static int i2s_dw_configure(const struct device *dev, enum i2s_dir dir,
 	}
 
 	if (i2s_cfg->frame_clk_freq == 0U) {
-		stream->queue_drop(stream);
+		if (dir == I2S_DIR_TX) {
+			tx_queue_drop(dev, stream);
+		} else {
+			rx_queue_drop(dev, stream);
+		}
 		memset(&stream->cfg, 0, sizeof(struct i2s_config));
 		stream->state = I2S_STATE_NOT_READY;
 		return 0;
@@ -208,11 +577,13 @@ static int i2s_dw_configure(const struct device *dev, enum i2s_dir dir,
 
 	memcpy(&stream->cfg, i2s_cfg, sizeof(struct i2s_config));
 
-	/* Set FIFO Trigger Level */
+	/* Set FIFO trigger level */
 	if (dir == I2S_DIR_TX) {
-		i2s_set_tx_trigger_level(i2s);
-	} else if (dir == I2S_DIR_RX) {
-		i2s_set_rx_trigger_level(i2s);
+		i2s_reg_write(dev, I2S_DW_TFCR,
+			      cfg->tx_fifo_trg_lvl & I2S_DW_FIFO_TRG_MASK);
+	} else {
+		i2s_reg_write(dev, I2S_DW_RFCR,
+			      cfg->rx_fifo_trg_lvl & I2S_DW_FIFO_TRG_MASK);
 	}
 
 	stream->state = I2S_STATE_READY;
@@ -220,19 +591,19 @@ static int i2s_dw_configure(const struct device *dev, enum i2s_dir dir,
 }
 
 static int i2s_dw_trigger(const struct device *dev, enum i2s_dir dir,
-			     enum i2s_trigger_cmd cmd)
+			  enum i2s_trigger_cmd cmd)
 {
-	struct i2s_dw_data *const dev_data = dev->data;
-	struct stream *stream;
+	struct i2s_dw_data *data = dev->data;
+	struct i2s_dw_stream *stream;
 	unsigned int key;
 	int ret;
 
 	switch (dir) {
 	case I2S_DIR_RX:
-		stream = &dev_data->rx;
+		stream = &data->rx;
 		break;
 	case I2S_DIR_TX:
-		stream = &dev_data->tx;
+		stream = &data->tx;
 		break;
 	case I2S_DIR_BOTH:
 		return -ENOSYS;
@@ -245,20 +616,21 @@ static int i2s_dw_trigger(const struct device *dev, enum i2s_dir dir,
 	case I2S_TRIGGER_START:
 		if (stream->state != I2S_STATE_READY) {
 			LOG_ERR("START trigger: invalid state %d",
-				    stream->state);
+				stream->state);
 			return -EIO;
 		}
-
 		__ASSERT_NO_MSG(stream->mem_block == NULL);
 
-		ret = stream->stream_start(stream, dev);
+		if (dir == I2S_DIR_TX) {
+			ret = tx_stream_start(dev, stream);
+		} else {
+			ret = rx_stream_start(dev, stream);
+		}
 		if (ret < 0) {
 			LOG_ERR("START trigger failed %d", ret);
 			return ret;
 		}
-
 		pm_device_busy_set(dev);
-
 		stream->state = I2S_STATE_RUNNING;
 		stream->last_block = false;
 		break;
@@ -270,13 +642,9 @@ static int i2s_dw_trigger(const struct device *dev, enum i2s_dir dir,
 			LOG_ERR("STOP trigger: invalid state");
 			return -EIO;
 		}
-		irq_unlock(key);
-		stream->stream_disable(stream, dev);
-		stream->queue_drop(stream);
-		stream->state = I2S_STATE_READY;
+		stream->state = I2S_STATE_STOPPING;
 		stream->last_block = true;
-
-		pm_device_busy_clear(dev);
+		irq_unlock(key);
 		break;
 
 	case I2S_TRIGGER_DRAIN:
@@ -286,21 +654,29 @@ static int i2s_dw_trigger(const struct device *dev, enum i2s_dir dir,
 			LOG_ERR("DRAIN trigger: invalid state");
 			return -EIO;
 		}
-		stream->stream_disable(stream, dev);
-		stream->queue_drop(stream);
-		stream->state = I2S_STATE_READY;
+		stream->state = I2S_STATE_STOPPING;
+		if (dir == I2S_DIR_RX) {
+			stream->last_block = true;
+		}
 		irq_unlock(key);
-		pm_device_busy_clear(dev);
 		break;
 
 	case I2S_TRIGGER_DROP:
+		key = irq_lock();
 		if (stream->state == I2S_STATE_NOT_READY) {
+			irq_unlock(key);
 			LOG_ERR("DROP trigger: invalid state");
 			return -EIO;
 		}
-		stream->stream_disable(stream, dev);
-		stream->queue_drop(stream);
+		if (dir == I2S_DIR_TX) {
+			tx_stream_disable(dev, stream);
+			tx_queue_drop(dev, stream);
+		} else {
+			rx_stream_disable(dev, stream);
+			rx_queue_drop(dev, stream);
+		}
 		stream->state = I2S_STATE_READY;
+		irq_unlock(key);
 		pm_device_busy_clear(dev);
 		break;
 
@@ -310,7 +686,11 @@ static int i2s_dw_trigger(const struct device *dev, enum i2s_dir dir,
 			return -EIO;
 		}
 		stream->state = I2S_STATE_READY;
-		stream->queue_drop(stream);
+		if (dir == I2S_DIR_TX) {
+			tx_queue_drop(dev, stream);
+		} else {
+			rx_queue_drop(dev, stream);
+		}
 		break;
 
 	default:
@@ -322,350 +702,69 @@ static int i2s_dw_trigger(const struct device *dev, enum i2s_dir dir,
 }
 
 static int i2s_dw_read(const struct device *dev, void **mem_block,
-			  size_t *size)
+		       size_t *size)
 {
-	struct i2s_dw_data *const dev_data = dev->data;
+	struct i2s_dw_data *data = dev->data;
+	struct i2s_dw_stream *stream = &data->rx;
 	int ret;
 
-	if (dev_data->rx.state == I2S_STATE_NOT_READY) {
+	if (stream->state == I2S_STATE_NOT_READY) {
 		LOG_DBG("invalid state");
 		return -EIO;
 	}
-	if (dev_data->rx.state != I2S_STATE_ERROR) {
-		ret = k_sem_take(&dev_data->rx.sem,
-				 SYS_TIMEOUT_MS(dev_data->rx.cfg.timeout));
+
+	if (stream->state != I2S_STATE_ERROR) {
+		ret = k_sem_take(&stream->sem,
+				 SYS_TIMEOUT_MS(stream->cfg.timeout));
 		if (ret < 0) {
 			return ret;
 		}
 	}
 
-	/* Get data from the beginning of RX queue */
-	ret = queue_get(&dev_data->rx.mem_block_queue, mem_block, size);
-	if (ret < 0) {
-		return -EIO;
-	}
-
-	return 0;
+	return queue_get(&stream->msgq, mem_block, size);
 }
 
 static int i2s_dw_write(const struct device *dev, void *mem_block,
-			   size_t size)
+			size_t size)
 {
-	struct i2s_dw_data *const dev_data = dev->data;
+	struct i2s_dw_data *data = dev->data;
+	struct i2s_dw_stream *stream = &data->tx;
 	int ret;
 
-	if (dev_data->tx.state != I2S_STATE_RUNNING &&
-	    dev_data->tx.state != I2S_STATE_READY) {
+	if (stream->state != I2S_STATE_RUNNING &&
+	    stream->state != I2S_STATE_READY) {
 		LOG_DBG("invalid state");
 		return -EIO;
 	}
 
-	ret = k_sem_take(&dev_data->tx.sem,
-			 SYS_TIMEOUT_MS(dev_data->tx.cfg.timeout));
+	ret = k_sem_take(&stream->sem,
+			 SYS_TIMEOUT_MS(stream->cfg.timeout));
 	if (ret < 0) {
 		return ret;
 	}
 
-	/* Add data to the end of the TX queue */
-	queue_put(&dev_data->tx.mem_block_queue, mem_block, size);
-
-	return 0;
+	return queue_put(&stream->msgq, mem_block, size);
 }
 
-static const struct i2s_driver_api i2s_dw_driver_api = {
+static DEVICE_API(i2s, i2s_dw_driver_api) = {
 	.configure = i2s_dw_configure,
 	.read = i2s_dw_read,
 	.write = i2s_dw_write,
 	.trigger = i2s_dw_trigger,
 };
 
-static void tx_stream_disable(struct stream *stream, const struct device *dev);
-static void rx_stream_disable(struct stream *stream, const struct device *dev);
-
-static void i2s_tx_irq_handler(const struct device *dev)
+/* Initialization */
+static int i2s_dw_init(const struct device *dev)
 {
-	const struct i2s_dw_cfg *i2s = dev->config;
-	struct i2s_dw_data *const dev_data = dev->data;
-	struct stream *stream = &dev_data->tx;
-	const uint32_t num_channels = stream->cfg.format & I2S_FMT_DATA_FORMAT_MASK
-				      ? 2U : stream->cfg.channels;
-	/* Number of data that can copy to TX FIFO */
-	uint32_t tx_avail = I2S_FIFO_DEPTH - i2s->cfg.tx_fifo_trg_lvl;
-	const uint8_t *buff = stream->mem_block; /* Assign the buffer base address */
-	uint8_t last_lap = 0, bytes = 0, cnt = 0, frames = 0;
-	uint32_t offset = stream->mem_block_offset;
-	uint32_t size = stream->mem_block_size;
+	const struct i2s_dw_cfg *cfg = dev->config;
+	struct i2s_dw_data *data = dev->data;
 	int ret;
 
-	/* Stop transmission if there was an error */
-	if (stream->state == I2S_STATE_ERROR) {
-		LOG_ERR("TX error detected");
-		goto tx_disable;
-	}
-
-	/* Stop transmission if we were requested */
-	if (stream->last_block) {
-		stream->state = I2S_STATE_READY;
-		goto tx_disable;
-	}
-
-	if (stream->cfg.word_size <= 16) {
-		bytes = I2S_16BIT_BUF_TYPE;
-	} else {
-		bytes = I2S_32BIT_BUF_TYPE;
-	}
-
-	/* Check if it is the last lap */
-	if ((offset + (2 * tx_avail * bytes)) >  size) {
-		/* Assign the number of iterations required */
-		frames = (size - offset)/(2*bytes);
-		last_lap = 1;
-	} else {
-		frames = tx_avail;
-	}
-
-	for (cnt = 0; cnt < frames; cnt++) {
-		/* Assuming that application uses 16bit buffer for 16bit data resolution */
-		if (bytes == I2S_16BIT_BUF_TYPE) {
-			if (num_channels == 1) {
-				i2s_write_left_tx((uint32_t)
-				(*(uint16_t *)(buff + offset)), i2s);
-				i2s_write_right_tx(0, i2s);
-				offset = offset + I2S_16BIT_BUF_TYPE;
-			} else {
-				i2s_write_left_tx((uint32_t)
-				(*(uint16_t *)(buff + offset)), i2s);
-				i2s_write_right_tx((uint32_t) (*(uint16_t *)
-				(buff + offset + I2S_16BIT_BUF_TYPE)), i2s);
-				offset = offset + 2 * I2S_16BIT_BUF_TYPE;
-			}
-		} else {
-			/* For > 16bit data resolution */
-			/* consider as 32bit buffer */
-			if (num_channels == 1) {
-				i2s_write_left_tx(*(uint32_t *)(buff + offset), i2s);
-				i2s_write_right_tx(0, i2s);
-				offset = offset + I2S_32BIT_BUF_TYPE;
-			} else {
-				i2s_write_left_tx(*(uint32_t *)(buff + offset), i2s);
-				i2s_write_right_tx(*(uint32_t *)
-					(buff + offset + I2S_32BIT_BUF_TYPE), i2s);
-				offset = offset + (2 * I2S_32BIT_BUF_TYPE);
-			}
-		}
-	}
-
-	if (last_lap && (offset < size)) {
-		if (num_channels == 1) {
-			/* Write the Left sample and fill right with 0 */
-			i2s_write_left_tx((uint32_t)
-					(*(uint16_t *)(buff + offset)), i2s);
-			i2s_write_right_tx(0, i2s);
-			offset = offset + I2S_16BIT_BUF_TYPE;
-		} else {
-			/* Write the Left sample and fill right with 0 */
-			i2s_write_left_tx(*(uint32_t *)(buff + offset), i2s);
-			i2s_write_right_tx(0, i2s);
-			offset = offset + I2S_32BIT_BUF_TYPE;
-		}
-	}
-
-	stream->mem_block_offset = offset;
-
-	/* Send complete event once all the data is copied to FIFO */
-	if (offset >= size) {
-		/* All block data sent */
-		k_mem_slab_free(stream->cfg.mem_slab, stream->mem_block);
-		stream->mem_block = NULL;
-		stream->mem_block_offset = 0;
-
-		/* Prepare to send the next data block */
-		ret = queue_get(&stream->mem_block_queue, &stream->mem_block,
-				&stream->mem_block_size);
-		if (ret < 0) {
-			if (stream->state == I2S_STATE_STOPPING) {
-				stream->state = I2S_STATE_READY;
-			} else {
-				stream->state = I2S_STATE_ERROR;
-			}
-			goto tx_disable;
-		}
-		k_sem_give(&stream->sem);
-	}
-	return;
-
-tx_disable:
-	tx_stream_disable(stream, dev);
-}
-
-static void i2s_rx_irq_handler(const struct device *dev)
-{
-	const struct i2s_dw_cfg *i2s = dev->config;
-	struct i2s_dw_data *const dev_data = dev->data;
-	struct stream *stream = &dev_data->rx;
-	void *mblk_tmp;
-	int ret;
-
-	 /* Data available in RX FIFO */
-	uint32_t rx_avail = i2s->cfg.rx_fifo_trg_lvl;
-	uint8_t last_lap = 0, bytes = 0, cnt = 0, frames = 0;
-	const uint32_t num_channels =
-			stream->cfg.format & I2S_FMT_DATA_FORMAT_MASK
-			? 2U : stream->cfg.channels;
-	/* Assign the buffer base address */
-	uint8_t *const buff  = stream->mem_block;
-	uint32_t offset = stream->mem_block_offset;
-	uint32_t size = stream->cfg.block_size;
-
-	/* Stop reception if there was an error */
-	if (stream->state == I2S_STATE_ERROR) {
-		goto rx_disable;
-	}
-	/* Stop reception if we were requested */
-	if (stream->state == I2S_STATE_STOPPING) {
-		stream->state = I2S_STATE_READY;
-		goto rx_disable;
-	}
-
-	if ((stream->cfg.word_size <= 16)) {
-		bytes = I2S_16BIT_BUF_TYPE;
-	} else {
-		bytes = I2S_32BIT_BUF_TYPE;
-	}
-	/* Check if it is the last lap */
-	if ((offset + (2 * rx_avail * bytes)) >  size) {
-		/* Assign the number of iterations required */
-		frames = (size - offset)/(2*bytes);
-		last_lap = 1;
-	} else {
-		frames = rx_avail;
-	}
-
-	for (cnt = 0; cnt < frames; cnt++) {
-		/* Assuming that application uses 16bit */
-		/* buffer for 16bit data resolution */
-		if (bytes == I2S_16BIT_BUF_TYPE) {
-			if (num_channels == 1) {
-				(*(uint16_t *)(buff + offset)) =
-				(uint16_t)i2s_read_left_rx(i2s);
-				i2s_read_right_rx(i2s);
-				offset = offset + I2S_16BIT_BUF_TYPE;
-			} else {
-				(*(uint16_t *)(buff + offset)) =
-				(uint16_t)i2s_read_left_rx(i2s);
-				(*(uint16_t *)
-				(buff + offset + I2S_16BIT_BUF_TYPE)) =
-				(uint16_t)i2s_read_right_rx(i2s);
-				offset = offset + 2 * I2S_16BIT_BUF_TYPE;
-			}
-		} else {
-			/* For > 16bit data resolution consider */
-			/* as 32bit buffer */
-			if (num_channels == 1) {
-				*(uint32_t *)(buff + offset) = i2s_read_left_rx(i2s);
-				i2s_read_right_rx(i2s);
-				offset = offset + I2S_32BIT_BUF_TYPE;
-			} else {
-				*(uint32_t *)(buff + offset) = i2s_read_left_rx(i2s);
-				*(uint32_t *)(buff + offset + I2S_32BIT_BUF_TYPE) =
-				i2s_read_right_rx(i2s);
-				offset = offset + 2 * I2S_32BIT_BUF_TYPE;
-			}
-		}
-	}
-
-	if (last_lap && (offset < size)) {
-		if (bytes == I2S_16BIT_BUF_TYPE) {
-			/* Read the last sample from left */
-			(*(uint16_t *)(buff + offset)) =
-			(uint16_t)i2s_read_left_rx(i2s);
-			i2s_read_right_rx(i2s);
-			offset = offset + I2S_16BIT_BUF_TYPE;
-		} else {
-			/* Read the last sample from left */
-			*(uint32_t *)(buff + offset) = i2s_read_left_rx(i2s);
-			i2s_read_right_rx(i2s);
-			offset = offset + I2S_32BIT_BUF_TYPE;
-		}
-	}
-
-	stream->mem_block_offset = offset;
-
-	/* Once the buffer is full, */
-	/* send complete event with interrupt disabled */
-	if (offset >= size) {
-		mblk_tmp = stream->mem_block;
-
-		/* Prepare to receive the next data block */
-		ret = k_mem_slab_alloc(stream->cfg.mem_slab,
-				       &stream->mem_block,
-				       K_NO_WAIT);
-		if (ret < 0) {
-			stream->state = I2S_STATE_ERROR;
-			goto rx_disable;
-		}
-		stream->mem_block_offset = 0;
-
-		/* All block data received */
-		ret = queue_put(&stream->mem_block_queue, mblk_tmp,
-				stream->cfg.block_size);
-		if (ret < 0) {
-			stream->state = I2S_STATE_ERROR;
-			goto rx_disable;
-		}
-		k_sem_give(&stream->sem);
-	}
-	return;
-
-rx_disable:
-	rx_stream_disable(stream, dev);
-}
-
-static void i2s_dw_isr(const struct device *dev)
-{
-	const struct i2s_dw_cfg *i2s = dev->config;
-	struct i2s_dw_data *const dev_data = dev->data;
-	uint32_t int_status = 0;
-
-	/* Get the Current Interrupt Status*/
-	int_status = i2s->paddr->ISR;
-
-	if ((dev_data->dir == I2S_DIR_TX) &&
-	    (_FLD2VAL(I2S_ISR_TXFE, int_status))) {
-		/* Handle Tx Interrupt */
-		i2s_tx_irq_handler(dev);
-	}
-	if ((dev_data->dir == I2S_DIR_RX) &&
-	    (_FLD2VAL(I2S_ISR_RXDA, int_status))) {
-		/* Handle Rx Interrupt */
-		i2s_rx_irq_handler(dev);
-	}
-
-	/* This should not happen */
-	if (_FLD2VAL(I2S_ISR_TXFO, int_status)) {
-		i2s_clear_tx_overrun(i2s);
-	}
-
-	if (_FLD2VAL(I2S_ISR_RXFO, int_status)) {
-		/* Clear overrun interrupt */
-		i2s_clear_rx_overrun(i2s);
-
-		/* Disable the Rx Overflow interrupt for now. This will */
-		/* be enabled again when Receive function is called */
-		i2s_disable_rx_fo_interrupt(i2s);
-	}
-
-}
-
-static int i2s_dw_initialize(const struct device *dev)
-{
-	const struct i2s_dw_cfg *i2s = dev->config;
-	struct i2s_dw_data *const dev_data = dev->data;
-	int ret;
+	DEVICE_MMIO_MAP(dev, K_MEM_CACHE_NONE);
 
 #if defined(CONFIG_PINCTRL)
-	if (i2s->pincfg != NULL) {
-		ret = pinctrl_apply_state(i2s->pincfg, PINCTRL_STATE_DEFAULT);
+	if (cfg->pincfg != NULL) {
+		ret = pinctrl_apply_state(cfg->pincfg, PINCTRL_STATE_DEFAULT);
 		if (ret < 0) {
 			LOG_ERR("I2S pinctrl setup failed (%d)", ret);
 			return ret;
@@ -673,350 +772,178 @@ static int i2s_dw_initialize(const struct device *dev)
 	}
 #endif
 
-	/* check device availability */
-	if (!device_is_ready(i2s->clk_dev)) {
+	if (!device_is_ready(cfg->clk_dev)) {
 		LOG_ERR("clock controller device not ready");
 		return -ENODEV;
 	}
 
-	/* Configure I2S clock sources */
-	ret = clock_control_configure(i2s->clk_dev,
-			i2s->clkid, NULL);
+	ret = clock_control_configure(cfg->clk_dev, cfg->clkid, NULL);
 	if (ret != 0) {
 		LOG_ERR("Unable to configure clock: err:%d", ret);
 		return ret;
 	}
 
-	/* Enable I2S clock from clock manager */
-	ret = clock_control_on(i2s->clk_dev, i2s->clkid);
+	ret = clock_control_on(cfg->clk_dev, cfg->clkid);
 	if (ret != 0) {
 		LOG_ERR("Unable to turn on clock: err:%d", ret);
 		return ret;
 	}
 
-	/* Enable and configure the I2S controller */
-	i2s_enable_controller(dev);
+	i2s_dw_enable_controller(dev);
 
-	i2s->irq_config(dev);
+	cfg->irq_config(dev);
 
-	k_sem_init(&dev_data->rx.sem, 0, CONFIG_I2S_DW_RX_BLOCK_COUNT);
-	k_sem_init(&dev_data->tx.sem, CONFIG_I2S_DW_TX_BLOCK_COUNT,
+	k_sem_init(&data->rx.sem, 0, CONFIG_I2S_DW_RX_BLOCK_COUNT);
+	k_sem_init(&data->tx.sem, CONFIG_I2S_DW_TX_BLOCK_COUNT,
 		   CONFIG_I2S_DW_TX_BLOCK_COUNT);
 
-	/* Mask all the interrupts */
-	i2s_disable_tx_interrupt(i2s);
-	i2s_disable_rx_interrupt(i2s);
-	LOG_INF("%s inited", dev->name);
+	/* Mask all interrupts */
+	i2s_dw_disable_tx_irq(dev);
+	i2s_dw_disable_rx_irq(dev);
+
+	LOG_DBG("%s initialized", dev->name);
 
 	return 0;
 }
 
-static int rx_stream_start(struct stream *stream, const struct device *dev)
-{
-	const struct i2s_dw_cfg *i2s = dev->config;
-	int ret;
-
-	ret = k_mem_slab_alloc(stream->cfg.mem_slab, &stream->mem_block,
-			       K_NO_WAIT);
-	if (ret < 0) {
-		return ret;
-	}
-
-	/* Configure the I2S Peripheral Clock */
-	i2s_configure_clocksource(true, i2s, stream->cfg.frame_clk_freq);
-
-	/* Reset the Rx FIFO */
-	i2s_rx_fifo_reset(i2s);
-	/* Set WLEN */
-	i2s_rx_config_wlen(i2s, stream->cfg.word_size);
-	/* Enable Master Clock */
-	i2s_configure_clock(i2s);
-	i2s_clock_enable(i2s);
-	/* Disable Tx Channel */
-	i2s_tx_channel_disable(i2s);
-
-	/* Clear Overrun interrupt if any */
-	i2s_clear_rx_overrun(i2s);
-
-	/* Enable Rx Channel */
-	i2s_rx_channel_enable(i2s);
-
-	/* Enable RX Interrupts */
-	i2s_enable_rx_interrupt(i2s);
-	/* Enable Rx Block */
-	i2s_rx_block_enable(i2s);
-
-	return 0;
-}
-
-static int tx_stream_start(struct stream *stream, const struct device *dev)
-{
-	const struct i2s_dw_cfg *i2s = dev->config;
-	int ret;
-
-	ret = queue_get(&stream->mem_block_queue, &stream->mem_block,
-			&stream->mem_block_size);
-	if (ret < 0) {
-		return ret;
-	}
-	k_sem_give(&stream->sem);
-
-	stream->mem_block_offset = 0;
-
-	/* Configure the I2S Peripheral Clock */
-	i2s_configure_clocksource(true, i2s, stream->cfg.frame_clk_freq);
-
-	/* Reset the Tx FIFO */
-	i2s_tx_fifo_reset(i2s);
-
-	/* Set WLEN */
-	i2s_tx_config_wlen(i2s, stream->cfg.word_size);
-
-	/* Enable Master Clock */
-	i2s_configure_clock(i2s);
-	i2s_clock_enable(i2s);
-
-	/* Disable Rx Channel */
-	i2s_rx_channel_disable(i2s);
-
-	/* Clear Overrun interrupt if any */
-	i2s_clear_tx_overrun(i2s);
-
-	/* Enable Tx Channel */
-	i2s_tx_channel_enable(i2s);
-
-	/* Enable Tx Interrupt */
-	i2s_enable_tx_interrupt(i2s);
-
-	/* Enable Tx Block */
-	i2s_tx_block_enable(i2s);
-
-	return 0;
-}
-
-static void rx_stream_disable(struct stream *stream, const struct device *dev)
-{
-	const struct i2s_dw_cfg *i2s = dev->config;
-
-	if (stream->mem_block != NULL) {
-		k_mem_slab_free(stream->cfg.mem_slab, stream->mem_block);
-		stream->mem_block = NULL;
-	}
-
-	/* Disable Rx Channel */
-	i2s_rx_channel_disable(i2s);
-	/* Disable Rx Block */
-	i2s_rx_block_disable(i2s);
-
-	/* Disable Rx Interrupt */
-	i2s_disable_rx_interrupt(i2s);
-	/* Disable Master Clock */
-	i2s_clock_disable(i2s);
-}
-
-static void tx_stream_disable(struct stream *stream, const struct device *dev)
-{
-	const struct i2s_dw_cfg *i2s = dev->config;
-
-	if (stream->mem_block != NULL) {
-		k_mem_slab_free(stream->cfg.mem_slab, stream->mem_block);
-		stream->mem_block = NULL;
-	}
-	/* Disable Tx Channel */
-	i2s_tx_channel_disable(i2s);
-	/* Disable Tx Block */
-	i2s_tx_block_disable(i2s);
-
-	/* Disable Tx Interrupt */
-	i2s_disable_tx_interrupt(i2s);
-
-	/* Disable Master Clock */
-	i2s_clock_disable(i2s);
-}
-
-static void rx_queue_drop(struct stream *stream)
-{
-	size_t size;
-	void *mem_block;
-
-	while (queue_get(&stream->mem_block_queue, &mem_block, &size) == 0) {
-		k_mem_slab_free(stream->cfg.mem_slab, mem_block);
-	}
-
-	k_sem_reset(&stream->sem);
-}
-
-static void tx_queue_drop(struct stream *stream)
-{
-	size_t size;
-	void *mem_block;
-	unsigned int n = 0U;
-
-	while (queue_get(&stream->mem_block_queue, &mem_block, &size) == 0) {
-		k_mem_slab_free(stream->cfg.mem_slab, mem_block);
-		n++;
-	}
-
-	for (; n > 0; n--) {
-		k_sem_give(&stream->sem);
-	}
-}
-
+/* Power Management */
 #if defined(CONFIG_PM_DEVICE)
-
-static void i2s_disable_controller(const struct device *dev)
+static void i2s_dw_disable_controller(const struct device *dev)
 {
-	const struct i2s_dw_cfg *i2s = dev->config;
-
-	/* Disable I2S */
-	i2s_global_disable(i2s);
-
-	i2s_clock_disable(i2s);
+	i2s_reg_write(dev, I2S_DW_CER, 0);
+	i2s_reg_write(dev, I2S_DW_IER, 0);
 }
 
-static int i2s_suspend(const struct device *dev)
+static int i2s_dw_pm_action(const struct device *dev,
+			    enum pm_device_action action)
 {
-	int ret;
-	const struct i2s_dw_cfg *i2s = dev->config;
+	const struct i2s_dw_cfg *cfg = dev->config;
 	struct i2s_dw_data *data = dev->data;
+	int ret;
 
-	data->irq_mask_cache = i2s_get_interrupt_mask(i2s);
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		data->imr_cache = i2s_reg_read(dev, I2S_DW_IMR);
+		i2s_dw_disable_tx_irq(dev);
+		i2s_dw_disable_rx_irq(dev);
+		i2s_dw_disable_controller(dev);
 
-	i2s_disable_tx_interrupt(i2s);
-	i2s_disable_rx_interrupt(i2s);
-
-	i2s_disable_controller(dev);
-
-	if (i2s->clk_dev != NULL) {
-		ret = clock_control_off(i2s->clk_dev, i2s->clkid);
+		ret = clock_control_off(cfg->clk_dev, cfg->clkid);
 		if (ret != 0 && ret != -EALREADY) {
 			LOG_ERR("Unable to turn off clock: err:%d", ret);
 			return ret;
 		}
-	}
 
 #if defined(CONFIG_PINCTRL)
-	/* Apply sleep pin configuration if available */
-	if (i2s->pincfg != NULL) {
-		ret = pinctrl_apply_state(i2s->pincfg, PINCTRL_STATE_SLEEP);
-		if (ret < 0 && ret != -ENOENT) {
-			/* Ignore -ENOENT (sleep state not defined) */
-			return ret;
+		if (cfg->pincfg != NULL) {
+			ret = pinctrl_apply_state(cfg->pincfg,
+						  PINCTRL_STATE_SLEEP);
+			if (ret < 0 && ret != -ENOENT) {
+				return ret;
+			}
 		}
-	}
 #endif
+		return 0;
 
-	return 0;
-}
-
-static int i2s_resume(const struct device *dev)
-{
-	const struct i2s_dw_cfg *i2s = dev->config;
-	struct i2s_dw_data *data = dev->data;
-	int ret;
-
+	case PM_DEVICE_ACTION_RESUME:
 #if defined(CONFIG_PINCTRL)
-	if (i2s->pincfg != NULL) {
-		ret = pinctrl_apply_state(i2s->pincfg, PINCTRL_STATE_DEFAULT);
-		if (ret < 0) {
-			LOG_ERR("I2S pinctrl setup failed (%d)", ret);
-			return ret;
+		if (cfg->pincfg != NULL) {
+			ret = pinctrl_apply_state(cfg->pincfg,
+						  PINCTRL_STATE_DEFAULT);
+			if (ret < 0) {
+				LOG_ERR("pinctrl setup failed (%d)", ret);
+				return ret;
+			}
 		}
-	}
 #endif
-
-	if (i2s->clk_dev) {
-		/* Reconfigure I2S clock sources */
-		ret = clock_control_configure(i2s->clk_dev,
-				i2s->clkid, NULL);
+		ret = clock_control_configure(cfg->clk_dev, cfg->clkid, NULL);
 		if (ret != 0 && ret != -ENOSYS && ret != -ENOTSUP) {
 			LOG_ERR("Unable to configure clock: err:%d", ret);
 			return ret;
 		}
 
-		ret = clock_control_on(i2s->clk_dev, i2s->clkid);
+		ret = clock_control_on(cfg->clk_dev, cfg->clkid);
 		if (ret != 0 && ret != -EALREADY) {
 			LOG_ERR("Unable to turn on clock: err:%d", ret);
 			return ret;
 		}
-	}
 
-	i2s_enable_controller(dev);
-
-	i2s_set_interrupt_mask(data->irq_mask_cache, i2s);
-
-	return 0;
-}
-
-static int i2s_pm_action(const struct device *dev,
-			enum pm_device_action action)
-{
-	switch (action) {
-	case PM_DEVICE_ACTION_SUSPEND:
-		return i2s_suspend(dev);
-
-	case PM_DEVICE_ACTION_RESUME:
-		return i2s_resume(dev);
+		i2s_dw_enable_controller(dev);
+		i2s_reg_write(dev, I2S_DW_IMR, data->imr_cache);
+		return 0;
 
 	case PM_DEVICE_ACTION_TURN_OFF:
 	case PM_DEVICE_ACTION_TURN_ON:
-		/* Power domain handling is automatic via PM framework */
 		return 0;
 
 	default:
-		break;
+		return -ENOTSUP;
 	}
-	return -ENOTSUP;
 }
 #endif /* CONFIG_PM_DEVICE */
 
+/* Device instantiation */
 #define I2S_DW_INIT(index)						\
 									\
-static void i2s_dw_irq_config_func_##index(const struct device *dev);	\
+static void i2s_dw_irq_config_##index(const struct device *dev);	\
 									\
 IF_ENABLED(DT_INST_NODE_HAS_PROP(index, pinctrl_0),			\
 	(PINCTRL_DT_INST_DEFINE(index)));				\
 									\
-static const struct i2s_dw_cfg i2s_dw_config_##index = {		\
+static struct i2s_dw_queue_item						\
+	i2s_dw_rx_queue_##index[CONFIG_I2S_DW_RX_BLOCK_COUNT];		\
+static struct i2s_dw_queue_item						\
+	i2s_dw_tx_queue_##index[CONFIG_I2S_DW_TX_BLOCK_COUNT];		\
+									\
+static const struct i2s_dw_cfg i2s_dw_cfg_##index = {			\
+	DEVICE_MMIO_ROM_INIT(DT_DRV_INST(index)),			\
+	.wss_len = I2S_DW_WSS_32_CYCLES,				\
+	.sclkg = I2S_DW_SCLKG_NONE,					\
+	.tx_fifo_trg_lvl = DT_INST_PROP(index, tx_fifo_watermark),	\
+	.rx_fifo_trg_lvl = DT_INST_PROP(index, rx_fifo_watermark),	\
 	.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(index)),		\
-	.clkid = (clock_control_subsys_t) DT_INST_CLOCKS_CELL_BY_IDX(index, 0, clkid),	\
-	.cfg.wss_len = WSS_LEN,						\
-	.cfg.tx_fifo_trg_lvl = TX_FIFO_TRG_LVL,				\
-	.cfg.rx_fifo_trg_lvl = RX_FIFO_TRG_LVL,				\
-	.paddr = (struct I2S_Type *)DT_INST_REG_ADDR(index),		\
-	.irq_config = i2s_dw_irq_config_func_##index,			\
+	.clkid = (clock_control_subsys_t)				\
+		DT_INST_CLOCKS_CELL_BY_IDX(index, 0, clkid),		\
+	.irq_config = i2s_dw_irq_config_##index,			\
 	IF_ENABLED(DT_INST_NODE_HAS_PROP(index, pinctrl_0),		\
 		(.pincfg = PINCTRL_DT_INST_DEV_CONFIG_GET(index),))	\
 };									\
 									\
-struct queue_item							\
-rx_##index##_dw_ring_buf[CONFIG_I2S_DW_RX_BLOCK_COUNT + 1];		\
-struct queue_item							\
-tx_##index##_dw_ring_buf[CONFIG_I2S_DW_TX_BLOCK_COUNT + 1];		\
-static struct i2s_dw_data i2s_dw_data_##index = {			\
-	.tx = {.stream_start = tx_stream_start,				\
-		.stream_disable = tx_stream_disable,			\
-		.queue_drop = tx_queue_drop,				\
-		.mem_block_queue.buf = tx_##index##_dw_ring_buf,	\
-		.mem_block_queue.len = ARRAY_SIZE(tx_##index##_dw_ring_buf)  },\
-	.rx = {.stream_start = rx_stream_start,				\
-		.stream_disable = rx_stream_disable,			\
-		.queue_drop = rx_queue_drop,				\
-		.mem_block_queue.buf = rx_##index##_dw_ring_buf,	\
-		.mem_block_queue.len = ARRAY_SIZE(rx_##index##_dw_ring_buf)  },\
-};									\
-PM_DEVICE_DT_INST_DEFINE(index, i2s_pm_action);				\
-DEVICE_DT_INST_DEFINE(index,						\
-		      &i2s_dw_initialize, PM_DEVICE_DT_INST_GET(index),	\
-		      &i2s_dw_data_##index,				\
-		      &i2s_dw_config_##index, POST_KERNEL,		\
-		      CONFIG_I2S_INIT_PRIORITY, &i2s_dw_driver_api);	\
+static struct i2s_dw_data i2s_dw_data_##index;				\
 									\
-static void i2s_dw_irq_config_func_##index(const struct device *dev)	\
+PM_DEVICE_DT_INST_DEFINE(index, i2s_dw_pm_action);			\
+									\
+static int i2s_dw_inst_init_##index(const struct device *dev)		\
+{									\
+	struct i2s_dw_data *data = dev->data;				\
+									\
+	k_msgq_init(&data->rx.msgq,					\
+		    (char *)i2s_dw_rx_queue_##index,			\
+		    sizeof(struct i2s_dw_queue_item),			\
+		    CONFIG_I2S_DW_RX_BLOCK_COUNT);			\
+	k_msgq_init(&data->tx.msgq,					\
+		    (char *)i2s_dw_tx_queue_##index,			\
+		    sizeof(struct i2s_dw_queue_item),			\
+		    CONFIG_I2S_DW_TX_BLOCK_COUNT);			\
+									\
+	return i2s_dw_init(dev);					\
+}									\
+									\
+DEVICE_DT_INST_DEFINE(index,						\
+		      i2s_dw_inst_init_##index,				\
+		      PM_DEVICE_DT_INST_GET(index),			\
+		      &i2s_dw_data_##index,				\
+		      &i2s_dw_cfg_##index,				\
+		      POST_KERNEL,					\
+		      CONFIG_I2S_INIT_PRIORITY,				\
+		      &i2s_dw_driver_api);				\
+									\
+static void i2s_dw_irq_config_##index(const struct device *dev)		\
 {									\
 	IRQ_CONNECT(DT_INST_IRQN(index),				\
 		    DT_INST_IRQ(index, priority),			\
-		    i2s_dw_isr, DEVICE_DT_INST_GET(index), 0);		\
+		    i2s_dw_isr,						\
+		    DEVICE_DT_INST_GET(index), 0);			\
 	irq_enable(DT_INST_IRQN(index));				\
 }
 
