@@ -64,11 +64,14 @@ struct pm_notifier {
 	 * Application defined function for doing any target specific operations
 	 * before devices are resumed.
 	 *
-	 * This callback is invoked before pm_resume_devices() is called,
-	 * allowing the application to restore system configuration (e.g.,
-	 * clock frequencies) before peripherals resume.
-	 * This ensures peripherals can configure themselves with correct
-	 * timing parameters.
+	 * Invoked once per system wake -- on the first CPU to leave a state
+	 * that manages devices (i.e., state != PM_STATE_RUNTIME_IDLE and
+	 * pm_device_disabled == false) -- before any device is touched.
+	 * Devices may be resumed either by pm_resume_devices() when
+	 * system-managed device PM is enabled, or later on demand by runtime
+	 * device PM. Use this hook to restore system configuration (e.g.,
+	 * clock frequencies) so peripherals can reconfigure themselves with
+	 * correct timing parameters.
 	 */
 	void (*pre_device_resume)(enum pm_state state);
 	/**
