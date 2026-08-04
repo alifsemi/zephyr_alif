@@ -1092,6 +1092,15 @@ int video_isp_init(const struct device *dev)
 				},                                                            \
 				.isp_idx = i,                                                 \
 				.port_id = 0,                                                 \
+				.bin = {                                                      \
+					.enable = DT_INST_PROP(i, binning_en),                \
+					.hstep = COND_CODE_1(DT_INST_PROP(i, binning_en),     \
+							(DT_INST_PROP(i, binning_hstep)),     \
+							(0)),                                 \
+					.vstep = COND_CODE_1(DT_INST_PROP(i, binning_en),     \
+							(DT_INST_PROP(i, binning_vstep)),     \
+							(0)),                                 \
+				},                                                            \
 			},                                                                    \
 			.channel = {                                                          \
 				.trans_bus = ONLINE,                                          \
