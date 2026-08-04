@@ -29,6 +29,9 @@
 #define PDM_AUDIO_DETECT_IRQ_STAT (0xFFU << 8U) /* Audio detect interrupt  */
 #define PDM_FIFO_ALMOST_FULL_IRQ  (0x1U << 0U)  /* FIFO almost full Interrupt*/
 #define PDM_FIFO_OVERFLOW_IRQ     (0x1U << 1U)  /* FIFO overflow interrupt   */
+#define PDM_FIFO_OVERFLOW_STAT    (0x1U << 0U)  /* Overflow status bit in PDM_ERROR_IRQ
+						 * (bit 0 there, unlike the enable register)
+						 */
 #define PDM_BYPASS_IIR            (2U)    /* Bypass DC blocking IIR filter*/
 #define PDM_CHANNEL_ENABLE        (0xFFU)       /* To check the which channel is enabled*/
 
