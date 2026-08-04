@@ -343,13 +343,21 @@ static int mhuv2_poll_out(const struct device *dev, uint32_t ch_id,
 		return -EINVAL;
 	}
 
+	struct MHUV2_SND *SND = (struct MHUV2_SND *)DEVICE_MMIO_GET(dev);
+
 	prev_irq_en_sts = irq_is_enabled(config->irq_num);
 	if (prev_irq_en_sts) {
 		/* Disable interrupt if enabled previously */
 		irq_disable(config->irq_num);
 	}
 
-	struct MHUV2_SND *SND = (struct MHUV2_SND *)DEVICE_MMIO_GET(dev);
+	/* Disable INT generation BEFORE requesting access, so the ACC_RDY
+	 * 0->1 transition inside mhuv2_send_access_request() does not latch
+	 * NR2R at the NVIC (which would otherwise become a spurious wake
+	 * source). Clear any stale top-level status too.
+	 */
+	SND->INT_EN = SND->INT_EN & ~(NR2R_INTR | R2NR_INTR | CHCOMB_INTR);
+	SND->INT_CLR = (NR2R_INTR | R2NR_INTR | CHCOMB_INTR);
 
 	ret = mhuv2_send_access_request(SND);
 	if (ret < 0) {
@@ -360,11 +368,6 @@ static int mhuv2_poll_out(const struct device *dev, uint32_t ch_id,
 	if ((SND->CHANNEL[ch_id].CH_ST & MHU_CH_INT_ST_SET) == MHU_CH_INT_ST_SET) {
 		return -EBUSY;
 	}
-
-	/* Clear Interrupt Status */
-	SND->INT_CLR = (NR2R_INTR | R2NR_INTR | CHCOMB_INTR);
-	/* Clear Interrupt generation (NR2R Int, R2NR Int, Combined Int) */
-	SND->INT_EN = SND->INT_EN & ~(NR2R_INTR | R2NR_INTR | CHCOMB_INTR);
 
 	/* Clear any pending channel interrupts */
 	SND->CHANNEL[ch_id].CH_INT_CLR = MHU_CH_INT_CLR;
@@ -381,6 +384,16 @@ static int mhuv2_poll_out(const struct device *dev, uint32_t ch_id,
 			ack = true;
 			break;
 		}
+	}
+
+	if (ack) {
+		/* Clear the channel + top-level status latched by the completed
+		 * transfer WHILE we still hold access. Dropping ACCESS_REQUEST
+		 * first would lose write privilege to the channel registers, so
+		 * CH_INT_CLR would be a no-op and CH_INT_ST would stay latched.
+		 */
+		SND->CHANNEL[ch_id].CH_INT_CLR = MHU_CH_INT_CLR;
+		SND->INT_CLR = (NR2R_INTR | R2NR_INTR | CHCOMB_INTR);
 	}
 
 	/* Reset access request */
