@@ -24,9 +24,9 @@
 				 <PIN_P3_5__OSPI0_D5_A>,
 				 <PIN_P3_6__OSPI0_D6_A>,
 				 <PIN_P3_7__OSPI0_D7_A>;
-			read_enable = <0x1>;
-			drive_strength = <12>;
-			slew_rate = <0x1>;
+			read-enable = <0x1>;
+			drive-strength = <12>;
+			slew-rate = <0x1>;
 		};
 	};
 
@@ -36,7 +36,7 @@
 			pinmux = <PIN_P8_7__EXT_TX_B>,
 				 <PIN_P8_3__EXT_RTS_B>,
 				 <PIN_P8_5__EXT_TRACE_B>;
-			read_enable = < 0x0 >;
+			read-enable = < 0x0 >;
 		};
 	};
 };
@@ -46,16 +46,14 @@
 	status = "okay";
 };
 
-/* Remove MRAM storage to replace flash specific storage */
-/delete-node/ &mram_storage;
+/* Move storage_partition from MRAM to OSPI flash. */
+/delete-node/ &storage_partition;
 
 /* Update zephyr,flash property */
 /{
 	chosen {
 		zephyr,flash-controller = &ospi_flash;
 		zephyr,flash = &flash_storage;
-
-		/delete-property/ zephyr,code-partition;
 	};
 };
 
@@ -67,10 +65,10 @@
 		#size-cells = <1>;
 		compatible = "fixed-partitions";
 
-		/* Set 64MB of storage flash */
+		/* Set 32MB of storage flash */
 		storage_partition: partition@0 {
 			label = "storage";
-			reg = <0x0 DT_SIZE_M(64)>;
+			reg = <0x0 DT_SIZE_M(32)>;
 		};
 	};
 };
