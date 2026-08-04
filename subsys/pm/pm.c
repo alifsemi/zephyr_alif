@@ -126,21 +126,20 @@ void pm_system_resume(void)
 	 * and it may schedule another thread.
 	 */
 	if (atomic_test_and_clear_bit(z_post_ops_required, id)) {
-		/*
-		 * Notify applications before devices are resumed.
-		 * This allows restoring system configuration (e.g., clock frequencies)
-		 * before peripherals resume and reconfigure.
-		 */
-		pm_state_notify_pre_resume();
-
-#ifdef CONFIG_PM_DEVICE_SYSTEM_MANAGED
 		if (atomic_add(&_cpus_active, 1) == 0) {
 			if ((z_cpus_pm_state[id].state != PM_STATE_RUNTIME_IDLE) &&
 					!z_cpus_pm_state[id].pm_device_disabled) {
+				/*
+				 * Restore system configuration (e.g., clock frequencies)
+				 * before any device is touched -- either by pm_resume_devices()
+				 * below, or later on demand by runtime device PM.
+				 */
+				pm_state_notify_pre_resume();
+#ifdef CONFIG_PM_DEVICE_SYSTEM_MANAGED
 				pm_resume_devices();
+#endif
 			}
 		}
-#endif
 		pm_state_exit_post_ops(z_cpus_pm_state[id].state, z_cpus_pm_state[id].substate_id);
 		pm_state_notify(false);
 #ifdef CONFIG_SYS_CLOCK_EXISTS
@@ -203,8 +202,8 @@ bool pm_system_suspend(int32_t kernel_ticks)
 		return false;
 	}
 
-#ifdef CONFIG_PM_DEVICE_SYSTEM_MANAGED
 	if (atomic_sub(&_cpus_active, 1) == 1) {
+#ifdef CONFIG_PM_DEVICE_SYSTEM_MANAGED
 		if ((z_cpus_pm_state[id].state != PM_STATE_RUNTIME_IDLE) &&
 		    !z_cpus_pm_state[id].pm_device_disabled) {
 			if (!pm_suspend_devices()) {
@@ -216,8 +215,8 @@ bool pm_system_suspend(int32_t kernel_ticks)
 				return false;
 			}
 		}
-	}
 #endif
+	}
 
 	if ((z_cpus_pm_state[id].exit_latency_us != 0) &&
 	    (ticks != K_TICKS_FOREVER)) {
