@@ -9,7 +9,8 @@
 
 /**
  * @file
- * @brief Public APIs for GPIO drivers
+ * @ingroup gpio_interface
+ * @brief Main header file for GPIO driver API.
  */
 
 #ifndef ZEPHYR_INCLUDE_DRIVERS_GPIO_H_
@@ -713,7 +714,6 @@ struct gpio_driver_data {
 struct gpio_callback;
 
 /**
- * @typedef gpio_callback_handler_t
  * @brief Define the application callback handler function signature
  *
  * @param port Device struct for the GPIO device.

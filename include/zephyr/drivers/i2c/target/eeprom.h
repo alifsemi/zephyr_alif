@@ -22,6 +22,60 @@
  */
 
 /**
+ * @brief Define the application callback handler function signature
+ *
+ * @param dev Pointer to the device structure for the driver instance.
+ * @param user_data Optional user data provided when callback is set.
+ */
+typedef void (*eeprom_target_changed_handler_t)(const struct device *dev, void *user_data);
+
+/**
+ * @brief Set the EEPROM changed callback handler
+ *
+ * @param dev Pointer to the device structure for the driver instance.
+ * @param handler Handler to call on EEPROM changes
+ * @param user_data Optional user data passed to callback
+ */
+void eeprom_target_set_changed_callback(const struct device *dev,
+					eeprom_target_changed_handler_t handler,
+					void *user_data);
+
+/**
+ * @brief Get size of the virtual EEPROM
+ *
+ * @param dev Pointer to the device structure for the driver instance.
+ *
+ * @return Size of EEPROM in bytes
+ */
+size_t eeprom_target_get_size(const struct device *dev);
+
+/**
+ * @brief Read data from the virtual EEPROM
+ *
+ * @param dev Pointer to the device structure for the driver instance.
+ * @param offset Address offset to read from.
+ * @param data Buffer to store read data.
+ * @param len Number of bytes to read.
+ *
+ * @return 0 on success, negative errno code on failure.
+ */
+int eeprom_target_read_data(const struct device *dev, off_t offset,
+			    void *data, size_t len);
+
+/**
+ * @brief Write data to the virtual EEPROM
+ *
+ * @param dev Pointer to the device structure for the driver instance.
+ * @param offset Address offset to write data to.
+ * @param data Buffer with data to write.
+ * @param len Number of bytes to write.
+ *
+ * @return 0 on success, negative errno code on failure.
+ */
+int eeprom_target_write_data(const struct device *dev, off_t offset,
+			     const void *data, size_t len);
+
+/**
  * @brief Program memory of the virtual EEPROM
  *
  * @param dev Pointer to the device structure for the driver instance.

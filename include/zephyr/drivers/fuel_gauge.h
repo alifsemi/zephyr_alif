@@ -5,6 +5,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @file
+ * @ingroup fuel_gauge_interface
+ * @brief Main header file for fuel gauge driver API.
+ */
+
 #ifndef ZEPHYR_INCLUDE_DRIVERS_BATTERY_H_
 #define ZEPHYR_INCLUDE_DRIVERS_BATTERY_H_
 
@@ -12,7 +18,7 @@
  * @brief Fuel Gauge Interface
  * @defgroup fuel_gauge_interface Fuel Gauge Interface
  * @since 3.3
- * @version 0.1.0
+ * @version 0.8.0
  * @ingroup io_interfaces
  * @{
  */
@@ -199,7 +205,6 @@ struct sbs_gauge_device_chemistry {
 } __packed;
 
 /**
- * @typedef fuel_gauge_get_property_t
  * @brief Callback API for getting a fuel_gauge property.
  *
  * See fuel_gauge_get_property() for argument description
@@ -208,7 +213,6 @@ typedef int (*fuel_gauge_get_property_t)(const struct device *dev, fuel_gauge_pr
 					 union fuel_gauge_prop_val *val);
 
 /**
- * @typedef fuel_gauge_set_property_t
  * @brief Callback API for setting a fuel_gauge property.
  *
  * See fuel_gauge_set_property() for argument description
@@ -217,7 +221,6 @@ typedef int (*fuel_gauge_set_property_t)(const struct device *dev, fuel_gauge_pr
 					 union fuel_gauge_prop_val val);
 
 /**
- * @typedef fuel_gauge_get_buffer_property_t
  * @brief Callback API for getting a fuel_gauge buffer property.
  *
  * See fuel_gauge_get_buffer_property() for argument description
@@ -227,7 +230,6 @@ typedef int (*fuel_gauge_get_buffer_property_t)(const struct device *dev,
 					       void *dst, size_t dst_len);
 
 /**
- * @typedef fuel_gauge_battery_cutoff_t
  * @brief Callback API for doing a battery cutoff.
  *
  * See fuel_gauge_battery_cutoff() for argument description

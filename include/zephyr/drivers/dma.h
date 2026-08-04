@@ -1,13 +1,13 @@
-/**
- * @file
- *
- * @brief Public APIs for the DMA drivers.
- */
-
 /*
  * Copyright (c) 2016 Intel Corporation
  *
  * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * @file
+ * @ingroup dma_interface
+ * @brief Main header file for DMA (Direct Memory Access) driver API.
  */
 
 #ifndef ZEPHYR_INCLUDE_DRIVERS_DMA_H_
@@ -170,7 +170,6 @@ struct dma_block_config {
 #define DMA_STATUS_BLOCK	1
 
 /**
- * @typedef dma_callback_t
  * @brief Callback function for DMA transfer completion
  *
  *  If enabled, callback function will be invoked at transfer or block completion,
@@ -337,7 +336,6 @@ typedef int (*dma_api_get_status)(const struct device *dev, uint32_t channel,
 typedef int (*dma_api_get_attribute)(const struct device *dev, uint32_t type, uint32_t *value);
 
 /**
- * @typedef dma_chan_filter
  * @brief channel filter function call
  *
  * filter function that is used to find the matched internal dma channel
@@ -353,7 +351,6 @@ typedef bool (*dma_api_chan_filter)(const struct device *dev,
 				int channel, void *filter_param);
 
 /**
- * @typedef dma_chan_release
  * @brief channel release function call
  *
  * used to release channel resources "allocated" during the

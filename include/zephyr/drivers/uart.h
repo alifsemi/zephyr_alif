@@ -8,7 +8,8 @@
 
 /**
  * @file
- * @brief Public APIs for UART drivers
+ * @ingroup uart_interface
+ * @brief Main header file for UART driver API.
  */
 
 #ifndef ZEPHYR_INCLUDE_DRIVERS_UART_H_
@@ -309,7 +310,6 @@ struct uart_event {
 };
 
 /**
- * @typedef uart_callback_t
  * @brief Define the application callback function signature for
  * uart_callback_set() function.
  *

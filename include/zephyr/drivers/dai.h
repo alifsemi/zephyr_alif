@@ -6,7 +6,8 @@
 
 /**
  * @file
- * @brief Public APIs for the DAI (Digital Audio Interface) bus drivers.
+ * @ingroup dai_interface
+ * @brief Main header file for DAI (Digital Audio Interface) driver API.
  */
 
 #ifndef ZEPHYR_INCLUDE_DRIVERS_DAI_H_
@@ -15,7 +16,7 @@
 /**
  * @defgroup dai_interface DAI Interface
  * @since 3.1
- * @version 0.1.0
+ * @version 0.8.0
  * @ingroup io_interfaces
  * @brief DAI Interface
  *

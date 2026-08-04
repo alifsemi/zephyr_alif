@@ -1,18 +1,18 @@
-/**
- * @file drivers/sensor.h
- *
- * @brief Public APIs for the sensor driver.
- */
-
 /*
- * Copyright (c) 2016 Intel Corporation
- *
- * SPDX-License-Identifier: Apache-2.0
- */
+* Copyright (c) 2016 Intel Corporation
+*
+* SPDX-License-Identifier: Apache-2.0
+*/
 #ifndef ZEPHYR_INCLUDE_DRIVERS_SENSOR_H_
 #define ZEPHYR_INCLUDE_DRIVERS_SENSOR_H_
 
 /**
+ * @file
+ * @ingroup sensor_interface
+ * @brief Main header file for sensor driver API.
+ */
+
+ /**
  * @brief Sensor Interface
  * @defgroup sensor_interface Sensor Interface
  * @since 1.2
@@ -374,7 +374,6 @@ enum sensor_attribute {
 };
 
 /**
- * @typedef sensor_trigger_handler_t
  * @brief Callback API upon firing of a trigger
  *
  * @param dev Pointer to the sensor device
@@ -1139,7 +1138,6 @@ static inline int sensor_read_async_mempool(struct rtio_iodev *iodev, struct rti
 }
 
 /**
- * @typedef sensor_processing_callback_t
  * @brief Callback function used with the helper processing function.
  *
  * @see sensor_processing_with_callback

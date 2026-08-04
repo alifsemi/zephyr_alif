@@ -6,7 +6,8 @@
 
 /**
  * @file
- * @brief SD Host Controller public API header file.
+ * @ingroup sdhc_interface
+ * @brief Main header file for SDHC (Secure Digital Host Controller) driver API.
  */
 
 #ifndef ZEPHYR_INCLUDE_DRIVERS_SDHC_H_
@@ -20,7 +21,7 @@
  * @brief SDHC interface
  * @defgroup sdhc_interface SDHC interface
  * @since 3.1
- * @version 0.1.0
+ * @version 0.8.0
  * @ingroup io_interfaces
  * @{
  */
@@ -245,7 +246,6 @@ enum sdhc_interrupt_source {
 };
 
 /**
- * @typedef sdhc_interrupt_cb_t
  * @brief SDHC card interrupt callback prototype
  *
  * Function prototype for SDHC card interrupt callback.

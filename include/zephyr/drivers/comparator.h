@@ -8,10 +8,16 @@
 #define ZEPHYR_INCLUDE_DRIVERS_COMPARATOR_H_
 
 /**
+ * @file
+ * @ingroup comparator_interface
+ * @brief Main header file for comparator driver API.
+ */
+
+/**
  * @brief Comparator Interface
  * @defgroup comparator_interface Comparator Interface
  * @since 4.0
- * @version 0.1.0
+ * @version 0.8.0
  * @ingroup io_interfaces
  * @{
  */

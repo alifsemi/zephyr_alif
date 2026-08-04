@@ -5,8 +5,9 @@
  */
 
 /**
- * @file gnss.h
- * @brief Public GNSS API.
+ * @file
+ * @ingroup gnss_interface
+ * @brief Main header file for GNSS driver API.
  */
 
 #ifndef ZEPHYR_INCLUDE_DRIVERS_GNSS_H_
@@ -16,7 +17,7 @@
  * @brief GNSS Interface
  * @defgroup gnss_interface GNSS Interface
  * @since 3.6
- * @version 0.1.0
+ * @version 0.8.0
  * @ingroup io_interfaces
  * @{
  */

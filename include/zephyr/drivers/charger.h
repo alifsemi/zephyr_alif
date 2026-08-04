@@ -6,7 +6,8 @@
 
 /**
  * @file
- * @brief Charger APIs
+ * @ingroup charger_interface
+ * @brief Main header file for battery charger driver API.
  */
 
 #ifndef ZEPHYR_INCLUDE_DRIVERS_CHARGER_H_
@@ -113,12 +114,33 @@ enum charger_property {
 };
 
 /**
- * @typedef charger_prop_t
  * @brief A charger property's identifier
  *
  * See charger_property for a list of identifiers
  */
 typedef uint16_t charger_prop_t;
+
+/**
+ * @brief Type for custom signed integer property values.
+ *
+ * Used only by downstream custom properties (>= CHARGER_PROP_CUSTOM_BEGIN).
+ */
+typedef int32_t charger_custom_value_int_t;
+
+/**
+ * @brief Type for custom unsigned integer property values.
+ *
+ * Used only by downstream custom properties (>= CHARGER_PROP_CUSTOM_BEGIN).
+ */
+typedef uint32_t charger_custom_value_uint_t;
+
+/**
+ * @brief Type for custom boolean property values.
+ *
+ * Used only by downstream custom properties (>= CHARGER_PROP_CUSTOM_BEGIN),
+ * typically for feature/status flags (e.g. jeita_active).
+ */
+typedef bool charger_custom_value_bool_t;
 
 /**
  * @brief External supply states

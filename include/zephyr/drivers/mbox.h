@@ -3,6 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @file
+ * @ingroup mbox_interface
+ * @brief Main header file for MBOX (Mailbox) driver API.
+ */
+
 #ifndef ZEPHYR_INCLUDE_DRIVERS_MBOX_H_
 #define ZEPHYR_INCLUDE_DRIVERS_MBOX_H_
 
@@ -21,7 +27,7 @@ extern "C" {
  * @brief MBOX Interface
  * @defgroup mbox_interface MBOX Interface
  * @since 1.0
- * @version 0.1.0
+ * @version 0.8.0
  * @ingroup io_interfaces
  * @{
  *

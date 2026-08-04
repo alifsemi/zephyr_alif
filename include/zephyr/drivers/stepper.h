@@ -6,7 +6,8 @@
 
 /**
  * @file drivers/stepper.h
- * @brief Public API for Stepper Driver
+ * @ingroup stepper_interface
+ * @brief Main header file for stepper driver API.
  */
 
 #ifndef ZEPHYR_INCLUDE_DRIVERS_STEPPER_H_
@@ -16,7 +17,7 @@
  * @brief Stepper Driver Interface
  * @defgroup stepper_interface Stepper Driver Interface
  * @since 4.0
- * @version 0.1.0
+ * @version 0.8.0
  * @ingroup io_interfaces
  * @{
  */
