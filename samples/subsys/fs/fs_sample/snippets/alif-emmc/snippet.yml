@@ -1,0 +1,27 @@
+#
+# Copyright 2026 Alif Semiconductor.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+name: alif-emmc
+append:
+  EXTRA_CONF_FILE: alif-emmc.conf
+
+boards:
+  # B1 Balletto and E1C boards (gpio7 for sd-pwr, gpio0 for sd-vsel)
+  /(alif_b1|alif_e1c).*/.*/rtss_he/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: alif_balletto_e1c_dk.overlay
+      EXTRA_CONF_FILE: alif_balletto_e1c_dk.conf
+
+  # E7 Ensemble boards (no reset gpio)
+  /(alif_e7).*/.*/rtss_(hp|he)/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: alif_ensemble_e7_dk.overlay
+
+  # E8 Ensemble boards (gpio14 for reset)
+  /(alif_e8).*/.*/rtss_(hp|he)/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: alif_ensemble_e8_dk.overlay
+      EXTRA_CONF_FILE: alif_ensemble_e8_dk.conf

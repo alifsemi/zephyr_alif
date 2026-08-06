@@ -69,6 +69,9 @@ tests:
     filter: dt_compat_enabled("zephyr,sdmmc-disk")
     integration_platforms:
       - frdm_k64f
+  sample.filesystem.fat_fs.has_mmc_disk:
+    build_only: true
+    filter: dt_compat_enabled("zephyr,mmc-disk")
   sample.filesystem.ext2:
     simulation_exclude:
       - renode
