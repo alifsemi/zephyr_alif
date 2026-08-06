@@ -1,0 +1,20 @@
+/*
+ * Copyright (c) 2026 Alif Semiconductor.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+ns: &ns {
+	status = "okay";
+};
+
+sdhc: &sdhc {
+	status = "okay";
+	/* eMMC is always present — no card-detect GPIO needed */
+	/delete-property/ cd-gpios;
+
+	mmc {
+		compatible = "zephyr,mmc-disk";
+		disk-name = "SD2";
+		status = "okay";
+	};
+};

@@ -86,3 +86,33 @@ the sample.
 
 A microSD card must be present in a microSD card slot of the board, for the sample to execute.
 After starting the sample a contents of a root directory should be printed on the console.
+
+Building and Running for Alif eMMC mode
+****************************************
+
+Alif Semiconductor boards support eMMC mode via the ``alif-emmc`` snippet.
+This snippet overrides the SDHC disk node to use the ``zephyr,mmc-disk`` compatible,
+enabling the MMC disk driver and MMC SD subsystem stack.
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/subsys/fs/fs_sample
+   :board: alif_e7_dk/ensemble/e7/rtss_hp
+   :gen-args: -DSNIPPET=alif-emmc
+   :goals: build
+   :compact:
+
+The eMMC chip must be present on the board. The sample will initialize the MMC
+disk, mount it as a FAT filesystem, and list directory contents on the console.
+
+Building and Running for Alif SD card mode
+******************************************
+
+Alif Semiconductor boards support SD card mode via the ``alif-sdmmc`` snippet.
+This snippet uses the ``zephyr,sdmmc-disk`` compatible with card-detect GPIO.
+
+.. zephyr-app-commands::
+   :zephyr-app: samples/subsys/fs/fs_sample
+   :board: alif_e7_dk/ensemble/e7/rtss_hp
+   :gen-args: -DSNIPPET=alif-sdmmc
+   :goals: build
+   :compact:
