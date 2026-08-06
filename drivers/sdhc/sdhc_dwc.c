@@ -43,6 +43,7 @@ struct sdhc_dwc_config {
 	uint32_t power_delay_ms;
 	uint8_t bus_width;
 	bool no_1_8_v;
+	bool is_emmc;
 #ifdef CONFIG_REGULATOR
 	const struct device *vmmc;
 	const struct device *vqmmc;
@@ -1167,6 +1168,12 @@ static int sdhc_dwc_init(const struct device *dev)
 		return ret;
 	}
 
+	/* Enable eMMC mode if the DTS has a zephyr,mmc-disk child node enabled */
+	if (config->is_emmc) {
+		config->regs->DWC_SDHC_EMMC_CTRL_R |= DWC_SDHC_EMMC_CTRL_ENABLE_Msk;
+		LOG_DBG("eMMC control enabled");
+	}
+
 	config->irq_config_func(dev);
 
 	/* Populate host props from capabilities registers */
@@ -1286,6 +1293,14 @@ static void sdhc_dwc_wakeup_isr(const struct device *dev)
 		(DEVICE_DT_GET(DT_PHANDLE(node_id, prop))), \
 		(NULL))
 
+/* Check if any child of the SDHC instance has zephyr,mmc-disk compatible and status okay */
+#define SDHC_DWC_IS_EMMC_CHILD(node_id) \
+	DT_NODE_HAS_COMPAT_STATUS(node_id, zephyr_mmc_disk, okay)
+#define SDHC_DWC_IS_EMMC(n) \
+	COND_CODE_1(IS_EQ(DT_INST_CHILD_NUM_STATUS_OKAY(n), 0), (0), \
+		(DT_FOREACH_CHILD_STATUS_OKAY_SEP(DT_DRV_INST(n), \
+			SDHC_DWC_IS_EMMC_CHILD, (||))))
+
 #define SDHC_DWC_INIT(n)                                                           \
 	PINCTRL_DT_INST_DEFINE(n);                                                     \
                                                                                    \
@@ -1324,6 +1339,7 @@ static void sdhc_dwc_wakeup_isr(const struct device *dev)
 		.power_delay_ms = DT_INST_PROP_OR(n, power_delay_ms, 500),                 \
 		.bus_width = DT_INST_PROP_OR(n, bus_width, 4),                             \
 		.no_1_8_v = DT_INST_PROP_OR(n, no_1_8_v, false),                           \
+		.is_emmc = SDHC_DWC_IS_EMMC(n),                                            \
 		IF_ENABLED(CONFIG_REGULATOR, (                                            \
 			.vmmc = SDHC_DWC_REGULATOR_GET_OR_NULL(DT_DRV_INST(n), vmmc_supply),   \
 			.vqmmc = SDHC_DWC_REGULATOR_GET_OR_NULL(DT_DRV_INST(n), vqmmc_supply),\
