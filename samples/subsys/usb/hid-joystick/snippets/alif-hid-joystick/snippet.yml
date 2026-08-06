@@ -1,0 +1,21 @@
+#
+# Copyright (c) 2026 Alif Semiconductor.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+name: alif-hid-joystick
+
+append:
+  EXTRA_CONF_FILE: alif-hid-joystick.conf
+
+boards:
+  # E1C Balletto boards (gpio5 joystick)
+  /alif_e1c_dk.*/.*/rtss_he/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: alif_balletto_dk.overlay
+
+  # E7/E8 Ensemble boards (lpgpio joystick)
+  /alif_(e7|e8)_dk.*/.*/rtss_(hp|he)/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: alif_ensemble_dk.overlay
