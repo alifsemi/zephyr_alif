@@ -59,7 +59,7 @@ static void dump_monkey_info(const struct shell *sh)
 	shell_print(sh, "id   device    active");
 	for (size_t i = 0; i < CONFIG_LV_Z_MAX_MONKEY_COUNT; i++) {
 		if (lvgl_monkeys[i] != NULL) {
-			shell_print(sh, "%-4u %-9s %-3s", i,
+			shell_print(sh, "%-4zu %-9s %-3s", i,
 				    lvgl_monkey_indev_as_string(lvgl_monkeys[i]),
 				    lv_monkey_get_enable(lvgl_monkeys[i]) ? "yes" : "no");
 		}
@@ -188,8 +188,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		      "Usage: lvgl monkey create [pointer|keypad|button|encoder]",
 		      cmd_lvgl_monkey_create, 1, 1),
 	SHELL_CMD_ARG(set, NULL,
-		      "Activate/deactive a monkey instance\n"
-		      "Usage: lvgl monkey set <index> <active|inactive>\n",
+		      "Activate/deactivate a monkey instance\n"
+		      "Usage: lvgl monkey set <index> <active|inactive>",
 		      cmd_lvgl_monkey_set, 3, 0),
 	SHELL_SUBCMD_SET_END);
 #endif /* CONFIG_LV_USE_MONKEY */
