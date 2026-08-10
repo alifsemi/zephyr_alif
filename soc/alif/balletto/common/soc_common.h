@@ -55,6 +55,7 @@
 #define CLKCTRL_PER_SLV_DAC_CTRL                (CLKCTRL_PER_SLV_BASE + 0x34)
 #define CLKCTRL_PER_SLV_CMP_CTRL                (CLKCTRL_PER_SLV_BASE + 0x38)
 #define CLKCTRL_PER_SLV_OSPI_CTRL               (CLKCTRL_PER_SLV_BASE + 0x3C)
+#define CLKCTRL_PER_SLV_GPIO_CTRLn              (CLKCTRL_PER_SLV_BASE + 0x80)
 
 /* Expansion Master-0 registers. */
 #define CLKCTRL_PER_MST_BASE                    0x4903F000

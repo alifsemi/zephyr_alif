@@ -223,7 +223,11 @@ static int gpio_dw_pin_interrupt_configure(const struct device *port,
 			dw_set_bit(base_addr, INT_POLARITY, pin,
 				   (trig == GPIO_INT_TRIG_HIGH));
 
-			if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2)) { /* ENSEMBLE_GEN2 SoC */
+			if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2) ||
+			    IS_ENABLED(CONFIG_SOC_FAMILY_BALLETTO) ||
+			    IS_ENABLED(CONFIG_SOC_SERIES_E1C)) {
+				/* ENSEMBLE_GEN2 SoC ,SOC_FAMILY_BALLETTO and SOC_SERIES_E1C */
+
 				/* default enable debounce when using interrupts. */
 				dw_set_bit(base_addr, PORTA_DEBOUNCE, pin, 1);
 			}
