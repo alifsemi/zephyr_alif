@@ -16,6 +16,40 @@ LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
 #include <zephyr/pm/pm.h>
 #include <zephyr/dt-bindings/dma/alif_dma_event_router.h>
 
+/* GPIO: enable debounce clock / divisor. */
+#define GPIO_DEBOUNCE_CK_DIV_MASK   0x3FF
+#define GPIO_DEBOUNCE_CK_DIV2       BIT(0)
+#define GPIO_DEBOUNCE_CK_ENABLE     BIT(12)
+
+/* GPIO: enable debounce clock / divisor for gpio0..gpio8 */
+#define EXPSLV_GPIO_DEBOUNCE_CK_EN(n) \
+	IF_ENABLED(DT_NODE_HAS_STATUS(DT_NODELABEL(gpio##n), okay), ( \
+		sys_clear_bits(CLKCTRL_PER_SLV_GPIO_CTRLn + (0x4 * n), GPIO_DEBOUNCE_CK_DIV_MASK); \
+		sys_set_bits(CLKCTRL_PER_SLV_GPIO_CTRLn + (0x4 * n), \
+				GPIO_DEBOUNCE_CK_ENABLE | GPIO_DEBOUNCE_CK_DIV2); \
+	))
+
+
+/* EXPSLV gpio0..gpio8 */
+#define EXPSLV_ALL_GPIO_DEBOUNCE_CK_EN() \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(0);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(1);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(2);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(3);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(4);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(5);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(6);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(7);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(8)
+
+static inline void enable_gpio_debounce_clock(void)
+{
+	/* EXPSLV gpio0..gpio8 */
+	EXPSLV_ALL_GPIO_DEBOUNCE_CK_EN();
+
+	/* LPGPIO debounce clock is always enabled. */
+}
+
 /*
  * Lock deeper power states during early boot to prevent premature sleep
  *
@@ -233,6 +267,9 @@ static int soc_init(void)
 	/* Enable HFOSC and 160MHz clock */
 	sys_set_bits(CGU_CLK_ENA, BIT(20) | BIT(23));
 #endif
+
+	/* GPIO: enable debounce clock. */
+	enable_gpio_debounce_clock();
 	return 0;
 }
 
