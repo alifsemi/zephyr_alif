@@ -14,13 +14,16 @@
 #include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
 #endif
 
-#if CONFIG_ENSEMBLE_GEN2 /* ENSEMBLE_GEN2 SoC */
+/* ENSENBLE_GEN2 soc and SOC_SERIES_E1C */
+#if CONFIG_ENSEMBLE_GEN2 || CONFIG_SOC_SERIES_E1C
 /* GPIO: enable debounce clock / divisor. */
 #define GPIO_DEBOUNCE_CK_DIV_MASK   0x3FF
 #define GPIO_DEBOUNCE_CK_DIV2       BIT(0)
 #define GPIO_DEBOUNCE_CK_ENABLE     BIT(12)
 
-/* GPIO: enable debounce clock / divisor for gpio0..gpio14 */
+/* GPIO: enable debounce clock / divisor for gpio0..gpio14
+ * for ENSEMBLE_GEN2 and gpio0..gpio8 for SOC_SERIES_E1C
+ */
 #define EXPSLV_GPIO_DEBOUNCE_CK_EN(n) \
 	IF_ENABLED(DT_NODE_HAS_STATUS(DT_NODELABEL(gpio##n), okay), ( \
 		sys_clear_bits(CLKCTRL_PER_SLV_GPIO_CTRLn + (0x4 * n), GPIO_DEBOUNCE_CK_DIV_MASK); \
@@ -28,11 +31,16 @@
 				GPIO_DEBOUNCE_CK_ENABLE | GPIO_DEBOUNCE_CK_DIV2); \
 	))
 
+#if CONFIG_ENSEMBLE_GEN2
 /* GPIO: enable debounce clock for gpio16 and gpio17 */
 #define AON_GPIO_DEBOUNCE_CK_EN(n, bit) \
 	IF_ENABLED(DT_NODE_HAS_STATUS(DT_NODELABEL(gpio##n), okay), \
 		(sys_set_bits(AON_RTSS_HE_LPPERI_CKEN, BIT(bit));))
 
+/* AON gpio16 and gpio17. */
+#define AON_ALL_GPIO_DEBOUNCE_CK_EN() \
+	AON_GPIO_DEBOUNCE_CK_EN(16, 8); \
+	AON_GPIO_DEBOUNCE_CK_EN(17, 9)
 /* EXPSLV gpio0..gpio14 */
 #define EXPSLV_ALL_GPIO_DEBOUNCE_CK_EN() \
 	EXPSLV_GPIO_DEBOUNCE_CK_EN(0);  \
@@ -50,23 +58,35 @@
 	EXPSLV_GPIO_DEBOUNCE_CK_EN(12); \
 	EXPSLV_GPIO_DEBOUNCE_CK_EN(13); \
 	EXPSLV_GPIO_DEBOUNCE_CK_EN(14)
-
-/* AON gpio16 and gpio17. */
-#define AON_ALL_GPIO_DEBOUNCE_CK_EN() \
-	AON_GPIO_DEBOUNCE_CK_EN(16, 8); \
-	AON_GPIO_DEBOUNCE_CK_EN(17, 9)
+#elif CONFIG_SOC_SERIES_E1C
+/* EXPSLV gpio0..gpio8 */
+#define EXPSLV_ALL_GPIO_DEBOUNCE_CK_EN() \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(0);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(1);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(2);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(3);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(4);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(5);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(6);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(7);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(8)
+#endif
 
 static inline void enable_gpio_debounce_clock(void)
 {
-	/* EXPSLV gpio0..gpio14 */
+	/* EXPSLV gpio0..gpio14 for ENSEMBLE_GEN2 and
+	 * gpio0..gpio8 for SOC_SERIES_E1C
+	 */
 	EXPSLV_ALL_GPIO_DEBOUNCE_CK_EN();
 
 	/* LPGPIO(gpio15) debounce clock is always enabled. */
 
+#if CONFIG_ENSEMBLE_GEN2
 	/* AON gpio16 and gpio17. */
 	AON_ALL_GPIO_DEBOUNCE_CK_EN();
+#endif
 }
-#endif /* CONFIG_ENSEMBLE_GEN2 */
+#endif /* CONFIG_ENSEMBLE_GEN2 and CONFIG_SOC_SERIES_E1C */
 
 #if IS_ENABLED(CONFIG_PM)
 
@@ -381,10 +401,11 @@ static int soc_init(void)
 	sys_write32(0x1, VBAT_GPIO_CTRL_EN);
 #endif
 
-#if CONFIG_ENSEMBLE_GEN2 /* ENSEMBLE_GEN2 SoC */
+/* ENSENBLE_GEN2 soc and SOC_SERIES_E1C */
+#if CONFIG_ENSEMBLE_GEN2 || CONFIG_SOC_SERIES_E1C
 	/* GPIO: enable debounce clock. */
 	enable_gpio_debounce_clock();
-#endif /* CONFIG_ENSEMBLE_GEN2 */
+#endif /* ENSENBLE_GEN2 soc and SOC_SERIES_E1C */
 
 	/* CAN settings */
 #if (DT_NODE_HAS_STATUS(DT_NODELABEL(can0), okay) || \
