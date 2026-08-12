@@ -8,11 +8,16 @@ import sys
 import json
 import shutil
 import re
-import fdt
 
 from pathlib import Path
 from runners.core import ZephyrBinaryRunner, RunnerCaps, FileType
 from runners.jlink import JLinkBinaryRunner
+
+try:
+    import fdt
+    MISSING_REQUIREMENTS = False
+except ImportError:
+    MISSING_REQUIREMENTS = True
 
 
 class AlifImageBinaryRunner(ZephyrBinaryRunner):
@@ -301,6 +306,11 @@ class AlifImageBinaryRunner(ZephyrBinaryRunner):
     @classmethod
     def get_itcm_address(cls, logger):
         """Retrieve itcm address from DTS."""
+        if MISSING_REQUIREMENTS:
+            raise RuntimeError(
+                "the 'fdt' Python package is required to flash an image linked "
+                "into ITCM; install it with 'python -m pip install fdt'")
+
         dts_path = os.path.join(cls.zephyr_repo, 'build', 'zephyr', 'zephyr.dts')
 
         try:
