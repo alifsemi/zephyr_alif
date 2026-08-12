@@ -116,6 +116,42 @@ SYS_INIT(soc_pm_notifier_init, PRE_KERNEL_2, 1);
 
 #endif /* CONFIG_PM */
 
+/* Enable analog peripheral supply (LDO + bandgap). Required by both the
+ * regular comparator (cmp) instances and the low-power comparator (lpcmp).
+ */
+#if DT_HAS_COMPAT_STATUS_OKAY(alif_cmp)
+static int soc_ana_periph_enable(void)
+{
+	return se_service_power_settings_set(POWER_SETTING_ANA_PERIPH_EN, true);
+}
+SYS_INIT(soc_ana_periph_enable, POST_KERNEL, CONFIG_COMPARATOR_INIT_PRIORITY);
+#endif /* alif_cmp */
+
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpcmp), okay)
+static int soc_lpcmp_init(void)
+{
+	const lpcmp_configure_t lpcmp_cfg = {
+		.comp_lp0_hyst = DT_ENUM_IDX(DT_NODELABEL(lpcmp), hysteresis_level),
+		.comp_lp0_in_p_sel = DT_ENUM_IDX(DT_NODELABEL(lpcmp), positive_input),
+		.comp_lp0_in_m_sel = DT_ENUM_IDX(DT_NODELABEL(lpcmp), negative_input),
+		.comp_lp_en = true,
+		.lpcomp_clk32k_en = true,
+		.lpcomp_clk_sel = 1,
+	};
+	int ret;
+
+	/* Enable analog supply before configuring LPCMP */
+	ret = se_service_power_settings_set(POWER_SETTING_ANA_PERIPH_EN, true);
+	if (ret) {
+		return ret;
+	}
+
+	return se_service_configure_lpcmp(&lpcmp_cfg);
+}
+SYS_INIT(soc_lpcmp_init, POST_KERNEL, CONFIG_COMPARATOR_INIT_PRIORITY);
+#endif /* lpcmp */
+
 /* Configure HE_DMA_SEL register for LP-SPI based on DTS dmas property.
  * B1: lpspi0 always uses DMA2.
  *   HE_DMA_SEL[5:4]: 0x0 = DMA2 group 1, 0x1/0x2/0x3 = DMA2 group 2
