@@ -16,6 +16,7 @@ def test_runner_imports():
 
     expected = set((
         # zephyr-keep-sorted-start
+        'alif_flash',
         'arc-nsim',
         'blackmagicprobe',
         'bossac',
