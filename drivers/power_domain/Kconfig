@@ -1,0 +1,139 @@
+# Copyright (c) 2022, CSIRO.
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig POWER_DOMAIN
+	bool "Power domain drivers"
+	help
+	  Include drivers for power domains in system config
+
+if POWER_DOMAIN
+
+module = POWER_DOMAIN
+module-str = power_domain
+source "subsys/logging/Kconfig.template.log_config"
+
+config POWER_DOMAIN_INIT_PRIORITY
+	int "Power domain init priority"
+	default 75
+	help
+	  Power domain initialization priority.
+
+config POWER_DOMAIN_GPIO
+	bool "GPIO controlled power domain"
+	default y
+	depends on DT_HAS_POWER_DOMAIN_GPIO_ENABLED
+	depends on GPIO
+	depends on PM_DEVICE || !PM_DEVICE_POWER_DOMAIN
+	depends on TIMEOUT_64BIT
+	select DEVICE_DEPS
+
+if POWER_DOMAIN_GPIO
+
+config POWER_DOMAIN_GPIO_INIT_PRIORITY
+	int "GPIO power domain init priority"
+	default POWER_DOMAIN_INIT_PRIORITY
+	help
+	  GPIO power domain initialization priority.
+
+endif #POWER_DOMAIN_GPIO_MONITOR
+
+config POWER_DOMAIN_INTEL_ADSP
+	bool "Use Intel ADSP power gating mechanisms"
+	default y
+	depends on DT_HAS_INTEL_ADSP_POWER_DOMAIN_ENABLED
+	select DEVICE_DEPS
+	help
+	  Include Intel ADSP power domain control mechanisms
+
+if POWER_DOMAIN_INTEL_ADSP
+
+config POWER_DOMAIN_INTEL_ADSP_INIT_PRIORITY
+	int "Intel ADSP power domain init priority"
+	default KERNEL_INIT_PRIORITY_DEFAULT
+	help
+	  Intel ADSP power domain initialization priority.
+
+endif #POWER_DOMAIN_INTEL_ADSP
+
+config POWER_DOMAIN_GPIO_MONITOR
+	bool "GPIO monitor for sensing power on rail"
+	default y
+	depends on DT_HAS_POWER_DOMAIN_GPIO_MONITOR_ENABLED
+	depends on GPIO
+	depends on PM_DEVICE
+	select DEVICE_DEPS
+
+if POWER_DOMAIN_GPIO_MONITOR
+
+config POWER_DOMAIN_GPIO_MONITOR_INIT_PRIORITY
+	int "GPIO monitor power domain init priority"
+	default POWER_DOMAIN_INIT_PRIORITY
+	help
+	  GPIO monitor power domain initialization priority.
+
+endif #POWER_DOMAIN_GPIO_MONITOR
+
+config POWER_DOMAIN_NXP_SCU
+	bool "NXP SCU-managed PD driver"
+	default y
+	depends on DT_HAS_NXP_SCU_PD_ENABLED
+	help
+	  Enable support for NXPs SCU-managed power domain driver.
+
+if POWER_DOMAIN_NXP_SCU
+
+config POWER_DOMAIN_NXP_SCU_INIT_PRIORITY
+	int "NXP SCU-managed PD driver init priority"
+	default 10
+	help
+	  NXP SCU-managed PD driver initialization priority.
+
+endif #POWER_DOMAIN_NXP_SCU
+
+config POWER_DOMAIN_SOC_PM_STATE
+	bool "SoC PM state power domain"
+	default y
+	depends on DT_HAS_POWER_DOMAIN_SOC_STATE_CHANGE_ENABLED
+	select DEVICE_DEPS
+	help
+	  Generic power domain control to turn on/off devices when the
+	  PM subsystem transitions in and out certain power states.
+
+config POWER_DOMAIN_ALIF
+	bool "Alif SoC power domain driver"
+	default y
+	depends on DT_HAS_ALIF_POWER_DOMAIN_ENABLED
+	depends on SOC_FAMILY_ENSEMBLE || SOC_FAMILY_BALLETTO
+	select DEVICE_DEPS
+	select PM_DEVICE
+	help
+	  Power domain driver for Alif Semiconductor SoCs (Ensemble and Balletto families).
+	  This driver manages power domains (PD_SYST, PD_SSE700_AON, etc.) through SE
+	  Services aiPM interface. It provides reference counting for power domain requests,
+	  integrates with PM subsystem for S2RAM/SOFT_OFF transitions, and ensures proper
+	  power domain state management across sleep/wake cycles. Uses Zephyr's PM device
+	  framework to automatically manage peripherals on power domains.
+
+	  Note: This automatically enables PM_DEVICE, which in turn enables
+	  PM_DEVICE_POWER_DOMAIN (default y), allowing peripherals to use the
+	  power-domains device tree property.
+
+if POWER_DOMAIN_ALIF
+
+config POWER_DOMAIN_ALIF_INIT_PRIORITY
+	int "Alif power domain init priority"
+	default 47
+	help
+	  Alif power domain initialization priority. Must be initialized at PRE_KERNEL_1
+	  level after MHU driver (priority 40) and SE services (priority 45), but before
+	  peripheral drivers (which default to priority 50 at PRE_KERNEL_1).
+
+	  Initialization order:
+	    Priority 40: MHU driver (CONFIG_KERNEL_INIT_PRIORITY_DEFAULT)
+	    Priority 45: SE services (CONFIG_SE_SERVICE_INIT_PRIORITY)
+	    Priority 47: Power domain driver (this config)
+	    Priority 50: Peripherals (CONFIG_SERIAL_INIT_PRIORITY, etc.)
+
+endif #POWER_DOMAIN_ALIF
+
+endif

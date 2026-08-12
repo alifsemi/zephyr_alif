@@ -1,0 +1,6 @@
+board:
+  name: alif_b1_sk
+  full_name: alif b1 SK
+  vendor: alif
+  socs:
+  - name: ab1c1f4m51820ph0

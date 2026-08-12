@@ -1,0 +1,117 @@
+# Copyright (c) 2024, Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: ILI9488 320x480 display controller accessed via DSI Interface
+
+compatible: "ilitek,ili9488"
+
+include: ["mipi-dsi-device.yaml", "ilitek,ili9xxx-common.yaml"]
+
+properties:
+  frmctr1:
+    type: uint8-array
+    default: [0xb0, 0x11]
+    description:
+      Frame rate control (in normal mode / full colors) (FRMCTR1) register value.
+
+  disctrl:
+    type: uint8-array
+    default: [0x02, 0x02, 0x3b]
+    description:
+      Display function control (DISCTRL) register value. Note that changing
+      default SS bit value (0) may interfere with display rotation.
+
+  pwctrl1:
+    type: uint8-array
+    default: [0x0e, 0x0e]
+    description:
+      Power control 1 (PWCTRL1) register values.
+
+  pwctrl2:
+    type: uint8-array
+    default: [0x43]
+    description:
+      Power control 2 (PWCTRL2) register values.
+
+  vmctrl:
+    type: uint8-array
+    default: [0x00, 0x40, 0x00, 0x40]
+    description:
+      VCOM control (VMCTRL) register values.
+
+  pgamctrl:
+    type: uint8-array
+    default: [
+      0x0f,
+      0x1f,
+      0x1c,
+      0x0b,
+      0x0e,
+      0x09,
+      0x48,
+      0x99,
+      0x38,
+      0x0a,
+      0x14,
+      0x06,
+      0x11,
+      0x09,
+      0x00
+    ]
+    description:
+      Positive gamma correction (PGAMCTRL) register values.
+
+  ngamctrl:
+    type: uint8-array
+    default: [
+      0x0f,
+      0x36,
+      0x2e,
+      0x09,
+      0x0a,
+      0x04,
+      0x46,
+      0x66,
+      0x37,
+      0x06,
+      0x10,
+      0x04,
+      0x24,
+      0x20,
+      0x00
+    ]
+    description:
+      Negative gamma correction (NGAMCTRL) register values.
+
+  reset-gpios:
+    type: phandle-array
+    description: |
+      The RESETn pin is asserted to disable the sensor causing a hard reset.
+      The sensor receives this as an active-low signal.
+
+  bl-gpios:
+    type: phandle-array
+    description: |
+      The BLn pin is asserted to control the backlight of the panel. The sensor
+      receives this as an active-high signal.
+
+  video-mode:
+    type: string
+    required: false
+    enum:
+      - "burst"
+      - "nb-sync-pulse"
+      - "nb-sync-events"
+    description: |
+      This property specifies whether the panel works in burst mode or
+      non-burst mode.
+
+  command-tx-mode:
+    type: string
+    required: false
+    enum:
+      - "low-power"
+      - "high-speed"
+    description: |
+      This property specifies whether the DSI commands transmission is
+      supported in Low-Power or High-Speed mode.

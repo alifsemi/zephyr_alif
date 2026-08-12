@@ -1,0 +1,31 @@
+# Copyright (c) 2023 Alif Semiconductor.
+# SPDX-License-Identifier: Apache-2.0
+
+description: Synopsys DesignWare RTC counter node
+
+compatible: "snps,dw-apb-rtc"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true
+
+  wrap-enable:
+    type: boolean
+    description: Wrap mode enable disable
+
+  prescaler:
+    type: int
+    description: prescaler load value
+
+  load-value:
+    type: int
+    description: counter load value
+
+  clock-frequency:
+    type: int
+    description: counter clock frequency

@@ -1,0 +1,26 @@
+# MIPI-DPHY configuration options.
+
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig MIPI_DPHY
+	bool "MIPI-DPHY Host Controllers"
+	select EXPERIMENTAL
+	help
+	  Add support for MIPI-DPHY host controllers for DSI and CSI clients.
+
+if MIPI_DPHY
+
+module = MIPI_DPHY
+module-str = mipi_dphy
+source "subsys/logging/Kconfig.template.log_config"
+
+config MIPI_DPHY_INIT_PRIORITY
+	int "Initialization priority"
+	default 40
+	help
+	  MIPI-DPHY Host Controllers initialization priority.
+
+source "drivers/mipi_dphy/Kconfig.dw"
+
+endif

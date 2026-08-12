@@ -1,0 +1,11 @@
+identifier: arduino_uno_r4_wifi
+name: Arduino Uno R4 WiFi
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+  - gnuarmemb
+ram: 32
+supported:
+  - gpio
+  - uart

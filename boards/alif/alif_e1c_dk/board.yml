@@ -1,0 +1,6 @@
+board:
+  name: alif_e1c_dk
+  full_name: alif e1c DevKit
+  vendor: alif
+  socs:
+  - name: 'ae1c1f4051920hh'

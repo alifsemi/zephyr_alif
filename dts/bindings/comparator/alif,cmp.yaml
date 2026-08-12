@@ -1,0 +1,76 @@
+# Copyright (c) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Alif Comparator
+
+compatible: "alif,cmp"
+include: [base.yaml, pinctrl-device.yaml]
+
+properties:
+  reg:
+    required: true
+
+  driver_instance:
+    type: string
+    required: true
+    description: Selects the comparator hardware instance
+    enum:
+      - "CMP_INSTANCE_LP"
+      - "CMP_INSTANCE_0"
+      - "CMP_INSTANCE_1"
+      - "CMP_INSTANCE_2"
+      - "CMP_INSTANCE_3"
+
+  positive_input:
+    type: string
+    required: true
+    description: select input to the positive terminal of comparator
+    enum:
+      - "CMP_POS_IN0"
+      - "CMP_POS_IN1"
+      - "CMP_POS_IN2"
+      - "CMP_POS_IN3"
+
+  polarity_en:
+    type: boolean
+    description: This inverts the comparator results
+
+  prescaler:
+    type: int
+    description: This register sets the clocking rate for filtering
+
+  filter_taps:
+    type: int
+    description: set the filter taps
+
+  negative_input:
+    type: string
+    required: true
+    description: select input to the negative terminal of comparator
+    enum:
+      - "CMP_NEG_IN0"
+      - "CMP_NEG_IN1"
+      - "CMP_NEG_IN2"
+      - "CMP_NEG_IN3"
+
+  cmp-gpios:
+    type: phandle-array
+    description: |
+      An array of chip select GPIOs to use. Each element
+      in the array specifies a GPIO. The index in the array
+      corresponds to the child node that the CS gpio controls.
+
+
+  hysteresis_level:
+    type: string
+    required: true
+    description: Select comparator hysteresis level, step size is 6mV
+    enum:
+      - "0mV"
+      - "6mV"
+      - "12mV"
+      - "18mV"
+      - "24mV"
+      - "30mV"
+      - "36mV"
+      - "42mV"

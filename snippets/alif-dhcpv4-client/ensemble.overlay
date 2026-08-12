@@ -1,0 +1,20 @@
+/*
+ * SPDX-FileCopyrightText: Copyright Alif Semiconductor
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+&ns {
+	status = "okay";
+};
+
+&ethernet {
+	status = "okay";
+};
+
+&mdio {
+	status = "okay";
+};
+
+&ethernet_phy {
+	status = "okay";
+};

@@ -1,0 +1,120 @@
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: MIPI CSI-2 controller IP used by Alif SoC.
+
+compatible: "snps,designware-csi"
+
+include: base.yaml
+
+properties:
+  interrupts:
+    required: true
+
+  data-lanes1:
+    type: int
+    default: 2
+    description:
+      Number of data lanes for PHY-1
+    enum: [1, 2]
+
+  data-lanes2:
+    type: int
+    default: 2
+    description:
+      Number of data lanes for PHY-2
+    enum: [1, 2]
+
+  phy-if:
+    type: phandle-array
+    required: true
+    specifier-space: dphy
+    description:
+      Handle to the PHY interface.
+
+  ipi-mode:
+    type: string
+    required: false
+    default: "Camera"
+    description: |
+      Video mode transmission type.
+    enum: ["Camera", "Controller"]
+
+  csi-vsa:
+    type: int
+    required: false
+    description: |
+      The Vertical Synchronism Active time in Horizontal lines.
+
+  csi-vbp:
+    type: int
+    required: false
+    description: |
+      The Vertical back porch time in Horizontal lines.
+
+  csi-vfp:
+    type: int
+    required: false
+    description: |
+      The Vertical front porch time in Horizontal lines.
+
+  csi-vact:
+    type: int
+    required: false
+    description: |
+      The vertical active period time in number of Horizontal lines.
+
+  csi-hsa:
+    type: int
+    required: false
+    description: |
+      The Horizontal Synchronism Active time in PIXCLK.
+
+  csi-hbp:
+    type: int
+    required: false
+    description: |
+      The Horizontal back porch time in PIXCLK.
+
+  csi-hsd:
+    type: int
+    required: false
+    description: |
+      The Horizontal synch porch time in PIXCLK.
+
+  csi-hact:
+    type: int
+    required: false
+    description: |
+      The Horizontal active time in PIXCLK.
+
+  rx-ddr-clk1:
+    type: int
+    required: false
+    default: 400000000
+    description: |
+      The value of RX DDR Lane Clock coming from CMOS sensor to RX D-PHY and
+      to MIPI-CSI IP as RXBYTECLKHS. This is the clock value from DPHY ID 0.
+
+  rx-ddr-clk2:
+    type: int
+    required: false
+    default: 400000000
+    description: |
+      The value of RX DDR Lane Clock coming from CMOS sensor to RX D-PHY and
+      to MIPI-CSI IP as RXBYTECLKHS. This is the clock value from DPHY ID 1.
+
+child-binding:
+  child-binding:
+    child-binding:
+      include: video-interfaces.yaml
+      properties:
+        reg:
+          type: int
+          enum:
+            - 0 # Selfie Camera EP
+            - 1 # Standard Camera EP
+            - 2 # CPI EP
+          description: Endpoints to Selfie and Standard can be used.
+            Only one of these EPs are supported by CSI to transfer data to CPI.
+            Though, multiple cameras can be configured simultaneously.

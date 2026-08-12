@@ -1,0 +1,67 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_FAMILY_ENSEMBLE
+	bool "Alif Ensemble family of SoC"
+
+
+if SOC_FAMILY_ENSEMBLE
+
+config RTSS_HE
+	select ARM
+	select ARMV8_M_DSP
+	select ARMV8_1_M_MVEI
+	select ARMV8_1_M_MVEF
+	select CPU_CORTEX_M55
+	select CPU_CORTEX_M_HAS_SYSTICK
+	select CPU_HAS_ARM_MPU
+	select ARM_MPU
+	select CPU_HAS_ARM_SAU
+	select CPU_HAS_FPU
+	select CPU_HAS_CUSTOM_FIXED_SOC_MPU_REGIONS
+	select SOC_RESET_HOOK
+	select BUILTIN_STACK_GUARD
+	select PINCTRL
+	select CLOCK_CONTROL
+	select HAS_ALIF_SE_SERVICES
+	select HAS_PM
+	select HAS_POWEROFF
+	select CORTEX_M_SYSTICK_RESET_BY_LPM if (PM && CORTEX_M_SYSTICK && \
+						 !CORTEX_M_SYSTICK_LPM_TIMER_NONE)
+
+config RTSS_HP
+	select ARM
+	select ARMV8_M_DSP
+	select ARMV8_1_M_MVEI
+	select ARMV8_1_M_MVEF
+	select CPU_CORTEX_M55
+	select CPU_CORTEX_M_HAS_SYSTICK
+	select CPU_HAS_ARM_MPU
+	select ARM_MPU
+	select CPU_HAS_ARM_SAU
+	select CPU_HAS_FPU
+	select CPU_HAS_CUSTOM_FIXED_SOC_MPU_REGIONS
+	select SOC_RESET_HOOK
+	select BUILTIN_STACK_GUARD
+	select PINCTRL
+	select CLOCK_CONTROL
+	select HAS_ALIF_SE_SERVICES
+	select HAS_PM
+	select HAS_POWEROFF
+	select CORTEX_M_SYSTICK_RESET_BY_LPM if (PM && CORTEX_M_SYSTICK && \
+						 !CORTEX_M_SYSTICK_LPM_TIMER_NONE)
+
+config APSS
+	select ARM
+	select CPU_CORTEX_A32
+	select GIC_V2
+	select PINCTRL
+	select CLOCK_CONTROL
+
+config ENSEMBLE_GEN2
+	bool
+
+rsource "*/Kconfig"
+
+endif # SOC_FAMILY_ENSEMBLE

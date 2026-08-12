@@ -1,0 +1,12 @@
+# Copyright (C) 2024 Alif Semiconductor.
+# SPDX-License-Identifier: Apache-2.0
+
+description: Alif LP-I2C node
+
+compatible: "alif,lpi2c"
+
+include: [base.yaml, i2c-controller.yaml, pinctrl-device.yaml]
+
+properties:
+  interrupts:
+    required: true

@@ -1,0 +1,13 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <alif/ensemble/e8/ae822fa0e5597xx0.dtsi>
+
+/delete-node/ &uart0;
+/delete-node/ &uart1;
+/delete-node/ &uart3;
+/delete-node/ &uart5;
+/delete-node/ &uart6;
+/delete-node/ &uart7;

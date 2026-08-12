@@ -1,0 +1,56 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Alif Semiconductor individual power domain device
+
+  Each power domain is a separate device that manages one specific Alif power domain
+  (SYST, SSE700_AON, etc.) through SE Services aiPM interface.
+
+  This design allows Zephyr's PM framework to automatically handle power domains
+  through runtime PM (pm_device_runtime_get/put) or system PM (suspend/resume).
+
+  Example usage in board DTS:
+
+    #include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
+
+    pd_syst: power-domain-syst {
+        compatible = "alif,power-domain";
+        domain-id = <ALIF_PD_SYST>;
+        #power-domain-cells = <0>;
+    };
+
+    pd_sse700_aon: power-domain-sse700-aon {
+        compatible = "alif,power-domain";
+        domain-id = <ALIF_PD_SSE700_AON>;
+        #power-domain-cells = <0>;
+    };
+
+    &uart0 {
+        power-domains = <&pd_syst>;
+    };
+
+compatible: "alif,power-domain"
+
+include: power-domain.yaml
+
+properties:
+  domain-id:
+    type: int
+    required: true
+    description: |
+      Alif power domain ID (0-9) from alif_power_domain.h:
+        ALIF_PD_VBAT_AON      = 0
+        ALIF_PD_SRAM_CTRL_AON = 1
+        ALIF_PD_SSE700_AON    = 2
+        ALIF_PD_RTSS_HE       = 3
+        ALIF_PD_SRAMS         = 4
+        ALIF_PD_SESS          = 5
+        ALIF_PD_SYST          = 6
+        ALIF_PD_RTSS_HP       = 7
+        ALIF_PD_DBSS          = 8
+        ALIF_PD_APPS          = 9
+
+  "#power-domain-cells":
+    const: 0

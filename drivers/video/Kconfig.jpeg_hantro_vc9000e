@@ -1,0 +1,40 @@
+# Copyright (c) 2026 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config VIDEO_JPEG_HANTRO_VC9000E
+	bool "VeriSilicon Hantro VC9000E JPEG Hardware Encoder"
+	default y
+	depends on DT_HAS_VERISILICON_HANTRO_VC9000E_JPEG_ENABLED
+	help
+	  Enable support for VeriSilicon Hantro VC9000E JPEG hardware encoder.
+	  Supports JPEG/MJPEG encoding with YUV420 input formats,
+	  hardware-accelerated compression up to 2MP @ 200 FPS.
+
+if VIDEO_JPEG_HANTRO_VC9000E
+
+config VIDEO_JPEG_HANTRO_VC9000E_HEADER_SIZE
+	int "JPEG header buffer size"
+	default 623
+	help
+	  Size of JPEG header in bytes. The hardware encoder generates
+	  the compressed data, but the header is generated in software.
+
+config VIDEO_JPEG_HANTRO_VC9000E_MAX_WIDTH
+	int "Maximum JPEG image width"
+	default 16384
+	help
+	  Maximum supported image width in pixels.
+
+config VIDEO_JPEG_HANTRO_VC9000E_MAX_HEIGHT
+	int "Maximum JPEG image height"
+	default 16384
+	help
+	  Maximum supported image height in pixels.
+
+config VIDEO_JPEG_HANTRO_VC9000E_MIN_SIZE
+	int "Minimum JPEG image dimension"
+	default 32
+	help
+	  Minimum supported image width/height in pixels.
+
+endif # VIDEO_JPEG_HANTRO_VC9000E

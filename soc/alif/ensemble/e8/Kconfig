@@ -1,0 +1,20 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_SERIES_E8
+		select ENSEMBLE_GEN2
+
+config SOC_AE822FA0E5597XX0_RTSS_HE
+		select RTSS_HE
+
+config SOC_AE822FA0E5597XX0_RTSS_HP
+		select RTSS_HP
+
+config SOC_AE822FA0E5597XX0_APSS
+		select APSS
+
+config ANALOG_ALIASING
+	bool "Enable Analog Aliasing"
+	help
+	  Enable the analog aliasing feature for peripherals.

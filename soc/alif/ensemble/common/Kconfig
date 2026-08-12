@@ -1,0 +1,113 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config RTSS_HE
+	bool "RTSS_HE core"
+	help
+	  Enable RTSS_HE core.
+
+config RTSS_HP
+	bool "RTSS_HP core"
+	help
+	  Enable RTSS_HP core.
+
+config APSS
+	bool "APSS core"
+	help
+	  Enable APSS core.
+
+config ALIF_HWSEM_INIT_PRIORITY
+	int "HWSEM Init priority"
+	depends on ALIF_HWSEM
+	default 50
+	help
+	  Hardware Semaphore driver initialization priority.
+
+config SOC_SUPPORT_ARM_MHUV2
+	bool "SoC support communication through Arm MHUv2"
+	depends on SOC_FAMILY_ENSEMBLE
+	select IPM
+	select ARM_MHUV2
+	help
+	  SoC support communication through Arm MHUv2	  
+
+config USE_ALIF_HAL_UTIMER
+	bool "UTIMER ll driver access"
+	default n
+	help
+	  Enables UTIMER LL driver on Alif SoCs.
+
+config USE_ALIF_HAL_ANALOG
+	bool "Enable Alif HAL Analog support"
+	default n
+	help
+	  Enables access to Alif HAL analog layer(ADC, DAC, CMP)
+
+config USE_ALIF_HAL_OSPI
+	bool "OSPI driver located in HAL Module"
+	default n
+	help
+	  Enables OSPI driver on Alif SoCs.
+
+config SPI_DW_ENABLE
+	bool "SPI DW"
+	default y
+	depends on SPI && DT_HAS_SNPS_DESIGNWARE_SPI_ENABLED
+	help
+	  Enable Designware SPI driver.
+	select SPI_DW
+
+if RTSS_HP && !USE_DT_CODE_PARTITION
+config FLASH_LOAD_OFFSET
+	default 0x200000
+endif # RTSS_HP && !USE_DT_CODE_PARTITION
+
+config ROM_START_OFFSET
+	default 0x800 if BOOTLOADER_MCUBOOT
+
+if COUNTER_SNPS_DW
+config LPTIMER0_OUTPUT_TOGGLE
+	bool "LPTimer0 Output Toggle"
+	help
+	  Enable lptimer 0 output toggle.
+
+config LPTIMER0_EXT_CLK_FREQ
+	int "LPTimer0 External clock source Frequency value"
+	default 0
+	help
+	  Provide lptimer 0 clock frequency for external clock source.
+
+config LPTIMER1_OUTPUT_TOGGLE
+	bool "LPTimer1 Output Toggle"
+	help
+	  Enable lptimer 1 output toggle.
+
+config LPTIMER1_EXT_CLK_FREQ
+	int "LPTimer1 External clock source Frequency value"
+	default 0
+	help
+	  Provide lptimer 1 clock frequency for external clock source.
+
+config LPTIMER2_OUTPUT_TOGGLE
+	bool "LPTimer2 Output Toggle"
+	help
+	  Enable lptimer 2 output toggle.
+
+config LPTIMER2_EXT_CLK_FREQ
+	int "LPTimer2 External clock source Frequency value"
+	default 0
+	help
+	  Provide lptimer 2 clock frequency for external clock source.
+
+config LPTIMER3_OUTPUT_TOGGLE
+	bool "LPTimer3 Output Toggle"
+	help
+	  Enable lptimer 3 output toggle.
+
+config LPTIMER3_EXT_CLK_FREQ
+	int "LPTimer3 External clock source Frequency value"
+	default 0
+	help
+	  Provide lptimer 3 clock frequency for external clock source.
+endif # COUNTER_SNPS_DW

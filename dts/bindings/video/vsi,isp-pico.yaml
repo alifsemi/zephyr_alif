@@ -1,0 +1,89 @@
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: ALIF ISP Interface
+
+compatible: "vsi,isp-pico"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true
+
+  tpg-bayer-pattern:
+    type: string
+    required: false
+    default: "GBRG"
+    description: |
+      Specifies the Bayer format output from TPG.
+    enum:
+      - "RGGB"
+      - "GRBG"
+      - "GBRG"
+      - "BGGR"
+
+  tpg-image-idx:
+    type: string
+    required: false
+    default: "Disabled"
+    enum:
+      - "3x3-Color-Block"
+      - "Color-Bar"
+      - "Gray-Bar"
+      - "Highlighted-grid"
+      - "Random-Generator"
+      - "Disabled"
+
+  tpg-pix-width:
+    type: int
+    required: false
+    enum:
+      - 0 # 8-bit
+      - 1 # 10-bit
+      - 2 # 12-bit
+
+  isp-subsampling:
+    type: string
+    required: false
+    default: "Co-sited"
+    description: |
+      Specifies for the YUV422 if the Cb and Cr channels are sampled with
+      Y0Cb0Cr0 Y1 - Cosited
+      Y0Cb0 Y1Cr1 - Interleaved
+      Y0Cb(0 + 1)/2 Y1Cr(0 + 1)/2 - Non-cosited
+    enum:
+      - "Co-sited"
+      - "Interleaved"
+      - "Non-cosited"
+
+  fieldsel:
+    type: string
+    required: false
+    default: "both"
+    description: |
+      Specifies if the field selection should be done on Even fields (Even lines)/
+      Odd fields (Odd lines) or both fields (both Even and Odd lines).
+    enum:
+      - "both"
+      - "even"
+      - "odd"
+
+  crop-x0:
+    type: int
+    default: 0
+    description: |
+      specify the left coordinate at the start of ROI.
+
+  crop-y0:
+    type: int
+    default: 0
+    description: |
+      specify the top coordinate at the start of ROI.
+
+child-binding:
+  child-binding:
+      include: video-interfaces.yaml

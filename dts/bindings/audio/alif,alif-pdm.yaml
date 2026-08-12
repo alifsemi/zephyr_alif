@@ -1,0 +1,37 @@
+# Copyright (C) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Alif Pulse Density Module
+
+compatible: "alif,alif-pdm"
+
+include: [base.yaml, pinctrl-device.yaml]
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true
+
+  fifo_watermark:
+    type: int
+    required: true
+    description: Fifo watermark threshold value
+    enum:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+
+  bypass_iir_filter:
+    type: int
+    required: true
+    description: Bypass IIR filter
+    enum:
+      - 0
+      - 1

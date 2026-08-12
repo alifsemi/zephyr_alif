@@ -1,0 +1,12 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * Enabling rtc for this sample application
+ */
+
+&rtc0 {
+	status = "okay";
+};

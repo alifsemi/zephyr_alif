@@ -1,0 +1,26 @@
+#
+# SPDX-FileCopyrightText: Copyright Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+#
+
+name: alif-msc-sd
+
+boards:
+  /alif_b1_dk.*/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: ../../boards/alif_b1_dk.overlay
+  /alif_e1c_dk.*/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: ../../boards/alif_e1c_dk.overlay
+  /alif_e3_dk.*/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: ../../boards/alif_e3_e7_dk.overlay
+  /alif_e4_dk.*/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: ../../boards/alif_e4_e8_dk.overlay
+  /alif_e7_dk.*/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: ../../boards/alif_e3_e7_dk.overlay
+  /alif_e8_dk.*/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: ../../boards/alif_e4_e8_dk.overlay

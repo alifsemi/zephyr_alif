@@ -1,0 +1,7 @@
+board:
+  name: alif_e7_dk
+  full_name: alif e7 DevKit 
+  vendor: alif
+  socs:
+  - name: 'ae722f80f55d5xx'
+  - name: 'ae302f80f55d5xx'

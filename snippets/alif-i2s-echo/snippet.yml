@@ -1,0 +1,17 @@
+name: alif-i2s-echo
+boards:
+  /alif_e1c_dk/.*/rtss_he/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: e1c_rtss_he.overlay
+
+  /alif_(e3|e7)_dk/.*/rtss_he/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: e3_e7_rtss_he.overlay
+
+  /alif_(e3|e7)_dk/.*/rtss_hp/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: e3_e7_rtss_hp.overlay
+
+  /alif_(e4|e8)_dk/.*/rtss_he/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: e4_e8_rtss_he.overlay

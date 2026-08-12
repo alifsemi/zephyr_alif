@@ -1,0 +1,67 @@
+# Copyright (c) 2018 Synopsys, Inc. All rights reserved.
+# Copyright (c) 2023 Meta Platforms All rights reserved.
+# Copyright (c) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Synopsys DesignWare SPI node
+
+compatible: "snps,designware-spi"
+
+include: [spi-controller.yaml, pinctrl-device.yaml]
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true
+
+  dwc-ssi:
+    type: boolean
+    description: |
+      Enable this flag for DWC_ssi only. For SPI devices on apb
+      like DW_apb_ssi, disable this flag. Using this flag for the
+      combined single driver to differentiate DW-apb-ssi and
+      DWC-ssi IPs
+
+  aux-reg:
+    type: boolean
+    description: |
+      This value is used for auxiliary register access. For
+      other platform, this value should be default 0.
+
+  fifo-depth:
+    type: int
+    description: |
+      RX/TX FIFO depth. Corresponds to the SSI_TX_FIFO_DEPTH
+      and SSI_RX_FIFO_DEPTH of the DesignWare Synchronous
+      Serial Interface. Depth ranges from 2-256.
+
+  serial-target:
+    type: boolean
+    description: |
+      True if it is a Serial Target. False if it is a Serial
+      Master. Corresponds to SSI_IS_MASTER of the Designware
+      Synchronous Serial Interface.
+
+  max-xfer-size:
+    type: int
+    description: |
+      Maximum transfer size. Corresponds to SPI_MAX_XFER_SIZE
+      of the DesignWare Synchronous Serial Interface. Only
+      values of 16 and 32 are supported.
+    enum:
+      - 16
+      - 32
+
+  rx-delay:
+    type: int
+    description: |
+      The number of SPI_CLK cycles that are delayed before the
+      actual sample of the RxD input occurs.
+
+  slv-slct-toggle:
+    type: boolean
+    description: |
+      Enable or Disable the chip select line toggle between
+      consecutive data frames.

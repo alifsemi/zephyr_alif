@@ -1,0 +1,8 @@
+# Copyright (c) 2023 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Alif IEEE 802.15.4 AHI RF node
+
+compatible: "alif,ahi-ieee802154"
+
+include: base.yaml

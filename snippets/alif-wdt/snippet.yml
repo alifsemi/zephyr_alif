@@ -1,0 +1,3 @@
+name: alif-wdt
+append:
+  EXTRA_DTC_OVERLAY_FILE: alif-wdt.overlay

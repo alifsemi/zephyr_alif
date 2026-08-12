@@ -1,0 +1,34 @@
+family:
+  - name: ensemble
+    series:
+      - name: e7
+        socs:
+          - name: ae722f80f55d5xx
+            cpuclusters:
+              - name: rtss_he
+              - name: rtss_hp
+              - name: apss
+      - name: e8
+        socs:
+          - name: ae822fa0e5597xx0
+            cpuclusters:
+              - name: rtss_he
+              - name: rtss_hp
+              - name: apss
+      - name: e4
+        socs:
+          - name: ae402fa0e5597xx0
+            cpuclusters:
+              - name: rtss_he
+              - name: rtss_hp
+      - name: e3
+        socs:
+          - name: ae302f80f55d5xx
+            cpuclusters:
+              - name: rtss_he
+              - name: rtss_hp
+      - name: e1c
+        socs:
+          - name: ae1c1f4051920hh
+            cpuclusters:
+              - name: rtss_he

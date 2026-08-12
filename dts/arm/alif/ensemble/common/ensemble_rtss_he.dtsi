@@ -1,0 +1,249 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <alif/common/alif_common.dtsi>
+#include <dt-bindings/misc/alif_aipm_common.h>
+
+&{/soc} {
+	itcm: itcm@0 {
+		compatible = "alif,itcm";
+		reg = <0x0 DT_SIZE_K(256)>;
+		global_base = <0x58000000>;
+		zephyr,memory-region = "ITCM";
+	};
+	dtcm: dtcm@20000000 {
+		compatible = "alif,dtcm";
+		reg = <0x20000000 DT_SIZE_K(256)>;
+		global_base = <0x58800000>;
+		zephyr,memory-region = "DTCM";
+	};
+
+	spi4: lpspi@43000000 {
+		compatible = "snps,designware-spi";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-0 = < &pinctrl_lpspi >;
+		pinctrl-1 = < &pinctrl_lpspi_sleep >;
+		pinctrl-names = "default", "sleep";
+		reg = <0x43000000 0x1000>;
+		interrupt-parent = <&nvic>;
+		interrupts = <46 ALIF_DEFAULT_IRQ_PRIORITY>;
+		clocks = <&clockctrl ALIF_LPSPI_CLK>;
+		fifo-depth = <16>;
+		max-xfer-size = <32>;
+		rx-delay = <4>;
+		status = "disabled";
+	};
+
+	dma2: dma2@400c0000 {
+		compatible = "arm,dma-pl330";
+		reg = <0x400C0000 0x1000>;
+		reg-names = "pl330_regs";
+		dma-channels = <8>;
+		#dma-cells = <2>;
+		interrupt-parent = <&nvic>;
+		interrupts = <0 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <1 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <2 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <3 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <4 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <5 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <6 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <7 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <32 ALIF_DEFAULT_IRQ_PRIORITY>;
+		interrupt-names = "channel0", "channel1",
+				"channel2", "channel3",
+				"channel4", "channel5",
+				"channel6", "channel7",
+				"abort";
+		clocks = <&clockctrl ALIF_DMA2_CLK>;
+		status = "disabled";
+	};
+
+	evtrtr2: event-router@400e2000 {
+		compatible = "alif,dma-event-router";
+		reg = <0x400e2000 0x100>;
+		dma-controller = <&dma2>;
+		channels = <32>;
+		dma-groups = <1>;
+		#dma-cells = <2>;
+		status = "disabled";
+	};
+
+	lpuart: uart@43008000 {
+		compatible = "ns16550";
+		reg = <0x43008000 0x100>;
+		interrupts = <45 ALIF_DEFAULT_IRQ_PRIORITY>;
+		clocks = <&clockctrl ALIF_LPUART_CLK>;
+		power-domains = <&pd_sse700_aon>;
+		reg-shift = <2>;
+		current-speed = <115200>;
+		dlf = <13>;
+		pinctrl-0 = <&pinctrl_lpuart>;
+		pinctrl-1 = <&pinctrl_lpuart_sleep>;
+		pinctrl-names = "default", "sleep";
+		fifo-size = <32>;
+		status = "disabled";
+	};
+
+	lppdm: lppdm@43002000 {
+		compatible = "alif,alif-pdm";
+		reg = <0x43002000 0x1000>;
+		interrupts = <49 ALIF_DEFAULT_IRQ_PRIORITY>;
+		interrupt-names = "warning_intr";
+		pinctrl-0 = <&pinctrl_lppdm>;
+		pinctrl-names = "default";
+		clocks = <&clockctrl ALIF_LPPDM_76M8_CLK>;
+		fifo_watermark = <5>;
+		bypass_iir_filter = <1>;
+		status = "disabled";
+	};
+
+	lpcam: lpcam@43003000 {
+		compatible = "alif,cam";
+		reg = <0x43003000 0x1000>;
+		interrupts = <54 0>;
+		lp-cam;
+		clocks = <&clockctrl ALIF_LPCPI_CLK>;
+		clock-names = "cam_clk";
+		pinctrl-0 = <&pinctrl_lpcam>;
+		pinctrl-names = "default";
+
+		status = "disabled";
+	};
+
+	wdog0: wdog0@40100000{
+	       compatible = "arm,cmsdk-watchdog";
+	       reg = <0x40100000 0x1000>;
+	       clocks = <&rtss_he_clk>;
+	       status = "disabled";
+	};
+};
+
+&{/soc/peripheral@40000000} {
+	apss_rtsshe_mhu0_r: mhu@40000000 {
+		compatible = "arm,mhuv2";
+		reg = < 0x40000000 0x1000 >;
+		interrupts = < 33 ALIF_DEFAULT_IRQ_PRIORITY >;
+		interrupt-names = "rx";
+	};
+	rtsshe_apss_mhu0_s: mhu@40010000 {
+		compatible = "arm,mhuv2";
+		reg = < 0x40010000 0x1000 >;
+		interrupts = < 34 ALIF_DEFAULT_IRQ_PRIORITY >;
+		interrupt-names = "tx";
+	};
+	apss_rtsshe_mhu1_r: mhu@40020000 {
+		compatible = "arm,mhuv2";
+		reg = < 0x40020000 0x1000 >;
+		interrupts = < 35 ALIF_DEFAULT_IRQ_PRIORITY >;
+		interrupt-names = "rx";
+	};
+	rtsshe_apss_mhu1_s: mhu@40030000 {
+		compatible = "arm,mhuv2";
+		reg = < 0x40030000 0x1000 >;
+		interrupts = < 36 ALIF_DEFAULT_IRQ_PRIORITY >;
+		interrupt-names = "tx";
+	};
+};
+
+&{/} {
+	power-states {
+		suspend_idle: suspend_idle {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-idle";
+			min-residency-us = <2500>;
+			exit-latency-us = <500>;
+			substate-id = <0>;
+			zephyr,pm-device-disabled;
+			status = "disabled";
+		};
+		standby_s2ram: standby_s2ram {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-ram";
+			min-residency-us = <1000000>;
+			exit-latency-us = <10000>;
+			substate-id = <0>;
+			status = "disabled";
+		};
+		stop_s2ram: stop_s2ram {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-ram";
+			min-residency-us = <2000000>;
+			exit-latency-us = <20000>;
+			substate-id = <1>;
+			status = "disabled";
+		};
+		subsys_off: subsys_off {
+			compatible = "zephyr,power-state";
+			power-state-name = "soft-off";
+			min-residency-us = <5000000>;
+			exit-latency-us = <60000>;
+			status = "disabled";
+		};
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-m55";
+			d-cache-line-size = <32>;
+			i-cache-line-size = <32>;
+			reg = <0>;
+			cpu-power-states = <&suspend_idle &standby_s2ram &stop_s2ram &subsys_off>;
+		};
+	};
+
+	clocks {
+		rtss_he_clk: rtss_he_clk {
+			compatible = "alif,clock";
+			clock-frequency = <160000000>;
+			#clock-cells = <0>;
+		};
+	};
+};
+
+&nvic {
+	arm,num-irq-priority-bits = <8>;
+};
+
+&mram_storage {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x00000000 DT_SIZE_K(64)>;
+			read-only;
+		};
+		slot0_partition: partition@10000 {
+			label = "image-0";
+			reg = <0x00010000 DT_SIZE_K(768)>;
+		};
+		slot1_partition: partition@D0000 {
+			label = "image-1";
+			reg = <0x000D0000 DT_SIZE_K(768)>;
+		};
+		scratch_partition: partition@190000 {
+			label = "image-scratch";
+			reg = <0x00190000 DT_SIZE_K(64)>;
+		};
+		storage_partition: partition@1A0000 {
+			label = "storage";
+			reg = <0x001A0000 DT_SIZE_K(10)>;
+		};
+	};
+};
+
+&aipm_run_default {
+	cpu-clk-freq = <ALIF_CLOCK_FREQ_160MHZ>;
+};
+
+&aipm_off {
+	vtor-address = <0x80000000>; /* Default MRAM boot address */
+};

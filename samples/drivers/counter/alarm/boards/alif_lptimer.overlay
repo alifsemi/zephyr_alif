@@ -1,0 +1,13 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * Enabling lptimer the sample application
+ */
+
+&timer0 {
+	status = "okay";
+};
+

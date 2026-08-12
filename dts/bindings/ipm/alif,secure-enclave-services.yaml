@@ -1,0 +1,33 @@
+# Copyright (C) 2024 Alif Semiconductor - All Rights Reserved.
+# Use, distribution and modification of this code is permitted under the
+# terms stated in the Alif Semiconductor Software License Agreement
+#
+# You should have received a copy of the Alif Semiconductor Software
+# License Agreement with this file. If not, please write to:
+# contact@alifsemi.com, or visit: https://alifsemi.com/license
+description: Secure Enclave services through Arm MHUv2 on Alif SoCs
+
+compatible: "alif,secure-enclave-services"
+
+properties:
+  status:
+    type: string
+    description: indicates the operational status of a device
+    enum:
+      - "ok" # Deprecated form
+      - "okay"
+      - "disabled"
+      - "reserved"
+      - "fail"
+  compatible:
+    type: string-array
+    required: true
+    description: compatible strings
+  mhuv2-send-node:
+    type: phandle
+    required: true
+    description: Arm MHUv2 sender node used for SE services.
+  mhuv2-recv-node:
+    type: phandle
+    required: true
+    description: Arm MHUv2 recevier node used for SE services.

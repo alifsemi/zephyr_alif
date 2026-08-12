@@ -1,0 +1,16 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+description: Alif SoC ITCM (Instruction Tightly Coupled Memory)
+
+compatible: "alif,itcm"
+
+include: [base.yaml, "zephyr,memory-region.yaml"]
+
+properties:
+  reg:
+    required: true
+  global_base:
+    required: true
+    type: int
+    description: Global base address for the ITCM

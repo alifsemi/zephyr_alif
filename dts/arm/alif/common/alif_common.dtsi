@@ -1,0 +1,11 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * Default IRQ priotity for Alif SoCs.
+ */
+#ifndef ALIF_DEFAULT_IRQ_PRIORITY
+#define ALIF_DEFAULT_IRQ_PRIORITY 0
+#endif

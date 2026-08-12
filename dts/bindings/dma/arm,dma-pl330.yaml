@@ -1,0 +1,78 @@
+# Copyright 2020 Broadcom
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  PL330 DMA Controller
+
+  A phandle to the DMA controller plus "channel" integer cell specifying
+  channel to be used for data transfer
+
+  Example for pl330 DMA Controller
+     pl330: pl330@48300000 {
+                  compatible = "arm,dma-pl330";
+                  ...
+                  dma-channels = <8>;
+                  #dma-cells = <1>;
+            };
+
+  Example using Interrupt
+  The interrupt name should be used along with the interrupts.
+  The driver fetches the enabled channels using the interrupt-names
+
+    pl330: pl330@48300000 {
+                compatible = "arm,dma-pl330";
+                  ...
+                interrupts = <0 3>, <1 3>, <32 3>;
+                interrupt-names = "channel0", "channel1", "abort";
+           };
+
+  If PCIe EP client uses channel 0 for Tx DMA and channel 1 for Rx DMA
+     pcie0_ep: pcie@4e100000 {
+                  compatible = "brcm,iproc-pcie-ep";
+                  ...
+                  dmas = <&pl330 0>, <&pl330 1>;
+                  dma-names = "txdma", "rxdma";
+            };
+
+  Example for enabling dma for device
+  For spi example, the peripheral request id has to be provided
+
+      &spi4 {
+          ...
+          dmas = <&dma2 0 13>, <&dma2, 1 12>;
+          dma-names = "txdma", "rxdma";
+      };
+
+
+compatible: "arm,dma-pl330"
+
+include: dma-controller.yaml
+
+properties:
+  reg:
+    required: true
+  dma-channels:
+    description: |
+      Number of DMA channels supported by the controller. When the
+      microcode property is not set, the driver statically allocates
+      a fixed-size microcode buffer (~1KB) per channel, so this
+      property directly impacts RAM usage. When the microcode property
+      is provided, the driver uses that external memory address and no
+      static buffer is allocated.
+  microcode:
+    type: array
+    description: microcode's physical memory address
+  interrupts:
+    description: optional
+  "#dma-cells":
+    const: 2
+# The 1st cell specifies the DMAC channel to be used for the data transfer.
+#   This channel should be unique between all peripherals/mem2mem that are using the
+#   DMAC instance.
+# The 2nd cell defines the peripheral request interface<N>
+#   See the SoC's reference manual for all the supported request sources.
+
+# Parameter syntax
+dma-cells:
+  - channel
+  - periph

@@ -1,0 +1,190 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <alif/common/alif_common.dtsi>
+#include <dt-bindings/misc/alif_aipm_common.h>
+
+&{/soc} {
+	itcm: itcm@0 {
+		compatible = "alif,itcm";
+		reg = <0x0 DT_SIZE_K(256)>;
+		global_base = <0x50000000>;
+		zephyr,memory-region = "ITCM";
+	};
+	dtcm: dtcm@20000000 {
+		compatible = "alif,dtcm";
+		reg = <0x20000000 DT_SIZE_K(1024)>;
+		global_base = <0x50800000>;
+		zephyr,memory-region = "DTCM";
+	};
+
+	dma1: dma1@400c0000 {
+		compatible = "arm,dma-pl330";
+		reg = <0x400C0000 0x1000>;
+		reg-names = "pl330_regs";
+		dma-channels = <8>;
+		#dma-cells = <2>;
+		interrupt-parent = <&nvic>;
+		interrupts = <0 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <1 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <2 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <3 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <4 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <5 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <6 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <7 ALIF_DEFAULT_IRQ_PRIORITY>,
+			     <32 ALIF_DEFAULT_IRQ_PRIORITY>;
+		interrupt-names = "channel0", "channel1",
+				"channel2", "channel3",
+				"channel4", "channel5",
+				"channel6", "channel7",
+				"abort";
+		clocks = <&clockctrl ALIF_DMA1_CLK>;
+		status = "disabled";
+	};
+
+	evtrtr1: event-router@400e2000 {
+		compatible = "alif,dma-event-router";
+		reg = <0x400e2000 0x100>;
+		dma-controller = <&dma1>;
+		channels = <32>;
+		dma-groups = <1>;
+		#dma-cells = <2>;
+		status = "disabled";
+	};
+
+	wdog0: wdog0@40100000{
+		compatible = "arm,cmsdk-watchdog";
+		reg = <0x40100000 0x1000>;
+		clocks = <&rtss_hp_clk>;
+		status = "disabled";
+	};
+};
+
+&{/soc/peripheral@40000000} {
+	apss_rtsshe_mhu0_r: mhu@40000000 {
+		compatible = "arm,mhuv2";
+		reg = < 0x40000000 0x1000 >;
+		interrupts = < 33 ALIF_DEFAULT_IRQ_PRIORITY >;
+		interrupt-names = "rx";
+	};
+	rtsshe_apss_mhu0_s: mhu@40010000 {
+		compatible = "arm,mhuv2";
+		reg = < 0x40010000 0x1000 >;
+		interrupts = < 34 ALIF_DEFAULT_IRQ_PRIORITY >;
+		interrupt-names = "tx";
+	};
+	apss_rtsshe_mhu1_r: mhu@40020000 {
+		compatible = "arm,mhuv2";
+		reg = < 0x40020000 0x1000 >;
+		interrupts = < 35 ALIF_DEFAULT_IRQ_PRIORITY >;
+		interrupt-names = "rx";
+	};
+	rtsshe_apss_mhu1_s: mhu@40030000 {
+		compatible = "arm,mhuv2";
+		reg = < 0x40030000 0x1000 >;
+		interrupts = < 36 ALIF_DEFAULT_IRQ_PRIORITY >;
+		interrupt-names = "tx";
+	};
+};
+
+&{/} {
+	power-states {
+		suspend_idle: suspend_idle {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-idle";
+			min-residency-us = <2500>;
+			exit-latency-us = <500>;
+			substate-id = <0>;
+			zephyr,pm-device-disabled;
+			status = "disabled";
+		};
+		standby_s2ram: standby_s2ram {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-ram";
+			min-residency-us = <1000000>;
+			exit-latency-us = <10000>;
+			substate-id = <0>;
+			status = "disabled";
+		};
+		stop_s2ram: stop_s2ram {
+			compatible = "zephyr,power-state";
+			power-state-name = "suspend-to-ram";
+			min-residency-us = <2000000>;
+			exit-latency-us = <20000>;
+			substate-id = <1>;
+			status = "disabled";
+		};
+		subsys_off: subsys_off {
+			compatible = "zephyr,power-state";
+			power-state-name = "soft-off";
+			min-residency-us = <5000000>;
+			exit-latency-us = <60000>;
+			status = "disabled";
+		};
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-m55";
+			d-cache-line-size = <32>;
+			i-cache-line-size = <32>;
+			reg = <0>;
+			cpu-power-states = <&suspend_idle &standby_s2ram &stop_s2ram &subsys_off>;
+		};
+	};
+
+	clocks {
+		rtss_hp_clk: rtss_hp_clk {
+			compatible = "alif,clock";
+			clock-frequency = <400000000>;
+			#clock-cells = <0>;
+		};
+	};
+};
+
+&nvic {
+	arm,num-irq-priority-bits = <8>;
+};
+
+&mram_storage {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		boot_partition: partition@200000 {
+			label = "mcuboot";
+			reg = <0x00200000 DT_SIZE_K(64)>;
+			read-only;
+		};
+		slot0_partition: partition@210000 {
+			label = "image-0";
+			reg = <0x00210000 DT_SIZE_K(768)>;
+		};
+		slot1_partition: partition@2D0000 {
+			label = "image-1";
+			reg = <0x002D0000 DT_SIZE_K(768)>;
+		};
+		scratch_partition: partition@390000 {
+			label = "image-scratch";
+			reg = <0x00390000 DT_SIZE_K(64)>;
+		};
+		storage_partition: partition@3A0000 {
+			label = "storage";
+			reg = <0x003A0000 DT_SIZE_K(10)>;
+		};
+	};
+};
+
+&aipm_run_default {
+	cpu-clk-freq = <ALIF_CLOCK_FREQ_400MHZ>;
+};
+
+&aipm_off {
+	vtor-address = <0x80200000>; /* Default MRAM boot address */
+};

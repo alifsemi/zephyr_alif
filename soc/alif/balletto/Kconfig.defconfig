@@ -1,0 +1,31 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+if SOC_FAMILY_BALLETTO
+
+# Disable null pointer exception detection by default for Balletto B1.
+# The Alif BLE ROM patcher dereferences address 0x00000000 (ITCM base)
+# when no patch is present (__ble_patch_info_start weak symbol resolves to NULL).
+# Enabling MPU-based null pointer detection would trap this access and cause a fault.
+choice NULL_POINTER_EXCEPTION_DETECTION
+	default NULL_POINTER_EXCEPTION_DETECTION_NONE
+endchoice
+
+config ROM_START_OFFSET
+	default 0x800 if BOOTLOADER_MCUBOOT
+
+rsource "*/Kconfig.defconfig"
+
+endif # SOC_FAMILY_BALLETTO
+
+config SD_BUFFER_SECTION
+	string "Alif Non Secure Section Name for card internal buffer"
+	default ".alif_ns"
+
+config SDHC_DESCRIPTOR_SECTION
+	string "Alif Non Secure Section Name for SDHC Descriptor"
+	default ".alif_ns"
+
+config I2C_DW_IC_CLK_FREQ_OPTIMIZATION
+	default y if I2C_DW

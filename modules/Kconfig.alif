@@ -1,0 +1,32 @@
+# Copyright (C) 2024 Alif Semiconductor - All Rights Reserved.
+# Use, distribution and modification of this code is permitted under the
+# terms stated in the Alif Semiconductor Software License Agreement
+#
+# You should have received a copy of the Alif Semiconductor Software
+# License Agreement with this file. If not, please write to:
+# contact@alifsemi.com, or visit: https://alifsemi.com/license
+
+config ZEPHYR_HAL_ALIF_MODULE
+	bool
+
+config HAS_ALIF_SE_SERVICES
+	bool "Alif HAL drivers support"
+	depends on SOC_FAMILY_ENSEMBLE || SOC_FAMILY_BALLETTO
+
+config IEEE802154_ALIF_SUPPORT
+	bool "include 802.15.4 support"
+	depends on HAS_ALIF_BLE_802154_LINK_LAYER
+	help
+	  This option enables Alif Semiconductor's 802.15.4 HW adaptation.
+
+if IEEE802154_ALIF_SUPPORT
+
+config IEEE802154_ALIF_TX_ENCRYPT
+	bool "IEEE 802.15.4 TX packet handler and encryption"
+	depends on MBEDTLS
+	default n if OPENTHREAD_THREAD_VERSION_1_1
+	default y
+	help
+	  This option is enables Alif Semiconductor's 802.15.4 Tx packet handler for encryption.
+
+endif

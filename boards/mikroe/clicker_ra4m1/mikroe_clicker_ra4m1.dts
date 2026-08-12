@@ -1,0 +1,153 @@
+/*
+ * Copyright (c) 2024 Ian Morris
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+#include <renesas/ra/r7fa4m1ab3cfm.dtsi>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+#include <zephyr/dt-bindings/pinctrl/renesas/pinctrl-ra.h>
+
+/ {
+	model = "Mikroe Clicker RA4M1";
+	compatible = "renesas,r7fa4m1ab3cfm";
+
+	chosen {
+		zephyr,console = &uart0;
+		zephyr,shell-uart = &uart0;
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+	};
+
+	leds {
+		compatible = "gpio-leds";
+		ld1: led_1 {
+			gpios = <&ioport4 9 GPIO_ACTIVE_HIGH>;
+			label = "User LED 1";
+		};
+		ld2: led_2 {
+			gpios = <&ioport4 8 GPIO_ACTIVE_HIGH>;
+			label = "User LED 2";
+		};
+	};
+
+	buttons {
+		compatible = "gpio-keys";
+		btn1: button_1 {
+			gpios = <&ioport3 4 GPIO_ACTIVE_LOW>;
+			label = "User Button 1";
+			zephyr,code = <INPUT_KEY_0>;
+		};
+	};
+
+	mikrobus_header: mikrobus-connector {
+		compatible = "mikro-bus";
+		#gpio-cells = <2>;
+		gpio-map-mask = <0xffffffff 0xffffffc0>;
+		gpio-map-pass-thru = <0 0x3f>;
+		gpio-map =	<0 0 &ioport0 0 0>,	/* AN  */
+				<1 0 &ioport4 7 0>,		/* RST */
+				<2 0 &ioport1 3 0>,		/* CS   */
+				<3 0 &ioport1 2 0>,		/* SCK  */
+				<4 0 &ioport1 0 0>,		/* MISO */
+				<5 0 &ioport1 1 0>,		/* MOSI */
+							/* +3.3V */
+							/* GND */
+				<6 0 &ioport1 7 0>,		/* PWM  */
+				<7 0 &ioport3 2 0>,		/* INT  */
+				<8 0 &ioport4 10 0>,	/* RX   */
+				<9 0 &ioport4 11 0>,	/* TX   */
+				<10 0 &ioport2 5 0>,	/* SCL  */
+				<11 0 &ioport2 6 0>;	/* SDA  */
+							/* +5V */
+							/* GND */
+	};
+
+	aliases {
+		led0 = &ld1;
+		led1 = &ld2;
+		sw0 = &btn1;
+	};
+};
+
+&pinctrl {
+	sci0_default: sci0_default {
+		group1 {
+			/* tx */
+			psels = <RA_PSEL(RA_PSEL_SCI_0, 4, 11)>;
+		};
+		group2 {
+			/* rx */
+			psels = <RA_PSEL(RA_PSEL_SCI_0, 4, 10)>;
+		};
+	};
+};
+
+&sci0 {
+	status = "okay";
+	pinctrl-0 = <&sci0_default>;
+	pinctrl-names = "default";
+	uart0: uart {
+		current-speed = <115200>;
+		status = "okay";
+	};
+};
+
+&ioport0 {
+	status = "okay";
+};
+
+&ioport1 {
+	status = "okay";
+};
+
+&ioport2 {
+	status = "okay";
+};
+
+&ioport3 {
+	status = "okay";
+};
+
+&ioport4 {
+	status = "okay";
+};
+
+&fcu {
+	status = "okay";
+};
+
+&xtal {
+	status = "okay";
+	clock-frequency = <12000000>;
+};
+
+&pclkblock {
+	clocks = <&xtal>;
+};
+
+&iclk {
+	div = <1>;
+};
+
+&pclka {
+	div = <1>;
+};
+
+&pclkb {
+	div = <2>;
+};
+
+&pclkc {
+	div = <1>;
+};
+
+&pclkd {
+	div = <1>;
+};
+
+&fclk {
+	div = <2>;
+};

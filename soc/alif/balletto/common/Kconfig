@@ -1,0 +1,136 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config RTSS_HE
+	bool "RTSS_HE core"
+	select CORTEX_M_SYSTICK_RESET_BY_LPM if (PM && CORTEX_M_SYSTICK && \
+						 !CORTEX_M_SYSTICK_LPM_TIMER_NONE)
+	help
+	  Enable RTSS_HE core.
+
+config HAS_ALIF_BLE_802154_LINK_LAYER
+	bool
+	help
+	  Device has BLE and 802154 Link Layers
+
+config HAS_ALIF_BLE_ROM_IMAGE
+	bool
+	help
+	  Device has BLE HOST and LC3 ROM code
+
+if HAS_ALIF_BLE_ROM_IMAGE
+
+# BLE ROM version is hardware-specific and defined in DTS.
+# The version is automatically detected from the ble-rom-version property.
+
+DT_SOC_INFO := $(dt_nodelabel_path,soc_info)
+
+config ALIF_BLE_ROM_IMAGE_V1_2
+	def_bool $(dt_node_str_prop_equals,$(DT_SOC_INFO),ble-rom-version,1.2) && !ALIF_BLE_ROM_API_EXTERNAL
+	help
+	  BLE ROM version 1.2 (automatically set from device tree)
+
+# To add support for a new BLE ROM version (e.g., v1.3):
+# 1. Add "1.3" to the enum in zephyr/dts/bindings/arm/alif,balletto-soc.yaml
+# 2. Add a new config here:
+#    config ALIF_BLE_ROM_IMAGE_V1_3
+#        def_bool $(dt_node_str_prop_equals,$(DT_SOC_INFO),ble-rom-version,1.3)
+# 3. Update CMakeLists.txt in modules/hal/alif/ble/ and modules/hal/alif/lc3/
+# 4. Create version-specific subdirectories with ROM symbols
+
+endif
+
+config HAS_ALIF_POWER_MANAGER
+	bool
+	depends on HAS_ALIF_SE_SERVICES
+	help
+	  Device has Alif Power Manager services
+
+if BT
+
+config BT_BUF_ACL_RX_SIZE
+	range 251 65535
+	default 251
+
+config BT_BUF_EVT_RX_COUNT
+	default 20 if (BT_MESH && !(BT_BUF_EVT_DISCARDABLE_COUNT > 0))
+	default 10
+	range 10 255
+
+config BT_BUF_ACL_TX_COUNT
+	default 6
+	range 6 255
+
+endif # BT
+
+config ALIF_HWSEM_INIT_PRIORITY
+	int "HWSEM Init priority"
+	depends on ALIF_HWSEM
+	default 50
+	help
+	  Hardware Semaphore driver initialization priority.
+
+config SOC_SUPPORT_ARM_MHUV2
+	bool "SoC support communication through Arm MHUv2"
+	depends on SOC_FAMILY_ENSEMBLE || SOC_FAMILY_BALLETTO
+	select IPM
+	select ARM_MHUV2
+	help
+	  SoC support communication through Arm MHUv2
+
+config SPI_DW_ENABLE
+	bool "SPI DW"
+	default y
+	depends on SPI && DT_HAS_SNPS_DESIGNWARE_SPI_ENABLED
+	help
+	  Enable Designware SPI driver.
+	select SPI_DW
+
+config USE_ALIF_HAL_UTIMER
+	bool "UTIMER ll driver access"
+	default n
+	help
+	  Enables UTIMER LL driver on Alif SoCs.
+
+config USE_ALIF_HAL_ANALOG
+	bool "Enable Alif HAL Analog support"
+	default n
+	help
+	  Enables access to Alif HAL analog layer(ADC, DAC, CMP)
+
+config USE_ALIF_HAL_OSPI
+	bool "OSPI driver located in HAL Module"
+	default n
+	help
+	  Enables OSPI driver on Alif SoCs.
+
+config FLASH_SIZE
+	default $(dt_node_reg_size_int,$(dt_nodelabel_path,itcm),0,K) if !XIP
+
+config FLASH_BASE_ADDRESS
+	default $(dt_node_reg_addr_hex,$(dt_nodelabel_path,itcm))     if !XIP
+
+if COUNTER_SNPS_DW
+config LPTIMER0_OUTPUT_TOGGLE
+	bool "LPTimer0 Output Toggle"
+	help
+	  Enable lptimer 0 output toggle.
+
+config LPTIMER0_EXT_CLK_FREQ
+	int "LPTimer0 External clock source Frequency value"
+	default 0
+	help
+	  Provide lptimer 0 clock frequency for external clock source.
+
+config LPTIMER1_OUTPUT_TOGGLE
+	bool "LPTimer1 Output Toggle"
+	help
+	  Enable lptimer 1 output toggle.
+
+config LPTIMER1_EXT_CLK_FREQ
+	int "LPTimer1 External clock source Frequency value"
+	default 0
+	help
+	  Provide lptimer 1 clock frequency for external clock source.
+endif # COUNTER_SNPS_DW

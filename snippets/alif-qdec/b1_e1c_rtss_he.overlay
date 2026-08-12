@@ -1,0 +1,36 @@
+/*
+ * SPDX-FileCopyrightText: Copyright Alif Semiconductor
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/ {
+	aliases {
+		qdec0 = &qdec;
+		qenca = &gpio_a;
+		qencb = &gpio_b;
+	};
+
+	encoder-emulate {
+		compatible = "gpio-leds";
+		gpio_a: gpio_a {
+			gpios = <&gpio2 4 GPIO_ACTIVE_HIGH>;
+		};
+		gpio_b: gpio_b {
+			gpios = <&gpio2 5 GPIO_ACTIVE_HIGH>;
+		};
+	};
+};
+
+&gpio2 {
+	status = "okay";
+};
+
+&utimer1 {
+	status = "okay";
+
+	qdec: qdec {
+		pinctrl-0 = <&pinctrl_ut1>;
+		pinctrl-names = "default";
+		status = "okay";
+	};
+};

@@ -1,0 +1,8 @@
+#
+# Copyright (c) 2021 Linaro, Limited
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+config MCUX_ACMP
+	bool "Include ACMP driver from MCUX SDK"

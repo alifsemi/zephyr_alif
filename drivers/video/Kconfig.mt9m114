@@ -1,0 +1,20 @@
+# MT9m114
+
+# Copyright (c) 2016 Linaro Limited
+# SPDX-License-Identifier: Apache-2.0
+
+config VIDEO_MT9M114
+	bool "MT9M114 Aptina CMOS digital image sensor"
+	select I2C
+	depends on DT_HAS_APTINA_MT9M114_ENABLED
+	default y
+	help
+	  Enable driver for MT9M114 CMOS digital image sensor device.
+
+if VIDEO_MT9M114
+
+config MT9M114_PARALLEL_INIT
+	bool "MT9M114 parallel init configuration"
+	default y
+
+endif #VIDEO_MT9M114

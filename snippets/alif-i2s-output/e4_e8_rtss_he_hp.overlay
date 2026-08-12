@@ -1,0 +1,18 @@
+/*
+ * SPDX-FileCopyrightText: Copyright Alif Semiconductor
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * I2S_3 => Speaker Output
+ */
+
+&i2s3 {
+	status = "okay";
+};
+
+/ {
+	aliases {
+		i2s-tx = &i2s3;
+	};
+};

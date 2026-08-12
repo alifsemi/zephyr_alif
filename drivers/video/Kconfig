@@ -1,0 +1,95 @@
+# VIDEO driver configuration options
+
+# Copyright (c) 2019 Linaro Limited
+# SPDX-License-Identifier: Apache-2.0
+
+#
+# VIDEO Drivers
+#
+menuconfig VIDEO
+	bool "Video drivers"
+	help
+	  Enable support for the VIDEO.
+
+if VIDEO
+
+module = VIDEO
+module-str = video
+source "subsys/logging/Kconfig.template.log_config"
+
+config VIDEO_INIT_PRIORITY
+	int "Video initialization priority"
+	default 60
+	help
+	  System initialization priority for video drivers.
+
+config VIDEO_BUFFER_POOL_SZ_MAX
+	int "Size of the largest buffer in the video pool"
+	default 1048576
+
+config VIDEO_BUFFER_POOL_NUM_MAX
+	int "Number of maximum sized buffer in the video pool"
+	default 2
+
+config VIDEO_BUFFER_POOL_ALIGN
+	int "Alignment of the video pool’s buffer"
+	default 64
+
+config VIDEO_BUFFER_USE_SHARED_MULTI_HEAP
+	bool "Use shared multi heap for video buffer"
+	default n
+
+config VIDEO_BUFFER_SMH_ATTRIBUTE
+	int "Shared multi heap attribute for video buffer"
+	depends on VIDEO_BUFFER_USE_SHARED_MULTI_HEAP
+	default 0
+	range 0 2
+	help
+	  Shared multi heap attribute for video buffer:
+	  0: SMH_REG_ATTR_CACHEABLE
+	  1: SMH_REG_ATTR_NON_CACHEABLE
+	  2: SMH_REG_ATTR_EXTERNAL
+
+source "drivers/video/Kconfig.esp32_dvp"
+
+source "drivers/video/Kconfig.mcux_csi"
+
+source "drivers/video/Kconfig.mcux_mipi_csi2rx"
+
+source "drivers/video/Kconfig.sw_generator"
+
+source "drivers/video/Kconfig.mt9m114"
+
+source "drivers/video/Kconfig.ov7725"
+
+source "drivers/video/Kconfig.ov2640"
+
+source "drivers/video/Kconfig.isp_vsi"
+
+source "drivers/video/Kconfig.stm32_dcmi"
+
+source "drivers/video/Kconfig.ov5640"
+
+source "drivers/video/Kconfig.ov7670"
+
+source "drivers/video/Kconfig.gc2145"
+
+source "drivers/video/Kconfig.mcux_sdma"
+
+source "drivers/video/Kconfig.emul_imager"
+
+source "drivers/video/Kconfig.emul_rx"
+
+source "drivers/video/Kconfig.arx3a0"
+
+source "drivers/video/Kconfig.ov5675"
+
+source "drivers/video/Kconfig.hm0360"
+
+source "drivers/video/Kconfig.alif"
+
+source "drivers/video/Kconfig.dw"
+
+source "drivers/video/Kconfig.jpeg_hantro_vc9000e"
+
+endif # VIDEO

@@ -1,0 +1,14 @@
+# Alif CDC200 display driver configuration options
+
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config CDC200
+	bool "CDC200 driver"
+	default y
+	depends on DT_HAS_TES_CDC_2_1_ENABLED
+	help
+	  Enable support for CDC200 driver controller.
+
+config FB_USES_DTCM_REGION
+	bool "CDC200 uses DTCM region for buffers"

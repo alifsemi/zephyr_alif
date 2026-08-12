@@ -1,0 +1,415 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <zephyr/init.h>
+#include <zephyr/arch/cpu.h>
+#include <soc_common.h>
+#include <zephyr/dt-bindings/dma/alif_dma_event_router.h>
+#if IS_ENABLED(CONFIG_PM)
+#include <zephyr/pm/pm.h>
+#include <zephyr/pm/policy.h>
+#include <se_service.h>
+#include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
+#endif
+
+#if CONFIG_ENSEMBLE_GEN2 /* ENSEMBLE_GEN2 SoC */
+/* GPIO: enable debounce clock / divisor. */
+#define GPIO_DEBOUNCE_CK_DIV_MASK   0x3FF
+#define GPIO_DEBOUNCE_CK_DIV2       BIT(0)
+#define GPIO_DEBOUNCE_CK_ENABLE     BIT(12)
+
+/* GPIO: enable debounce clock / divisor for gpio0..gpio14 */
+#define EXPSLV_GPIO_DEBOUNCE_CK_EN(n) \
+	IF_ENABLED(DT_NODE_HAS_STATUS(DT_NODELABEL(gpio##n), okay), ( \
+		sys_clear_bits(CLKCTRL_PER_SLV_GPIO_CTRLn + (0x4 * n), GPIO_DEBOUNCE_CK_DIV_MASK); \
+		sys_set_bits(CLKCTRL_PER_SLV_GPIO_CTRLn + (0x4 * n), \
+				GPIO_DEBOUNCE_CK_ENABLE | GPIO_DEBOUNCE_CK_DIV2); \
+	))
+
+/* GPIO: enable debounce clock for gpio16 and gpio17 */
+#define AON_GPIO_DEBOUNCE_CK_EN(n, bit) \
+	IF_ENABLED(DT_NODE_HAS_STATUS(DT_NODELABEL(gpio##n), okay), \
+		(sys_set_bits(AON_RTSS_HE_LPPERI_CKEN, BIT(bit));))
+
+/* EXPSLV gpio0..gpio14 */
+#define EXPSLV_ALL_GPIO_DEBOUNCE_CK_EN() \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(0);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(1);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(2);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(3);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(4);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(5);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(6);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(7);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(8);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(9);  \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(10); \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(11); \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(12); \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(13); \
+	EXPSLV_GPIO_DEBOUNCE_CK_EN(14)
+
+/* AON gpio16 and gpio17. */
+#define AON_ALL_GPIO_DEBOUNCE_CK_EN() \
+	AON_GPIO_DEBOUNCE_CK_EN(16, 8); \
+	AON_GPIO_DEBOUNCE_CK_EN(17, 9)
+
+static inline void enable_gpio_debounce_clock(void)
+{
+	/* EXPSLV gpio0..gpio14 */
+	EXPSLV_ALL_GPIO_DEBOUNCE_CK_EN();
+
+	/* LPGPIO(gpio15) debounce clock is always enabled. */
+
+	/* AON gpio16 and gpio17. */
+	AON_ALL_GPIO_DEBOUNCE_CK_EN();
+}
+#endif /* CONFIG_ENSEMBLE_GEN2 */
+
+#if IS_ENABLED(CONFIG_PM)
+
+/*
+ * Lock deeper power states during early boot to prevent premature sleep
+ *
+ * During driver initialization, some drivers may trigger idle conditions
+ * that could cause the PM subsystem to enter deep sleep states before the
+ * system is ready. This locks all deeper states, allowing only
+ * PM_STATE_RUNTIME_IDLE during boot. Locks are released at APPLICATION phase.
+ */
+static int soc_pm_lock_boot_states(void)
+{
+	/* Lock all deeper power states, allowing only RUNTIME_IDLE during boot */
+	for (enum pm_state state = PM_STATE_SUSPEND_TO_IDLE; state < PM_STATE_COUNT; state++) {
+		pm_policy_state_lock_get(state, PM_ALL_SUBSTATES);
+	}
+
+	return 0;
+}
+SYS_INIT(soc_pm_lock_boot_states, PRE_KERNEL_2, 0);
+
+/*
+ * Release deeper power state locks after kernel initialization
+ *
+ * Once kernel initialization is complete (APPLICATION phase), release the
+ * boot-time locks to allow normal power management operation.
+ */
+static int soc_pm_unlock_boot_states(void)
+{
+	/* Unlock all deeper power states */
+	for (enum pm_state state = PM_STATE_SUSPEND_TO_IDLE; state < PM_STATE_COUNT; state++) {
+		pm_policy_state_lock_put(state, PM_ALL_SUBSTATES);
+	}
+
+	return 0;
+}
+SYS_INIT(soc_pm_unlock_boot_states, APPLICATION, 0);
+
+/*
+ * Single SoC PM notifier for save/restore of SoC-level peripheral
+ * configuration registers across deep power states (SOFT_OFF, SUSPEND_TO_RAM).
+ */
+
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay)
+/* Saved HE_DMA_SEL value (LP-SPI mux) — restored before dma2 driver resumes */
+static uint32_t he_dma_sel_saved;
+#endif
+
+static void soc_pm_save_dma(void)
+{
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay)
+	he_dma_sel_saved = sys_read32(M55HE_CFG_HE_DMA_SEL);
+#endif
+}
+
+static void soc_pm_restore_dma(void)
+{
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma0), arm_dma_pl330, okay)
+	/* DMA0 registers are in SYSTOP — ensure it is ON before restoring. */
+	se_service_enable_pd(ALIF_PD_SYST);
+	sys_clear_bits(CLKCTRL_PER_MST_DMA_CTRL, BIT(0));
+	sys_write32(0U, CLKCTRL_PER_MST_DMA_IRQ);
+	sys_write32(0U, CLKCTRL_PER_MST_DMA_PERIPH);
+	sys_set_bits(CLKCTRL_PER_MST_DMA_CTRL, BIT(16));
+#endif
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma1), arm_dma_pl330, okay)
+	sys_clear_bits(M55HP_CFG_HP_DMA_CTRL, BIT(0));
+	sys_write32(0U, M55HP_CFG_HP_DMA_IRQ);
+	sys_write32(0U, M55HP_CFG_HP_DMA_PERIPH);
+	sys_set_bits(M55HP_CFG_HP_DMA_CTRL, BIT(16));
+#endif
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay)
+	sys_clear_bits(M55HE_CFG_HE_DMA_CTRL, BIT(0));
+	sys_write32(0U, M55HE_CFG_HE_DMA_IRQ);
+	sys_write32(0U, M55HE_CFG_HE_DMA_PERIPH);
+	sys_set_bits(M55HE_CFG_HE_DMA_CTRL, BIT(16));
+	sys_write32(he_dma_sel_saved, M55HE_CFG_HE_DMA_SEL);
+#endif
+}
+
+static void soc_pm_state_entry(enum pm_state state)
+{
+	if (state == PM_STATE_RUNTIME_IDLE || state == PM_STATE_SUSPEND_TO_IDLE) {
+		return;
+	}
+	soc_pm_save_dma();
+}
+
+static void soc_pm_pre_device_resume(enum pm_state state)
+{
+	if (state == PM_STATE_RUNTIME_IDLE || state == PM_STATE_SUSPEND_TO_IDLE) {
+		return;
+	}
+	soc_pm_restore_dma();
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi0), okay)
+	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2) ||
+		IS_ENABLED(CONFIG_SOC_SERIES_E1C)) {
+		sys_write32(0x1, CLKCTRL_PER_SLV_OSPI_CTRL);
+	}
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi1), okay)
+	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2)) {
+		sys_write32(0x2, CLKCTRL_PER_SLV_OSPI_CTRL);
+	}
+#endif
+}
+
+static struct pm_notifier soc_pm_notifier = {
+	.state_entry = soc_pm_state_entry,
+	.pre_device_resume = soc_pm_pre_device_resume,
+};
+
+static int soc_pm_notifier_init(void)
+{
+	pm_notifier_register(&soc_pm_notifier);
+	return 0;
+}
+SYS_INIT(soc_pm_notifier_init, PRE_KERNEL_2, 1);
+
+#endif /* CONFIG_PM */
+
+/* Configure HE_DMA_SEL register for LP-SPI based on DTS dmas property.
+ *
+ * E1C: lpspi0 always uses DMA2.
+ *   HE_DMA_SEL[5:4]: 0x0 = DMA2 group 1, 0x1/0x2/0x3 = DMA2 group 2
+ *
+ * E7/E5/E3/E8/E6/E4: spi4 can use DMA2 or DMA0.
+ *   HE_DMA_SEL[5:4]: 0x0 = DMA2, 0x1 = DMA0 group 1, 0x2/0x3 = DMA0 group 2
+ */
+#if IS_ENABLED(CONFIG_RTSS_HE)
+#if IS_ENABLED(CONFIG_SOC_SERIES_E1C)
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay) && DT_NODE_HAS_PROP(DT_NODELABEL(lpspi0), dmas)
+static void soc_configure_he_dma_sel_lpspi(void)
+{
+	uint32_t dma_group = ALIF_DMA_DECODE_GROUP(
+		DT_PHA_BY_IDX(DT_NODELABEL(lpspi0), dmas, 0, channel));
+	/* group 1 = 0x0 (DMA2 group 1); group 2+ = 0x1 (DMA2 group 2) */
+	uint32_t sel_val = (dma_group == 1U) ? 0x0U : 0x1U;
+
+	sys_clear_bits(M55HE_CFG_HE_DMA_SEL, HE_DMA_SEL_LPSPI_Msk);
+	sys_set_bits(M55HE_CFG_HE_DMA_SEL,
+		     (sel_val << HE_DMA_SEL_LPSPI_Pos) & HE_DMA_SEL_LPSPI_Msk);
+}
+#endif /* lpspi0 with dmas - E1C */
+#else /* E7/E5/E3/E8/E6/E4 */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi4), okay) && DT_NODE_HAS_PROP(DT_NODELABEL(spi4), dmas)
+static void soc_configure_he_dma_sel_lpspi(void)
+{
+	uint32_t sel_val;
+
+#if DT_SAME_NODE(DT_PHANDLE_BY_IDX(DT_NODELABEL(spi4), dmas, 0), DT_NODELABEL(evtrtr2))
+	sel_val = 0x0U; /* DMA2 selected */
+#else
+	/* DMA0 selected — determine group */
+	uint32_t dma_group = ALIF_DMA_DECODE_GROUP(
+		DT_PHA_BY_IDX(DT_NODELABEL(spi4), dmas, 0, channel));
+	/* group 1 = 0x1 (DMA0 group 1); group 2+ = 0x2 (DMA0 group 2) */
+	sel_val = (dma_group == 1U) ? 0x1U : 0x2U;
+#endif
+
+	sys_clear_bits(M55HE_CFG_HE_DMA_SEL, HE_DMA_SEL_LPSPI_Msk);
+	sys_set_bits(M55HE_CFG_HE_DMA_SEL,
+		     (sel_val << HE_DMA_SEL_LPSPI_Pos) & HE_DMA_SEL_LPSPI_Msk);
+}
+#endif /* spi4 with dmas - E-series */
+#endif /* CONFIG_SOC_SERIES_E1C */
+#endif /* CONFIG_RTSS_HE */
+
+/**
+ * @brief Perform common SoC initialization at boot
+ *        for ensemble family.
+ *        This will run after soc_early_init_hook.
+ *
+ * @return 0
+ */
+static int soc_init(void)
+{
+	/* LPUART settings */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart), okay)
+	if (IS_ENABLED(CONFIG_SERIAL)) {
+		/* Enable clock supply for LPUART */
+		sys_write32(0x1, AON_RTSS_HE_LPPERI_CKEN);
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_SPI_DW) /* SPI */
+	/* SPI: Enable Master Mode and SS Value */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi0), okay) && !DT_PROP(DT_NODELABEL(spi0), serial_target)
+	sys_set_bits(CLKCTRL_PER_SLV_SSI_CTRL, BIT(0) | BIT(8));
+#endif /* spi0 */
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi1), okay) && !DT_PROP(DT_NODELABEL(spi1), serial_target)
+	sys_set_bits(CLKCTRL_PER_SLV_SSI_CTRL, BIT(1) | BIT(9));
+#endif /* spi1 */
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi2), okay) && !DT_PROP(DT_NODELABEL(spi2), serial_target)
+	sys_set_bits(CLKCTRL_PER_SLV_SSI_CTRL, BIT(2) | BIT(10));
+#endif /* spi2 */
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi3), okay) && !DT_PROP(DT_NODELABEL(spi3), serial_target)
+	sys_set_bits(CLKCTRL_PER_SLV_SSI_CTRL, BIT(3) | BIT(11));
+#endif /* spi3 */
+
+	/* LP-SPI */
+#if (DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(spi4), okay))
+		/*Clock : LP-SPI*/
+		sys_set_bits(M55HE_CFG_HE_CLK_ENA, BIT(16));
+
+		/* LP-SPI0 Mode Selection */
+		/* To Slave Set Bit : 15  */
+		/* To Master Clear Bit : 15 */
+		sys_clear_bits(M55HE_CFG_HE_CLK_ENA, BIT(15));
+
+		/*LP-SPI0 Flex GPIO*/
+		sys_write32(0x1, VBAT_GPIO_CTRL_EN);
+#endif /* (DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(spi4),
+	* okay))
+	*/
+
+#endif /* defined(CONFIG_SPI_DW) */
+
+	/* Enable DMA */
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma0), arm_dma_pl330, okay) /* dma0 */
+	sys_clear_bits(CLKCTRL_PER_MST_DMA_CTRL, BIT(0));
+	sys_write32(0U, CLKCTRL_PER_MST_DMA_IRQ);
+	sys_write32(0U, CLKCTRL_PER_MST_DMA_PERIPH);
+	sys_set_bits(CLKCTRL_PER_MST_DMA_CTRL, BIT(16));
+#endif
+
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma1), arm_dma_pl330, okay) /* dma1 */
+	sys_clear_bits(M55HP_CFG_HP_DMA_CTRL, BIT(0));
+	sys_write32(0U, M55HP_CFG_HP_DMA_IRQ);
+	sys_write32(0U, M55HP_CFG_HP_DMA_PERIPH);
+	sys_set_bits(M55HP_CFG_HP_DMA_CTRL, BIT(16));
+#endif
+
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay) /* dma2 */
+	sys_clear_bits(M55HE_CFG_HE_DMA_CTRL, BIT(0));
+	sys_write32(0U, M55HE_CFG_HE_DMA_IRQ);
+	sys_write32(0U, M55HE_CFG_HE_DMA_PERIPH);
+	sys_set_bits(M55HE_CFG_HE_DMA_CTRL, BIT(16));
+#endif
+
+	/* Configure HE_DMA_SEL mux for LP-SPI */
+#if IS_ENABLED(CONFIG_RTSS_HE)
+#if IS_ENABLED(CONFIG_SOC_SERIES_E1C)
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay) && DT_NODE_HAS_PROP(DT_NODELABEL(lpspi0), dmas)
+	soc_configure_he_dma_sel_lpspi();
+#endif
+#else
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi4), okay) && DT_NODE_HAS_PROP(DT_NODELABEL(spi4), dmas)
+	soc_configure_he_dma_sel_lpspi();
+#endif
+#endif /* CONFIG_SOC_SERIES_E1C */
+#endif /* CONFIG_RTSS_HE */
+
+	/* Enable LPRTC Clock via VBAT registers */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(rtc0), okay)
+	sys_write32(0x1, VBAT_LPRTC0_CLK_EN);
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(rtc1), okay)
+	sys_write32(0x1, VBAT_LPRTC1_CLK_EN);
+#endif
+
+	/* lptimer settings */
+#if DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers)
+	LPTIMER_CONFIG(0);
+	LPTIMER_CONFIG(1);
+	LPTIMER_CONFIG(2);
+	LPTIMER_CONFIG(3);
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers) */
+
+	/*Enable Clock : 76P8M */
+#if DT_HAS_COMPAT_STATUS_OKAY(snps_designware_i2s)
+	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2)) {
+		sys_set_bits(CGU_CLK_ENA, BIT(24));
+	}
+#endif
+
+
+	/*Clock : OSPI */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi0), okay)
+	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2) ||
+		IS_ENABLED(CONFIG_SOC_SERIES_E1C)) {
+		sys_write32(0x1, CLKCTRL_PER_SLV_OSPI_CTRL);
+	}
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi1), okay)
+	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2)) {
+		sys_write32(0x2, CLKCTRL_PER_SLV_OSPI_CTRL);
+	}
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(sdhc), okay)
+	/* Enable CFG (100 MHz and 20MHz) clock.*/
+#if defined(CONFIG_ENSEMBLE_GEN2)
+	sys_set_bits(CGU_CLK_ENA, BIT(7) | BIT(9) | BIT(22));
+#else
+	sys_set_bits(CGU_CLK_ENA, BIT(21) | BIT(22));
+#endif
+
+	/* Peripheral clock enable */
+	sys_set_bits(CLKCTRL_PER_MST_PERIPH_CLK_EN, BIT(16));
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(usb), okay)
+	/* USB power on reset clear */
+	sys_clear_bits(CLKCTRL_PER_MST_USB_CTRL2, BIT(8));
+#endif
+
+#if (DT_NODE_HAS_STATUS(DT_NODELABEL(pdm), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(lppdm), okay))
+	if (IS_ENABLED(CONFIG_ENSEMBLE_GEN2)) {
+		/* enable the HFOSCx2 clock */
+		sys_set_bits(CGU_CLK_ENA, BIT(24));
+	}
+#endif
+	/* I3C settings */
+#if (DT_NODE_HAS_STATUS(DT_NODELABEL(i3c0), okay) || DT_NODE_HAS_STATUS(DT_NODELABEL(lpi3c0), okay))
+	/* I3C Flex GPIO */
+	sys_write32(0x1, VBAT_GPIO_CTRL_EN);
+#endif
+
+#if CONFIG_ENSEMBLE_GEN2 /* ENSEMBLE_GEN2 SoC */
+	/* GPIO: enable debounce clock. */
+	enable_gpio_debounce_clock();
+#endif /* CONFIG_ENSEMBLE_GEN2 */
+
+	/* CAN settings */
+#if (DT_NODE_HAS_STATUS(DT_NODELABEL(can0), okay) || \
+	DT_NODE_HAS_STATUS(DT_NODELABEL(can1), okay))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(can1), okay)
+	/* Flex GPIO */
+	sys_write32(0x1, VBAT_GPIO_CTRL_EN);
+#endif
+	/* Enable HFOSC and 160MHz clock */
+	sys_set_bits(CGU_CLK_ENA, BIT(20) | BIT(23));
+#endif
+	return 0;
+}
+
+SYS_INIT(soc_init, PRE_KERNEL_1, 1);

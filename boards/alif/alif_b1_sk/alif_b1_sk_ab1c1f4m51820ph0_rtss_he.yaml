@@ -1,0 +1,11 @@
+# Copyright (c) 2026 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+identifier: alif_b1_sk/ab1c1f4m51820ph0/rtss_he
+name: Alif DevKit Balletto B1 RTSS-HE BGA MCU
+type: mcu
+arch: arm
+vendor: alif
+toolchain:
+  - zephyr

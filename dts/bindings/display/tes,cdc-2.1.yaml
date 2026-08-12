@@ -1,0 +1,242 @@
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: TES CDC200 controller
+
+compatible: "tes,cdc-2.1"
+
+include: [display-controller.yaml, pinctrl-device.yaml]
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true
+
+  interrupt-names:
+    required: true
+
+  hfront-porch:
+    type: int
+    required: true
+    description: Horizontal front porch in display clock cycles
+
+  hback-porch:
+    type: int
+    required: true
+    description: Horizontal back porch in display clock cycles
+
+  hsync-len:
+    type: int
+    required: true
+    description: HSYNC pulse width in display clock cycles
+
+  vfront-porch:
+    type: int
+    required: true
+    description: Vertical front porch in display clock cycles
+
+  vback-porch:
+    type: int
+    required: true
+    description: Vertical back porch in display clock cycles
+
+  vsync-len:
+    type: int
+    required: true
+    description: VSYNC pulse width in display clock cycles
+
+  hsync-active:
+    type: int
+    required: true
+    description:
+      Horizontal synchronization pulse polarity.
+      If HSYNC is active low, use 0,
+      otherwise use 1.
+
+  vsync-active:
+    type: int
+    required: true
+    description:
+      Vertical synchronization pulse polarity.
+      If VSYNC is active low, use 0,
+      otherwise use 1.
+
+  de-active:
+    type: int
+    required: true
+    description:
+      Data Enable pulse polarity.
+      If DE is active low, use 0,
+      otherwise use 1.
+
+  pixelclk-active:
+    type: int
+    required: true
+    description:
+      Pixel Clock pulse polarity.
+      If PCLK is active low, use 0,
+      otherwise use 1.
+
+  enable-l1:
+    type: int
+    required: false
+    default: 0
+    description:
+      Enablement status of layer 1.
+    enum:
+      - 0
+      - 1
+
+  enable-l2:
+    type: int
+    required: false
+    default: 0
+    description:
+      Enablement status of layer 2.
+    enum:
+      - 0
+      - 1
+
+  pixel-fmt-l1:
+    type: string
+    required: false
+    description: Pixel format for Layer 1.
+    enum:
+      - "argb-8888"
+      - "rgb-888"
+      - "rgb-565"
+      - "rgba-8888"
+      - "al-44"
+      - "l-8"
+      - "argb-1555"
+      - "argb-4444"
+      - "undefined"
+
+  pixel-fmt-l2:
+    type: string
+    required: false
+    description: Pixel format for Layer 2.
+    enum:
+      - "argb-8888"
+      - "rgb-888"
+      - "rgb-565"
+      - "rgba-8888"
+      - "al-44"
+      - "l-8"
+      - "argb-1555"
+      - "argb-4444"
+      - "undefined"
+
+  def-back-color-l1:
+    type: int
+    required: false
+    description: Default display background color - layer 1.
+
+  def-back-color-l2:
+    type: int
+    required: false
+    description: Default display background color - layer 2.
+
+  bg-color:
+    type: int
+    required: false
+    default: 0xffffff
+    description: Default display Background layer color.
+
+  win-x0-l1:
+    type: int
+    required: false
+    default: 0
+    description: Window X0 for Layer 1.
+
+  win-y0-l1:
+    type: int
+    required: false
+    default: 0
+    description: Window Y0 for Layer 1.
+
+  win-x1-l1:
+    type: int
+    description: Window X1 for Layer 1.
+
+  win-y1-l1:
+    type: int
+    description: Window Y1 for Layer 1.
+
+  win-x0-l2:
+    type: int
+    required: false
+    default: 0
+    description: Window X0 for Layer 2.
+
+  win-y0-l2:
+    type: int
+    required: false
+    default: 0
+    description: Window Y0 for Layer 2.
+
+  win-x1-l2:
+    type: int
+    description: Window X1 for Layer 2.
+
+  win-y1-l2:
+    type: int
+    description: Window Y1 for Layer 2.
+
+  blend-factor1-l1:
+    type: int
+    required: false
+    default: 4
+    description: Blend factor 1 for current layer color to be used for blending algorithm for layer 1.
+    enum:
+      - 4
+      - 6
+
+  blend-factor2-l1:
+    type: int
+    required: false
+    default: 5
+    description: Blend factor 2 for subjacent layer color to be used for blending algorithm for layer 1.
+    enum:
+      - 5
+      - 7
+
+  blend-factor1-l2:
+    type: int
+    required: false
+    default: 6
+    description: Blend factor 1 for current layer color to be used for blending algorithm for layer 2.
+    enum:
+      - 4
+      - 6
+
+  blend-factor2-l2:
+    type: int
+    required: false
+    default: 7
+    description: Blend factor 2 for subjacent layer color to be used for blending algorithm for layer 2.
+    enum:
+      - 5
+      - 7
+
+  const-alpha-l1:
+    type: int
+    required: false
+    default: 0xff
+    description: Constant alpha to be used for layer 1.
+
+  const-alpha-l2:
+    type: int
+    required: false
+    default: 0xff
+    description: Constant alpha to be used for layer 2.
+
+  clock-frequency:
+    type: int
+    description: |
+      Pixel clock for display controller in Hz. Must be at least as large as:
+      (height + vsync-len + vfront-porch + vback-porch) *
+      (width + hsync-len + hfront-porch + hback-porch) *
+      desired frame rate

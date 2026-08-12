@@ -1,0 +1,15 @@
+tests:
+  benchmark.kernel.scheduler_userspace:
+    arch_allow: arm64
+    tags:
+      - kernel
+      - benchmark
+      - userspace
+    filter: CONFIG_ARCH_HAS_USERSPACE
+    arch_exclude:
+      - posix
+    harness: console
+    harness_config:
+      type: multi_line
+      regex:
+        - "SUCCESS"

@@ -1,0 +1,12 @@
+board:
+  name: hifive1
+  full_name: HiFive1
+  vendor: sifive
+  socs:
+    - name: fe310
+  revision:
+    format: letter
+    default: "A"
+    revisions:
+      - name: "A"
+      - name: "B"

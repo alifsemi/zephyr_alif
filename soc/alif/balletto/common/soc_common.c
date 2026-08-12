@@ -1,0 +1,264 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <se_service.h>
+#include <soc_common.h>
+#include <zephyr/init.h>
+#include <zephyr/arch/cpu.h>
+#include <zephyr/sys/reboot.h>
+
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(soc, CONFIG_SOC_LOG_LEVEL);
+
+#include <zephyr/pm/policy.h>
+#include <zephyr/pm/pm.h>
+#include <zephyr/dt-bindings/dma/alif_dma_event_router.h>
+
+/*
+ * Lock deeper power states during early boot to prevent premature sleep
+ *
+ * During driver initialization, some drivers may trigger idle conditions
+ * that could cause the PM subsystem to enter deep sleep states before the
+ * system is ready. This locks all deeper states, allowing only
+ * PM_STATE_RUNTIME_IDLE during boot. Locks are released at APPLICATION phase.
+ */
+static int soc_pm_lock_boot_states(void)
+{
+	/* Lock all deeper power states, allowing only RUNTIME_IDLE during boot */
+	for (enum pm_state state = PM_STATE_SUSPEND_TO_IDLE; state < PM_STATE_COUNT; state++) {
+		pm_policy_state_lock_get(state, PM_ALL_SUBSTATES);
+	}
+
+	return 0;
+}
+SYS_INIT(soc_pm_lock_boot_states, PRE_KERNEL_2, 0);
+
+/*
+ * Release deeper power state locks after kernel initialization
+ *
+ * Once kernel initialization is complete (APPLICATION phase), release the
+ * boot-time locks to allow normal power management operation.
+ */
+static int soc_pm_unlock_boot_states(void)
+{
+	/* Unlock all deeper power states */
+	for (enum pm_state state = PM_STATE_SUSPEND_TO_IDLE; state < PM_STATE_COUNT; state++) {
+		pm_policy_state_lock_put(state, PM_ALL_SUBSTATES);
+	}
+
+	return 0;
+}
+SYS_INIT(soc_pm_unlock_boot_states, APPLICATION, 0);
+
+/*
+ * Single SoC PM notifier for save/restore of SoC-level peripheral
+ * configuration registers across deep power states (SOFT_OFF, SUSPEND_TO_RAM).
+ */
+#if IS_ENABLED(CONFIG_PM)
+
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay)
+/* Saved HE_DMA_SEL value (LP-SPI mux) — restored before dma2 driver resumes */
+static uint32_t he_dma_sel_saved;
+
+static void soc_pm_save_dma(void)
+{
+	he_dma_sel_saved = sys_read32(M55HE_CFG_HE_DMA_SEL);
+}
+
+static void soc_pm_restore_dma(void)
+{
+	sys_clear_bits(M55HE_CFG_HE_DMA_CTRL, BIT(0));
+	sys_write32(0U, M55HE_CFG_HE_DMA_IRQ);
+	sys_write32(0U, M55HE_CFG_HE_DMA_PERIPH);
+	sys_set_bits(M55HE_CFG_HE_DMA_CTRL, BIT(16));
+	sys_write32(he_dma_sel_saved, M55HE_CFG_HE_DMA_SEL);
+}
+#endif /* dma2 */
+
+static void soc_pm_state_entry(enum pm_state state)
+{
+	if (state == PM_STATE_RUNTIME_IDLE || state == PM_STATE_SUSPEND_TO_IDLE) {
+		return;
+	}
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay)
+	soc_pm_save_dma();
+#endif
+}
+
+static void soc_pm_pre_device_resume(enum pm_state state)
+{
+	if (state == PM_STATE_RUNTIME_IDLE || state == PM_STATE_SUSPEND_TO_IDLE) {
+		return;
+	}
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay)
+	soc_pm_restore_dma();
+#endif
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi0), okay)
+	if (IS_ENABLED(CONFIG_SOC_SERIES_B1)) {
+		sys_write32(0x1, CLKCTRL_PER_SLV_OSPI_CTRL);
+	}
+#endif
+}
+
+static struct pm_notifier soc_pm_notifier = {
+	.state_entry = soc_pm_state_entry,
+	.pre_device_resume = soc_pm_pre_device_resume,
+};
+
+static int soc_pm_notifier_init(void)
+{
+	pm_notifier_register(&soc_pm_notifier);
+	return 0;
+}
+SYS_INIT(soc_pm_notifier_init, PRE_KERNEL_2, 1);
+
+#endif /* CONFIG_PM */
+
+/* Configure HE_DMA_SEL register for LP-SPI based on DTS dmas property.
+ * B1: lpspi0 always uses DMA2.
+ *   HE_DMA_SEL[5:4]: 0x0 = DMA2 group 1, 0x1/0x2/0x3 = DMA2 group 2
+ */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay) && DT_NODE_HAS_PROP(DT_NODELABEL(lpspi0), dmas)
+static void soc_configure_he_dma_sel_lpspi(void)
+{
+	uint32_t dma_group = ALIF_DMA_DECODE_GROUP(
+		DT_PHA_BY_IDX(DT_NODELABEL(lpspi0), dmas, 0, channel));
+	/* group 1 = 0x0 (DMA2 group 1); group 2+ = 0x1 (DMA2 group 2) */
+	uint32_t sel_val = (dma_group == 1U) ? 0x0U : 0x1U;
+
+	sys_clear_bits(M55HE_CFG_HE_DMA_SEL, HE_DMA_SEL_LPSPI_Msk);
+	sys_set_bits(M55HE_CFG_HE_DMA_SEL,
+		     (sel_val << HE_DMA_SEL_LPSPI_Pos) & HE_DMA_SEL_LPSPI_Msk);
+}
+#endif /* lpspi0 with dmas */
+
+/**
+ * @brief Perform common SoC initialization at boot
+ *        for ensemble family.
+ *        This will run after soc_early_init_hook.
+ *
+ * @return 0
+ */
+static int soc_init(void)
+{
+	/* LPUART settings */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpuart), okay)
+	if (IS_ENABLED(CONFIG_SERIAL)) {
+		/* Enable clock supply for LPUART */
+		sys_write32(0x1, AON_RTSS_HE_LPUART_CKEN);
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_SPI_DW) /* SPI */
+	/* SPI: Enable Master Mode and SS Value */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi0), okay) && !DT_PROP(DT_NODELABEL(spi0), serial_target)
+	sys_set_bits(CLKCTRL_PER_SLV_SSI_CTRL, BIT(0) | BIT(8));
+#endif /* spi0 */
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi1), okay) && !DT_PROP(DT_NODELABEL(spi1), serial_target)
+	sys_set_bits(CLKCTRL_PER_SLV_SSI_CTRL, BIT(1) | BIT(9));
+#endif /* spi1 */
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(spi2), okay) && !DT_PROP(DT_NODELABEL(spi2), serial_target)
+	sys_set_bits(CLKCTRL_PER_SLV_SSI_CTRL, BIT(2) | BIT(10));
+#endif /* spi2 */
+
+	/* LP-SPI */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay)
+		/*Clock : LP-SPI*/
+		sys_set_bits(M55HE_CFG_HE_CLK_ENA, BIT(16));
+
+		/* LP-SPI0 Mode Selection */
+		/* To Slave Set Bit : 15  */
+		/* To Master Clear Bit : 15 */
+		sys_clear_bits(M55HE_CFG_HE_CLK_ENA, BIT(15));
+
+		/*LP-SPI0 Flex GPIO*/
+		sys_write32(0x1, VBAT_GPIO_CTRL_EN);
+#endif /* LP-SPI */
+
+#endif /* defined(CONFIG_SPI_DW) */
+
+	/* Enable DMA */
+#if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma2), arm_dma_pl330, okay)
+	sys_clear_bits(M55HE_CFG_HE_DMA_CTRL, BIT(0));
+	sys_write32(0U, M55HE_CFG_HE_DMA_IRQ);
+	sys_write32(0U, M55HE_CFG_HE_DMA_PERIPH);
+	sys_set_bits(M55HE_CFG_HE_DMA_CTRL, BIT(16));
+#endif
+
+	/* Configure HE_DMA_SEL mux for LP-SPI */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpspi0), okay) && DT_NODE_HAS_PROP(DT_NODELABEL(lpspi0), dmas)
+	soc_configure_he_dma_sel_lpspi();
+#endif
+
+	/* RTC Clk Enable */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(rtc0), okay)
+	sys_write32(0x1, LPRTC0_CLK_EN);
+#endif
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(rtc1), okay)
+	sys_write32(0x1, LPRTC1_CLK_EN);
+#endif
+
+	/* lptimer settings */
+#if DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers)
+	LPTIMER_CONFIG(0);
+	LPTIMER_CONFIG(1);
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(snps_dw_timers) */
+
+	/*Clock : OSPI */
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(ospi0), okay)
+	if (IS_ENABLED(CONFIG_SOC_SERIES_B1)) {
+		sys_write32(0x1, CLKCTRL_PER_SLV_OSPI_CTRL);
+	}
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(sdhc), okay)
+	/* Enable CFG (100 MHz and 20MHz) clock.*/
+	sys_set_bits(CGU_CLK_ENA, BIT(21) | BIT(22));
+
+	/* Peripheral clock enable */
+	sys_set_bits(CLKCTRL_PER_MST_PERIPH_CLK_EN, BIT(16));
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(usb), okay)
+	/* USB power on reset clear */
+	sys_clear_bits(CLKCTRL_PER_MST_USB_CTRL2, BIT(8));
+#endif
+
+	/* CAN settings */
+#if (DT_NODE_HAS_STATUS(DT_NODELABEL(can0), okay) || \
+	DT_NODE_HAS_STATUS(DT_NODELABEL(can1), okay))
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(can1), okay)
+	/* Flex GPIO */
+	sys_write32(0x1, VBAT_GPIO_CTRL_EN);
+#endif
+	/* Enable HFOSC and 160MHz clock */
+	sys_set_bits(CGU_CLK_ENA, BIT(20) | BIT(23));
+#endif
+	return 0;
+}
+
+#ifdef CONFIG_REBOOT
+void sys_arch_reboot(int type)
+{
+	switch (type) {
+	case SYS_REBOOT_WARM:
+		/* Use Cold boot until NVIC reset is fully working */
+		/* se_service_boot_reset_cpu(EXTSYS_1); */
+		se_service_boot_reset_soc();
+		break;
+	case SYS_REBOOT_COLD:
+		se_service_boot_reset_soc();
+		break;
+
+	default:
+		/* Do nothing */
+		break;
+	}
+}
+#endif
+
+SYS_INIT(soc_init, PRE_KERNEL_1, 1);

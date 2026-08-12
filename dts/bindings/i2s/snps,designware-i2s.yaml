@@ -1,0 +1,15 @@
+# Copyright (c) 2025 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Synopsys DesignWare I2S node
+
+compatible: "snps,designware-i2s"
+
+include: [base.yaml,pinctrl-device.yaml]
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true

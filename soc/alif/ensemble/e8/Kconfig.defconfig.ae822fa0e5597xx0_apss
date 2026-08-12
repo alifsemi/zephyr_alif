@@ -1,0 +1,10 @@
+# Copyright (c) 2025 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+if SOC_AE822FA0E5597XX0_APSS
+
+config NUM_IRQS
+	default 480
+
+endif # SOC_AE822FA0E5597XX0_APSS

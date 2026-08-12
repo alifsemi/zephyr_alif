@@ -1,0 +1,9 @@
+# Copyright (C) 2024 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config LPI2C_ALIF
+	bool "Enable LPI2C for Alif Boards"
+	default n
+	depends on I2C && DT_HAS_ALIF_LPI2C_ENABLED
+	help
+	  Enable LPI2C module for Alif Boards

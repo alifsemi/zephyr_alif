@@ -1,0 +1,13 @@
+/*
+ * SPDX-FileCopyrightText: Copyright Alif Semiconductor
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* enable HFOSC clock clk_38p4m. */
+&clk_38p4m {
+	status = "okay";
+};
+
+&uart2 {
+	clocks = <&clockctrl ALIF_UART2_38M4_CLK>;
+};
