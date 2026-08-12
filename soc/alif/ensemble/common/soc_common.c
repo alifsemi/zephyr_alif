@@ -10,9 +10,9 @@
 #if IS_ENABLED(CONFIG_PM)
 #include <zephyr/pm/pm.h>
 #include <zephyr/pm/policy.h>
-#include <se_service.h>
 #include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
 #endif
+#include <se_service.h>
 
 #if CONFIG_ENSEMBLE_GEN2 /* ENSEMBLE_GEN2 SoC */
 /* GPIO: enable debounce clock / divisor. */
@@ -190,6 +190,45 @@ static int soc_pm_notifier_init(void)
 SYS_INIT(soc_pm_notifier_init, PRE_KERNEL_2, 1);
 
 #endif /* CONFIG_PM */
+
+/* Enable analog peripheral supply (LDO + bandgap). Required by the
+ * regular comparator (cmp) instances when no LPCMP node is present.
+ */
+#if DT_HAS_COMPAT_STATUS_OKAY(alif_cmp)
+static int soc_ana_periph_enable(void)
+{
+	return se_service_power_settings_set(POWER_SETTING_ANA_PERIPH_EN, true);
+}
+SYS_INIT(soc_ana_periph_enable, POST_KERNEL, CONFIG_COMPARATOR_INIT_PRIORITY);
+#endif /* alif_cmp without lpcmp */
+
+#if IS_ENABLED(CONFIG_SOC_SERIES_E1C)
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpcmp), okay)
+/* Enable analog supply and configure LPCMP in one init step so the
+ * analog peripheral is guaranteed to be powered before LPCMP setup.
+ */
+static int soc_lpcmp_init(void)
+{
+	const lpcmp_configure_t lpcmp_cfg = {
+		.comp_lp0_hyst = DT_ENUM_IDX(DT_NODELABEL(lpcmp), hysteresis_level),
+		.comp_lp0_in_p_sel = DT_ENUM_IDX(DT_NODELABEL(lpcmp), positive_input),
+		.comp_lp0_in_m_sel = DT_ENUM_IDX(DT_NODELABEL(lpcmp), negative_input),
+		.comp_lp_en = true,
+		.lpcomp_clk32k_en = true,
+		.lpcomp_clk_sel = 1,
+	};
+	int ret;
+
+	ret = se_service_power_settings_set(POWER_SETTING_ANA_PERIPH_EN, true);
+	if (ret) {
+		return ret;
+	}
+
+	return se_service_configure_lpcmp(&lpcmp_cfg);
+}
+SYS_INIT(soc_lpcmp_init, POST_KERNEL, CONFIG_COMPARATOR_INIT_PRIORITY);
+#endif /* lpcmp */
+#endif /* CONFIG_SOC_SERIES_E1C */
 
 /* Configure HE_DMA_SEL register for LP-SPI based on DTS dmas property.
  *
