@@ -27,13 +27,15 @@ struct clock_control_alif_config {
 };
 
 struct balletto_clk_data {
-	uint32_t axi_freq;
-	uint32_t ahb_freq;
-	uint32_t apb_freq;
-	uint32_t sysref_freq;
-	uint32_t hfosc_freq;
-	uint32_t extsys0_freq;
-	uint32_t extsys1_freq;
+	struct {
+		uint32_t axi_freq;
+		uint32_t ahb_freq;
+		uint32_t apb_freq;
+		uint32_t sysref_freq;
+		uint32_t hfosc_freq;
+		uint32_t extsys0_freq;
+		uint32_t extsys1_freq;
+	} sys_clk_cache;
 };
 
 static struct balletto_clk_data balletto_clk;
@@ -130,8 +132,8 @@ static uint32_t get_syst_refclk_freq(const struct device *dev)
 {
 	struct balletto_clk_data *data = dev->data;
 
-	if (data->sysref_freq != 0U) {
-		return data->sysref_freq;
+	if (data->sys_clk_cache.sysref_freq != 0U) {
+		return data->sys_clk_cache.sysref_freq;
 	}
 
 	const uint32_t base_clk = (sys_read32(CGU_PLL_CLK_SEL) & CGU_PLL_CLK_SEL_SYSREF)
@@ -140,8 +142,8 @@ static uint32_t get_syst_refclk_freq(const struct device *dev)
 	const uint32_t reg_val = sys_read32(CGU_ESCLK_SEL);
 	const uint32_t divider = (reg_val & BIT(27)) ? ((reg_val >> 16) & 0x7ff) : 0;
 
-	data->sysref_freq = base_clk / (!divider ? 1 : divider);
-	return data->sysref_freq;
+	data->sys_clk_cache.sysref_freq = base_clk / (!divider ? 1 : divider);
+	return data->sys_clk_cache.sysref_freq;
 }
 
 static uint32_t get_syst_aclk_freq(const struct device *dev)
@@ -150,8 +152,8 @@ static uint32_t get_syst_aclk_freq(const struct device *dev)
 #define SYST_ACLK_DIV0 0x824
 	struct balletto_clk_data *data = dev->data;
 
-	if (data->axi_freq != 0U) {
-		return data->axi_freq;
+	if (data->sys_clk_cache.axi_freq != 0U) {
+		return data->sys_clk_cache.axi_freq;
 	}
 
 	const uint32_t clkselect = (sys_read32(HOST_BASE_SYS_CTRL + SYST_ACLK_CTRL) >> 8) & 0xFF;
@@ -162,23 +164,23 @@ static uint32_t get_syst_aclk_freq(const struct device *dev)
 	}
 
 	if (clkselect == 1) {
-		data->axi_freq = get_syst_refclk_freq(dev);
-		return data->axi_freq;
+		data->sys_clk_cache.axi_freq = get_syst_refclk_freq(dev);
+		return data->sys_clk_cache.axi_freq;
 	}
 
 	/* Read current divider value */
 	const uint32_t divider = (sys_read32(HOST_BASE_SYS_CTRL + SYST_ACLK_DIV0) >> 16) & 0xF;
 
-	data->axi_freq = (get_syspll_clk_freq() >> divider);
-	return data->axi_freq;
+	data->sys_clk_cache.axi_freq = (get_syspll_clk_freq() >> divider);
+	return data->sys_clk_cache.axi_freq;
 }
 
 static uint32_t get_syst_hclk_freq(const struct device *dev)
 {
 	struct balletto_clk_data *data = dev->data;
 
-	if (data->ahb_freq != 0U) {
-		return data->ahb_freq;
+	if (data->sys_clk_cache.ahb_freq != 0U) {
+		return data->sys_clk_cache.ahb_freq;
 	}
 
 	uint32_t divider = (sys_read32(AON_BUS_CLK_DIV) >> 8) & 0x3;
@@ -187,16 +189,16 @@ static uint32_t get_syst_hclk_freq(const struct device *dev)
 		/* 2 or 3 == divide by 4 */
 		divider = 2;
 	}
-	data->ahb_freq = (get_syspll_clk_freq() >> divider);
-	return data->ahb_freq;
+	data->sys_clk_cache.ahb_freq = (get_syspll_clk_freq() >> divider);
+	return data->sys_clk_cache.ahb_freq;
 }
 
 static uint32_t get_syst_pclk_freq(const struct device *dev)
 {
 	struct balletto_clk_data *data = dev->data;
 
-	if (data->apb_freq != 0U) {
-		return data->apb_freq;
+	if (data->sys_clk_cache.apb_freq != 0U) {
+		return data->sys_clk_cache.apb_freq;
 	}
 
 	uint32_t divider = (sys_read32(AON_BUS_CLK_DIV)) & 0x3;
@@ -205,8 +207,8 @@ static uint32_t get_syst_pclk_freq(const struct device *dev)
 		/* 2 or 3 == divide by 4 */
 		divider = 2;
 	}
-	data->apb_freq = (get_syspll_clk_freq() >> divider);
-	return data->apb_freq;
+	data->sys_clk_cache.apb_freq = (get_syspll_clk_freq() >> divider);
+	return data->sys_clk_cache.apb_freq;
 }
 
 static uint32_t get_hfxo_divided_clk_freq(void)
@@ -245,65 +247,65 @@ static uint32_t get_hfosc_clk_freq(const struct device *dev)
 {
 	struct balletto_clk_data *data = dev->data;
 
-	if (data->hfosc_freq != 0U) {
-		return data->hfosc_freq;
+	if (data->sys_clk_cache.hfosc_freq != 0U) {
+		return data->sys_clk_cache.hfosc_freq;
 	}
 
 	/* Check oscillator clock source for HFOSC_CLK */
 	if (sys_read32(CGU_OSC_CTRL) & BIT(4)) {
 		/* HFXO selected */
-		data->hfosc_freq = get_hfxo_divided_clk_freq();
+		data->sys_clk_cache.hfosc_freq = get_hfxo_divided_clk_freq();
 	} else {
-		data->hfosc_freq = (get_hfrc_clk_freq() / 2);
+		data->sys_clk_cache.hfosc_freq = (get_hfrc_clk_freq() / 2);
 	}
-	return data->hfosc_freq;
+	return data->sys_clk_cache.hfosc_freq;
 }
 
 static uint32_t get_he_clock_freq(const struct device *dev)
 {
 	struct balletto_clk_data *data = dev->data;
 
-	if (data->extsys1_freq != 0U) {
-		return data->extsys1_freq;
+	if (data->sys_clk_cache.extsys1_freq != 0U) {
+		return data->sys_clk_cache.extsys1_freq;
 	}
 
 	if (sys_read32(CGU_PLL_CLK_SEL) & CGU_PLL_CLK_SEL_ES1) {
 		switch ((sys_read32(CGU_ESCLK_SEL) >> HE_PLL_DIV_POS) & HE_PLL_DIV_MASK) {
 		case 0:
-			data->extsys1_freq = (PLL_CLOCK2_SRC_FREQ / 2);
+			data->sys_clk_cache.extsys1_freq = (PLL_CLOCK2_SRC_FREQ / 2);
 			break;
 		case 1:
-			data->extsys1_freq = (PLL_CLOCK1_SRC_FREQ / 2);
+			data->sys_clk_cache.extsys1_freq = (PLL_CLOCK1_SRC_FREQ / 2);
 			break;
 		case 2:
-			data->extsys1_freq = PLL_CLOCK2_SRC_FREQ;
+			data->sys_clk_cache.extsys1_freq = PLL_CLOCK2_SRC_FREQ;
 			break;
 		case 3:
 		default:
-			data->extsys1_freq = PLL_CLOCK1_SRC_FREQ;
+			data->sys_clk_cache.extsys1_freq = PLL_CLOCK1_SRC_FREQ;
 			break;
 		}
-		return data->extsys1_freq;
+		return data->sys_clk_cache.extsys1_freq;
 	}
 
 	const uint32_t es1_osc = (sys_read32(CGU_ESCLK_SEL) >> HE_OSC_DIV_POS) & HE_OSC_DIV_MASK;
 
 	switch (es1_osc) {
 	case 0:
-		data->extsys1_freq = get_hfrc_clk_freq();
+		data->sys_clk_cache.extsys1_freq = get_hfrc_clk_freq();
 		break;
 	case 1:
-		data->extsys1_freq = get_hfrc_clk_freq() / 2;
+		data->sys_clk_cache.extsys1_freq = get_hfrc_clk_freq() / 2;
 		break;
 	case 2:
-		data->extsys1_freq = ALIF_CLOCK_76M8_CLK_FREQ;
+		data->sys_clk_cache.extsys1_freq = ALIF_CLOCK_76M8_CLK_FREQ;
 		break;
 	case 3:
 	default:
-		data->extsys1_freq = get_hfxo_divided_clk_freq();
+		data->sys_clk_cache.extsys1_freq = get_hfxo_divided_clk_freq();
 		break;
 	};
-	return data->extsys1_freq;
+	return data->sys_clk_cache.extsys1_freq;
 }
 
 static uint32_t alif_get_input_clock(const struct device *dev, uint32_t const clock_name)
@@ -698,7 +700,7 @@ static void balletto_clk_pre_device_resume(enum pm_state state)
 	if (state == PM_STATE_RUNTIME_IDLE || state == PM_STATE_SUSPEND_TO_IDLE) {
 		return;
 	}
-	memset(&balletto_clk, 0, sizeof(balletto_clk));
+	memset(&balletto_clk.sys_clk_cache, 0, sizeof(balletto_clk.sys_clk_cache));
 }
 
 static struct pm_notifier balletto_clk_pm_notifier = {
