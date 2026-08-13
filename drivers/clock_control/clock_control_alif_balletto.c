@@ -13,6 +13,7 @@
 #include <string.h>
 #include <zephyr/pm/pm.h>
 #endif
+#include <zephyr/pm/device.h>
 #include <soc_common.h>
 
 LOG_MODULE_REGISTER(alif_clock_control, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
@@ -36,6 +37,9 @@ struct balletto_clk_data {
 		uint32_t extsys0_freq;
 		uint32_t extsys1_freq;
 	} sys_clk_cache;
+#if IS_ENABLED(CONFIG_PM_DEVICE)
+	uint32_t cgu_mask;
+#endif
 };
 
 static struct balletto_clk_data balletto_clk;
@@ -708,6 +712,31 @@ static struct pm_notifier balletto_clk_pm_notifier = {
 };
 #endif /* CONFIG_PM */
 
+#if IS_ENABLED(CONFIG_PM_DEVICE)
+static int alif_clock_pm_action(const struct device *dev,
+				enum pm_device_action action)
+{
+	struct balletto_clk_data *data = dev->data;
+	const struct clock_control_alif_config *cfg = dev->config;
+	const uint32_t reg_addr = cfg->cgu_base + ALIF_CLK_ENA_REG;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		/* Nothing to save; mask is cached at init. */
+		break;
+	case PM_DEVICE_ACTION_RESUME:
+		if (data->cgu_mask != 0U) {
+			sys_set_bits(reg_addr, data->cgu_mask);
+		}
+		break;
+	default:
+		return -ENOTSUP;
+	}
+	return 0;
+}
+PM_DEVICE_DT_DEFINE(DT_NODELABEL(clockctrl), alif_clock_pm_action);
+#endif /* CONFIG_PM_DEVICE */
+
 static int clockctrl_init(const struct device *dev)
 {
 	uint32_t cgu_mask = 0;
@@ -740,6 +769,10 @@ static int clockctrl_init(const struct device *dev)
 		sys_set_bits(cgu_module_base + ALIF_CLK_ENA_REG, cgu_mask);
 	}
 
+#if IS_ENABLED(CONFIG_PM_DEVICE)
+	((struct balletto_clk_data *)dev->data)->cgu_mask = cgu_mask;
+#endif
+
 #if IS_ENABLED(CONFIG_PM)
 	pm_notifier_register(&balletto_clk_pm_notifier);
 #endif
@@ -764,5 +797,7 @@ static const struct clock_control_alif_config config = {
 	.m55he_cfg_base = DT_INST_REG_ADDR_BY_NAME(0, m55he_cfg),
 };
 
-DEVICE_DT_DEFINE(DT_NODELABEL(clockctrl), clockctrl_init, NULL, &balletto_clk, &config,
+DEVICE_DT_DEFINE(DT_NODELABEL(clockctrl), clockctrl_init,
+		 PM_DEVICE_DT_GET(DT_NODELABEL(clockctrl)),
+		 &balletto_clk, &config,
 		 PRE_KERNEL_1, CONFIG_CLOCK_CONTROL_INIT_PRIORITY, &alif_clock_control_driver_api);
