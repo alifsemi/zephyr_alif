@@ -1394,6 +1394,10 @@ static int uart_ns16550_irq_is_pending(const struct device *dev)
 
 	int ret = (!(IIRC(dev) & IIR_NIP)) ? 1 : 0;
 
+#ifdef CONFIG_UART_NS16550_WA_TX_FIFO_EMPTY_INTERRUPT
+	ret |= data->sw_tx_irq;
+#endif
+
 	k_spin_unlock(&data->lock, key);
 
 	return ret;
