@@ -745,6 +745,13 @@ static int can_cast_send(const struct device *dev, const struct can_frame *frame
 		return -ENOTSUP;
 	}
 
+	/* Returns error if RTR transmission is disabled */
+	if ((frame->flags & CAN_FRAME_RTR) &&
+		!IS_ENABLED(CONFIG_CAN_ACCEPT_RTR)) {
+		LOG_ERR("RTR transmission not supported");
+		return -ENOTSUP;
+	}
+
 	/* Returns error if RTR is requested to send in FD mode */
 	if ((frame->flags & CAN_FRAME_RTR) && (frame->flags & (CAN_FRAME_FDF | CAN_FRAME_BRS))) {
 		LOG_ERR("RTR in FD Mode");
