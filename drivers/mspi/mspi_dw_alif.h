@@ -127,14 +127,16 @@ static inline int alif_validate_dev_config(const struct device *dev,
 					   const struct mspi_dev_cfg *cfg)
 {
 	const struct alif_mspi_vendor_data *data = alif_vendor_data_get(dev);
+	struct mspi_dw_data *dev_data = dev->data;
 
 	if (data == NULL || !data->hyperbus_mode) {
 		return 0;
 	}
 
 	if ((param_mask & MSPI_DEVICE_CONFIG_IO_MODE) &&
-	    cfg->io_mode != MSPI_IO_MODE_OCTAL) {
-		LOG_ERR("Alif HyperBus supports only Octal I/O mode");
+	    cfg->io_mode != MSPI_IO_MODE_OCTAL &&
+	    cfg->io_mode != MSPI_IO_MODE_HEX_8_8_16) {
+		LOG_ERR("Alif HyperBus supports only Octal/HEX_8_8_16 I/O mode");
 		return -ENOTSUP;
 	}
 
@@ -148,6 +150,13 @@ static inline int alif_validate_dev_config(const struct device *dev,
 		LOG_ERR("Alif HyperBus requires RWDS");
 		return -ENOTSUP;
 	}
+
+	/*
+	 * On the Alif DesignWare OSPI integration, SPI_CTRLR0 bit 24 selects
+	 * HyperBus framing for indirect transfers. It shares the bit position
+	 * named SPI_DM_EN by the generic register definitions.
+	 */
+	dev_data->spi_ctrlr0 |= SPI_CTRLR0_SPI_DM_EN_BIT;
 
 	return 0;
 }
@@ -168,14 +177,14 @@ static inline void alif_xip_update_ctrl(const struct device *dev, struct xip_ctr
 			     XIP_CTRL_RXDS_SIG_EN_BIT |
 			     XIP_CTRL_DFS_HC_BIT |
 			     FIELD_PREP(XIP_CTRL_TRANS_TYPE_MASK,
-					XIP_CTRL_TRANS_TYPE_TT2);
+					XIP_CTRL_TRANS_TYPE_TT3);
 		ctrl->write = (ctrl->write & XIP_WRITE_CTRL_WAIT_CYCLES_MASK) |
 			      XIP_WRITE_CTRL_DFS_HC_BIT |
 			      XIP_WRITE_CTRL_DM_EN_BIT |
 			      XIP_WRITE_CTRL_RXDS_SIG_EN_BIT |
 			      XIP_WRITE_CTRL_HYBERBUS_EN_BIT |
 			      FIELD_PREP(XIP_WRITE_CTRL_TRANS_TYPE_MASK,
-					 XIP_WRITE_CTRL_TRANS_TYPE_TT2);
+					 XIP_WRITE_CTRL_TRANS_TYPE_TT3);
 
 		dev_data->ctrlr0 &= ~(CTRLR0_TMOD_MASK |
 				      CTRLR0_DFS_MASK |

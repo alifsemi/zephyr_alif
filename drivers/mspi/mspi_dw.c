@@ -664,6 +664,7 @@ static bool apply_io_mode(struct mspi_dw_data *dev_data,
 	case MSPI_IO_MODE_OCTAL:
 	case MSPI_IO_MODE_OCTAL_1_1_8:
 	case MSPI_IO_MODE_OCTAL_1_8_8:
+	case MSPI_IO_MODE_HEX_8_8_16:
 		dev_data->ctrlr0 |= FIELD_PREP(CTRLR0_SPI_FRF_MASK,
 					       CTRLR0_SPI_FRF_OCTAL);
 		break;
@@ -774,6 +775,7 @@ static bool apply_xip_io_mode(const struct mspi_dw_data *dev_data,
 	case MSPI_IO_MODE_OCTAL:
 	case MSPI_IO_MODE_OCTAL_1_1_8:
 	case MSPI_IO_MODE_OCTAL_1_8_8:
+	case MSPI_IO_MODE_HEX_8_8_16:
 		ctrl->read |= FIELD_PREP(XIP_CTRL_FRF_MASK,
 					 XIP_CTRL_FRF_OCTAL);
 		ctrl->write |= FIELD_PREP(XIP_WRITE_CTRL_FRF_MASK,
