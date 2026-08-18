@@ -45,4 +45,16 @@ config MEMC_MSPI_IS66WVH
 	  because this driver accesses the device through a memory-mapped
 	  read/write window.
 
+config MEMC_MSPI_S80KS
+	bool "MSPI Infineon S80KS HyperRAM driver"
+	default y
+	depends on DT_HAS_INFINEON_S80KS_ENABLED
+	depends on $(dt_compat_on_bus,$(DT_COMPAT_INFINEON_S80KS),mspi)
+	select MEMC_MSPI
+	help
+	  Enable memory-mapped Infineon S80KS HyperRAM devices connected to
+	  an Alif HyperBus-capable MSPI controller. The driver programs the
+	  device configuration register before enabling the read/write XIP
+	  window. MSPI_XIP must be enabled.
+
 endmenu
