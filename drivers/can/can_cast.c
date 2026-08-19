@@ -694,7 +694,7 @@ static int can_cast_set_timing_data(const struct device *dev, const struct can_t
 
 	loc_timing.sjw = timing_data->sjw;
 	/* Checks for the validity of the Signal Jump Width*/
-	if ((loc_timing.sjw < 0x1U) || (loc_timing.sjw > 0x10U) ||
+	if ((loc_timing.sjw < 0x1U) || (loc_timing.sjw > 0x8U) ||
 	    (loc_timing.sjw > timing_data->phase_seg2)) {
 		LOG_ERR("Invalid Signal Jump Width data");
 		return -ENOTSUP;
@@ -717,7 +717,7 @@ static int can_cast_set_timing_data(const struct device *dev, const struct can_t
 	}
 
 	loc_timing.prescaler = timing_data->prescaler;
-	if ((loc_timing.prescaler < 0x1U) || (loc_timing.prescaler > 0x2U)) {
+	if ((loc_timing.prescaler < 0x1U) || (loc_timing.prescaler > 0x4U)) {
 		LOG_ERR("Invalid Prescaler data");
 		return -ENOTSUP;
 	}

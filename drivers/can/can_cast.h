@@ -75,7 +75,7 @@ extern "C" {
 #define CAN_MIN_BIT_TIME_DATA {		\
 		.sjw = 0x1,		\
 		.prop_seg = 0x0,	\
-		.phase_seg1 = 0x0,	\
+		.phase_seg1 = 0x1,	\
 		.phase_seg2 = 0x2,	\
 		.prescaler = 0x1	\
 	}
