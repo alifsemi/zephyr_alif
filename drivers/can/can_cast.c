@@ -335,6 +335,9 @@ static int can_cast_get_capabilities(const struct device *dev, can_mode_t *cap)
 			*cap |= CAN_MODE_FD;
 		}
 	}
+#if defined(CONFIG_CAN_MANUAL_RECOVERY_MODE)
+	*cap |= CAN_MODE_MANUAL_RECOVERY;
+#endif
 
 	return 0;
 }
@@ -997,12 +1000,12 @@ static int can_cast_recover(const struct device *dev, k_timeout_t timeout)
 		return -ENETDOWN;
 	}
 
-	if (data->err_state != CAN_STATE_BUS_OFF) {
-		return 0;
-	}
-
 	if ((data->common.mode & CAN_MODE_MANUAL_RECOVERY) == 0U) {
 		return -ENOTSUP;
+	}
+
+	if (data->err_state != CAN_STATE_BUS_OFF) {
+		return 0;
 	}
 
 	can_base = DEVICE_MMIO_NAMED_GET(dev, can_reg);
