@@ -745,6 +745,13 @@ static int can_cast_send(const struct device *dev, const struct can_frame *frame
 		return -ENETUNREACH;
 	}
 
+	if ((frame->flags & ~(CAN_FRAME_IDE |
+			      CAN_FRAME_RTR |
+			      CAN_FRAME_FDF |
+			      CAN_FRAME_BRS)) != 0U) {
+		return -ENOTSUP;
+	}
+
 	/* Returns error if in Listen Only mode */
 	if (data->common.mode & CAN_MODE_LISTENONLY) {
 		LOG_ERR("Mode: ListenOnly");
