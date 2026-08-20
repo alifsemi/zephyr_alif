@@ -539,6 +539,10 @@ static int can_cast_set_mode(const struct device *dev, can_mode_t mode)
 			return -ENOTSUP;
 		}
 
+	} else if (config->can_fd) {
+		temp = sys_read32(config->can_fd_ctrl_reg);
+		temp &= ~BIT(config->can_fd_bit);
+		sys_write32(temp, config->can_fd_ctrl_reg);
 	}
 #endif
 
