@@ -9,6 +9,7 @@
 
 #include <zephyr/sys/device_mmio.h>
 #include <zephyr/kernel.h>
+#include <zephyr/pm/device.h>
 #include <zephyr/drivers/mipi_dsi.h>
 #include <zephyr/drivers/mipi_dsi/dsi_dw.h>
 #include <zephyr/drivers/mipi_dphy/dphy_dw.h>
@@ -1233,6 +1234,103 @@ static DEVICE_API(mipi_dsi, dsi_dw_api) = {
 	.transfer = dsi_dw_transfer,
 };
 
+#ifdef CONFIG_PM_DEVICE
+/**
+ * @brief DSI DW suspend handler.
+ *
+ * Stops the DSI controller, disables its clock, and marks the current
+ * mode as invalid so a full reconfiguration is forced on
+ * the next resume.
+ *
+ * @param dev DSI device struct.
+ * @return 0 on success, negative errno otherwise.
+ */
+static int dsi_dw_suspend(const struct device *dev)
+{
+	struct dsi_dw_data *data = dev->data;
+	uintptr_t regs = DEVICE_MMIO_GET(dev);
+
+	/* Stop DSI controller */
+	dsi_dw_pwr_down(regs);
+
+	/* Force a reconfiguration after resume */
+	data->curr_mode = (enum dsi_dw_mode)-1;
+
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
+	const struct dsi_dw_config *config = dev->config;
+	int ret;
+
+	/* Disable controller clock */
+	ret = clock_control_off(config->clk_dev, config->dsi_cid);
+	if (ret) {
+		LOG_ERR("Failed to disable controller clock (%d)", ret);
+		return ret;
+	}
+#endif /* DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks) */
+
+	LOG_DBG("PM: Suspended %s", dev->name);
+
+	return 0;
+}
+
+/**
+ * @brief DSI DW resume handler.
+ *
+ * Re-enables the controller clock. Does not reprogram DSI mode
+ * or packet-size registers directly; these are left invalidated
+ * (curr_mode = -1) so the next configuration call re-applies them.
+ *
+ * @param dev DSI device struct.
+ * @return 0 on success, negative errno otherwise.
+ */
+static int dsi_dw_resume(const struct device *dev)
+{
+	int ret = 0;
+
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
+	ret = dsi_dw_enable_clocks(dev);
+	if (ret) {
+		LOG_ERR("Failed to restore clocks");
+		return ret;
+	}
+#endif /* DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks) */
+
+	LOG_DBG("PM: Resumed %s", dev->name);
+
+	return 0;
+}
+
+
+/**
+ * @brief DSI PM device action handler
+ *
+ * Handles power management state transitions for the DSI DW Controller.
+ *
+ * @param dev DSI device struct
+ * @param action PM device action
+ * @return 0 if successful, negative errno otherwise
+ */
+static int dsi_dw_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		return dsi_dw_suspend(dev);
+
+	case PM_DEVICE_ACTION_RESUME:
+		return dsi_dw_resume(dev);
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Power domain handling is automatic via the PM framework */
+		return 0;
+
+	default:
+		return -ENOTSUP;
+	}
+}
+#endif /* CONFIG_PM_DEVICE */
+
 #define MIPI_DSI_GET_CLK(i)                                                                     \
 	IF_ENABLED(DT_INST_NODE_HAS_PROP(i, clocks),                                            \
 		(.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(i)),                              \
@@ -1286,9 +1384,10 @@ static DEVICE_API(mipi_dsi, dsi_dw_api) = {
 		.num_chunks = 0,								\
 		.null_size = 0,									\
 	};											\
+	IF_ENABLED(CONFIG_PM_DEVICE, (PM_DEVICE_DT_INST_DEFINE(i, dsi_dw_pm_action);))          \
 	DEVICE_DT_INST_DEFINE(i,								\
 			&dsi_dw_init,								\
-			NULL,									\
+			PM_DEVICE_DT_INST_GET(i),						\
 			&data_##i,								\
 			&config_##i,								\
 			POST_KERNEL,								\

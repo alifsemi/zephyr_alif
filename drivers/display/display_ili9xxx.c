@@ -8,6 +8,7 @@
 
 #include "display_ili9xxx.h"
 
+#include <zephyr/pm/device.h>
 #include <zephyr/dt-bindings/display/ili9xxx.h>
 #include <zephyr/drivers/display.h>
 #include <zephyr/sys/byteorder.h>
@@ -23,7 +24,18 @@ struct ili9xxx_data {
 	uint8_t bytes_per_pixel;
 	enum display_pixel_format pixel_format;
 	enum display_orientation orientation;
+#ifdef CONFIG_PM_DEVICE
+	const struct device *dev;
+	struct k_work_delayable reset_work;
+	struct k_work_sync reset_work_sync;
+	struct k_sem resume_sem;
+#endif /* CONFIG_PM_DEVICE */
 };
+
+#ifdef CONFIG_PM_DEVICE
+static void ili9xxx_reset_work_handler(struct k_work *work);
+static inline void ili9xxx_wait_ready(struct ili9xxx_data *data);
+#endif /* CONFIG_PM_DEVICE */
 
 #ifdef CONFIG_ILI9XXX_READ
 
@@ -313,6 +325,10 @@ static int ili9xxx_display_blanking_off(const struct device *dev)
 	const struct ili9xxx_config *config = dev->config;
 	int ret = -ENOTSUP;
 
+#ifdef CONFIG_PM_DEVICE
+	ili9xxx_wait_ready((struct ili9xxx_data *)dev->data);
+#endif /* CONFIG_PM_DEVICE */
+
 	if (config->bl_gpio.port != NULL) {
 		ret = gpio_pin_set_dt(&config->bl_gpio, 1);
 		if (ret < 0) {
@@ -329,6 +345,10 @@ static int ili9xxx_display_blanking_on(const struct device *dev)
 {
 	const struct ili9xxx_config *config = dev->config;
 	int ret = -ENOTSUP;
+
+#ifdef CONFIG_PM_DEVICE
+	ili9xxx_wait_ready((struct ili9xxx_data *)dev->data);
+#endif /* CONFIG_PM_DEVICE */
 
 	if (config->bl_gpio.port != NULL) {
 		ret = gpio_pin_set_dt(&config->bl_gpio, 0);
@@ -381,6 +401,11 @@ static int ili9xxx_set_orientation(const struct device *dev,
 
 	int r;
 	uint8_t tx_data = ILI9XXX_MADCTL_BGR;
+
+#ifdef CONFIG_PM_DEVICE
+	ili9xxx_wait_ready((struct ili9xxx_data *)dev->data);
+#endif /* CONFIG_PM_DEVICE */
+
 	if (config->quirks->cmd_set == CMD_SET_1) {
 		if (orientation == DISPLAY_ORIENTATION_NORMAL) {
 			tx_data |= ILI9XXX_MADCTL_MX;
@@ -441,10 +466,13 @@ static void ili9xxx_get_capabilities(const struct device *dev,
 static int ili9xxx_configure(const struct device *dev)
 {
 	const struct ili9xxx_config *config = dev->config;
+	struct ili9xxx_data *data = dev->data;
 
 	int r;
 	enum display_pixel_format pixel_format;
 	enum display_orientation orientation;
+
+	uint8_t madctl_data = ILI9XXX_MADCTL_BGR;
 
 	/* pixel format */
 	if (config->pixel_format == ILI9XXX_PIXEL_FORMAT_RGB565) {
@@ -476,7 +504,7 @@ static int ili9xxx_configure(const struct device *dev)
 		}
 	}
 
-	/* orientation */
+	/* Set orientation */
 	if (config->rotation == 0U) {
 		orientation = DISPLAY_ORIENTATION_NORMAL;
 	} else if (config->rotation == 90U) {
@@ -487,10 +515,35 @@ static int ili9xxx_configure(const struct device *dev)
 		orientation = DISPLAY_ORIENTATION_ROTATED_270;
 	}
 
-	r = ili9xxx_set_orientation(dev, orientation);
+	if (config->quirks->cmd_set == CMD_SET_1) {
+		if (orientation == DISPLAY_ORIENTATION_NORMAL) {
+			madctl_data |= ILI9XXX_MADCTL_MX;
+		} else if (orientation == DISPLAY_ORIENTATION_ROTATED_90) {
+			madctl_data |= ILI9XXX_MADCTL_MV;
+		} else if (orientation == DISPLAY_ORIENTATION_ROTATED_180) {
+			madctl_data |= ILI9XXX_MADCTL_MY;
+		} else if (orientation == DISPLAY_ORIENTATION_ROTATED_270) {
+			madctl_data |= ILI9XXX_MADCTL_MV | ILI9XXX_MADCTL_MX |
+				   ILI9XXX_MADCTL_MY;
+		}
+	} else if (config->quirks->cmd_set == CMD_SET_2) {
+		if (orientation == DISPLAY_ORIENTATION_NORMAL) {
+			/* Do nothing */
+		} else if (orientation == DISPLAY_ORIENTATION_ROTATED_90) {
+			madctl_data |= ILI9XXX_MADCTL_MV | ILI9XXX_MADCTL_MY;
+		} else if (orientation == DISPLAY_ORIENTATION_ROTATED_180) {
+			madctl_data |= ILI9XXX_MADCTL_MY | ILI9XXX_MADCTL_MX;
+		} else if (orientation == DISPLAY_ORIENTATION_ROTATED_270) {
+			madctl_data |= ILI9XXX_MADCTL_MV | ILI9XXX_MADCTL_MX;
+		}
+	}
+
+	r = ili9xxx_transmit(dev, ILI9XXX_MADCTL, &madctl_data, 1U);
 	if (r < 0) {
 		return r;
 	}
+
+	data->orientation = orientation;
 
 	if (config->inversion) {
 		r = ili9xxx_transmit(dev, ILI9XXX_DINVON, NULL, 0U);
@@ -510,8 +563,15 @@ static int ili9xxx_configure(const struct device *dev)
 static int ili9xxx_init(const struct device *dev)
 {
 	const struct ili9xxx_config *config = dev->config;
-
 	int r;
+#ifdef CONFIG_PM_DEVICE
+	struct ili9xxx_data *data = dev->data;
+
+	data->dev = dev;
+	k_work_init_delayable(&data->reset_work, ili9xxx_reset_work_handler);
+	k_sem_init(&data->resume_sem, 1, 1);
+#endif /* CONFIG_PM_DEVICE */
+
 #ifdef CONFIG_MIPI_DSI
 	struct mipi_dsi_device mdev;
 #endif
@@ -659,6 +719,256 @@ static const struct ili9xxx_quirks ili9488_quirks = {
 };
 #endif
 
+#ifdef CONFIG_PM_DEVICE
+/**
+ * @brief Block the calling thread until any in-progress resume work
+ * has completed.
+ *
+ * Internal only — called from within display API entry points below
+ * so the application doesn't need to be aware of resume timing.
+ * MUST only be called from a context that permits blocking
+ * (application threads) — never from suspend()/resume() themselves.
+ */
+static inline void ili9xxx_wait_ready(struct ili9xxx_data *data)
+{
+	k_sem_take(&data->resume_sem, K_FOREVER);
+	k_sem_give(&data->resume_sem);
+}
+
+/**
+ * @brief ILI9xxx suspend handler.
+ *
+ * Turns the display off, enters panel sleep mode, and disables the
+ * backlight.
+ *
+ * @param dev ILI9xxx device struct.
+ * @return 0 on success, negative errno otherwise.
+ */
+static int ili9xxx_suspend(const struct device *dev)
+{
+	const struct ili9xxx_config *config = dev->config;
+	struct ili9xxx_data *data = dev->data;
+	int ret;
+
+	/*
+	 * Cancel any pending resume work and wait for a running
+	 * resume handler to complete.
+	 */
+	(void)k_work_cancel_delayable_sync(&data->reset_work,
+					   &data->reset_work_sync);
+
+	/*
+	 * If resume work was cancelled before its handler ran,
+	 * it never gets a chance to give resume_sem back.
+	 *
+	 * k_sem_give() is safe here because resume_sem has a
+	 * limit of 1; if the worker already gave it, this is a no-op.
+	 */
+	k_sem_give(&data->resume_sem);
+
+	/* Disable backlight */
+	if (config->bl_gpio.port != NULL) {
+		ret = gpio_pin_set_dt(&config->bl_gpio, 0);
+		if (ret < 0) {
+			LOG_ERR("Failed to turn Backlight GPIO OFF");
+			return ret;
+		}
+	}
+
+	/* Display OFF */
+	ret = ili9xxx_transmit(dev, ILI9XXX_DISPOFF, NULL, 0);
+	if (ret < 0) {
+		LOG_ERR("DISPOFF failed (%d)", ret);
+		return ret;
+	}
+
+	/* Enter sleep mode */
+	ret = ili9xxx_transmit(dev, ILI9XXX_SLPIN, NULL, 0);
+	if (ret < 0) {
+		LOG_ERR("SLPIN failed (%d)", ret);
+		return ret;
+	}
+
+	LOG_DBG("PM: Suspended %s", dev->name);
+
+	return 0;
+}
+
+/**
+ * @brief Deferred resume work — runs the full reinit sequence on the
+ * system workqueue so ili9xxx_resume() itself never blocks.
+ */
+static void ili9xxx_reset_work_handler(struct k_work *work)
+{
+	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
+	struct ili9xxx_data *data = CONTAINER_OF(dwork, struct ili9xxx_data, reset_work);
+	const struct device *dev = data->dev;
+	const struct ili9xxx_config *config = dev->config;
+	int ret;
+
+#if CONFIG_MIPI_DSI
+	struct mipi_dsi_device mdev;
+
+	mdev.data_lanes = config->num_lanes;
+
+	switch (config->pixel_format) {
+	case ILI9XXX_PIXEL_FORMAT_RGB565:
+		mdev.pixfmt = MIPI_DSI_PIXFMT_RGB565;
+		break;
+	case ILI9XXX_PIXEL_FORMAT_RGB888:
+		mdev.pixfmt = MIPI_DSI_PIXFMT_RGB888;
+		break;
+	case ILI9XXX_PIXEL_FORMAT_RGB666_PACKED:
+		mdev.pixfmt = MIPI_DSI_PIXFMT_RGB666_PACKED;
+		break;
+	case ILI9XXX_PIXEL_FORMAT_RGB666:
+		mdev.pixfmt = MIPI_DSI_PIXFMT_RGB666;
+		break;
+	}
+
+	mdev.timings.hactive = config->x_resolution;
+	mdev.timings.vactive = config->y_resolution;
+	mdev.timings.hfp = TIMINGS_HFP;
+	mdev.timings.hbp = TIMINGS_HBP;
+	mdev.timings.hsync = TIMINGS_HSYNC_LEN;
+	mdev.timings.vfp = TIMINGS_VFP;
+	mdev.timings.vbp = TIMINGS_VBP;
+	mdev.timings.vsync = TIMINGS_VSYNC_LEN;
+
+	mdev.mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_EOT_PACKET;
+
+	if (config->cmd_type == CMD_LP) {
+		mdev.mode_flags |= MIPI_DSI_MODE_LPM;
+	}
+
+	switch (config->vid_mode) {
+	case BURST_MODE:
+		mdev.mode_flags |= MIPI_DSI_MODE_VIDEO_BURST;
+		break;
+	case NON_BURST_MODE_SYNC_PULSE:
+		mdev.mode_flags |= MIPI_DSI_MODE_VIDEO_SYNC_PULSE;
+		break;
+	case NON_BURST_MODE_SYNC_EVENTS:
+	default:
+		break;
+	}
+
+	/* Re-attach to DSI host */
+	ret = mipi_dsi_attach(config->mipi_dev, config->channel, &mdev);
+	if (ret < 0) {
+		LOG_ERR("Failed to re-attach to DSI host (%d)", ret);
+		goto done;
+	}
+#endif /* CONFIG_MIPI_DSI */
+
+	/* Hardware reset */
+	ili9xxx_hw_reset(dev);
+
+	ret = ili9xxx_transmit(dev, ILI9XXX_SWRESET, NULL, 0);
+	if (ret < 0) {
+		LOG_ERR("SWRESET failed (%d)", ret);
+		goto done;
+	}
+
+	if (config->bl_gpio.port != NULL) {
+		ret = gpio_pin_set_dt(&config->bl_gpio, 0);
+		if (ret < 0) {
+			LOG_ERR("Failed to turn Backlight GPIO OFF");
+			goto done;
+		}
+	}
+
+	ili9xxx_transmit(dev, ILI9XXX_DISPOFF, NULL, 0);
+
+	ret = ili9xxx_configure(dev);
+	if (ret < 0) {
+		LOG_ERR("Failed to reconfigure panel (%d)", ret);
+		goto done;
+	}
+
+	ret = ili9xxx_exit_sleep(dev);
+	if (ret < 0) {
+		LOG_ERR("Failed to exit sleep mode (%d)", ret);
+		goto done;
+	}
+
+	LOG_DBG("PM: Resumed %s", dev->name);
+
+done:
+	k_sem_give(&data->resume_sem);
+}
+
+/**
+ * @brief ILI9xxx resume handler.
+ *
+ * Re-attaches to the DSI host (if applicable), performs a full hardware
+ * reset, reprograms all panel registers, exits sleep mode.
+ *
+ * @param dev ILI9xxx device struct.
+ * @return 0 on success, negative errno otherwise.
+ */
+static int ili9xxx_resume(const struct device *dev)
+{
+	const struct ili9xxx_config *config = dev->config;
+	struct ili9xxx_data *data = dev->data;
+	int ret;
+
+	if (IS_ENABLED(CONFIG_MIPI_DSI) && (config->reset_gpio.port != NULL)) {
+		ret = gpio_pin_configure_dt(&config->reset_gpio,
+				GPIO_OUTPUT_INACTIVE);
+		if (ret < 0) {
+			LOG_ERR("Failed to configure reset GPIO (%d)", ret);
+			return ret;
+		}
+	}
+
+	if (config->bl_gpio.port != NULL) {
+		ret = gpio_pin_configure_dt(&config->bl_gpio,
+				GPIO_OUTPUT_INACTIVE);
+		if (ret < 0) {
+			LOG_ERR("Failed to configure Backlight GPIO (%d)", ret);
+			return ret;
+		}
+	}
+
+	/* reset-wait delay + remaining reinit is offloaded to the
+	 * system workqueue rather than blocking this calling context.
+	 */
+	(void)k_sem_take(&data->resume_sem, K_NO_WAIT);
+	k_work_schedule(&data->reset_work, K_NO_WAIT);
+
+	return 0;
+}
+
+/**
+ * @brief ILI9xxx PM device action handler.
+ *
+ * Dispatches power management state transitions for the ILI9xxx panel.
+ *
+ * @param dev ILI9xxx device struct.
+ * @param action PM device action to perform.
+ * @return 0 on success, negative errno otherwise.
+ */
+static int ili9xxx_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		return ili9xxx_suspend(dev);
+
+	case PM_DEVICE_ACTION_RESUME:
+		return ili9xxx_resume(dev);
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Power domain handling is automatic via the PM framework */
+		return 0;
+
+	default:
+		return -ENOTSUP;
+	}
+}
+#endif /* CONFIG_PM_DEVICE */
+
 #define ILI9XXX_GET_DBI_CONFIG(n, t, _dbi_config)                             \
 	IF_ENABLED(CONFIG_MIPI_DBI,                                           \
 		(._dbi_config.mode = MIPI_DBI_MODE_SPI_4WIRE,                 \
@@ -703,8 +1013,9 @@ static const struct ili9xxx_quirks ili9488_quirks = {
 									       \
 	static struct ili9xxx_data ili9##t##_data_##n;                         \
 									       \
+	IF_ENABLED(CONFIG_PM_DEVICE, (PM_DEVICE_DT_INST_DEFINE(n, ili9xxx_pm_action);))           \
 	DEVICE_DT_DEFINE(INST_DT_ILI9XXX(n, t), ili9xxx_init,                  \
-			    NULL, &ili9##t##_data_##n,                         \
+			    PM_DEVICE_DT_INST_GET(n), &ili9##t##_data_##n,                         \
 			    &ili9##t##_config_##n, POST_KERNEL,                \
 			    CONFIG_APPLICATION_INIT_PRIORITY, &ili9xxx_api)
 

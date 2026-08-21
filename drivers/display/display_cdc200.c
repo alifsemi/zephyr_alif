@@ -12,6 +12,7 @@
 #include <zephyr/drivers/display/cdc200.h>
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/kernel.h>
+#include <zephyr/pm/device.h>
 #include <zephyr/sys/device_mmio.h>
 #include "display_cdc200.h"
 #include <soc_memory_map.h>
@@ -861,6 +862,139 @@ static DEVICE_API(display, cdc200_display_api) = {
 	 */
 };
 
+#if defined(CONFIG_PM_DEVICE)
+
+/**
+ * @brief CDC200 suspend handler.
+ *
+ * Stops CDC200 display output, disables all active layers, and gates
+ * the pixel and DPI clocks. Does not currently save layer/enable state;
+ * resume unconditionally reprograms all registers from devicetree config.
+ *
+ * @param dev CDC200 device struct.
+ * @return 0 on success, negative errno otherwise.
+ */
+static int cdc200_suspend(const struct device *dev)
+{
+	const struct cdc200_config *config = dev->config;
+	uintptr_t regs = DEVICE_MMIO_GET(dev);
+	int ret;
+
+	/* Stop display fetch/output */
+	cdc200_set_enable(dev, false);
+
+	/* Disable all enabled layers */
+	for (int i = CDC_LAYER_1; i < CDC_LAYER_MAX; i++) {
+		cdc200_layer_disable(regs, i);
+	}
+
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
+	/* Stop pixel clock */
+	ret = clock_control_off(config->clk_dev, config->pix_cid);
+	if (ret) {
+		LOG_ERR("Failed to disable pixel clock (%d)", ret);
+		return ret;
+	}
+
+	/* Stop DPI/APB clock */
+	ret = clock_control_off(config->clk_dev, config->dpi_cid);
+	if (ret) {
+		LOG_ERR("Failed to disable DPI clock (%d)", ret);
+		return ret;
+	}
+#endif /* DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks) */
+
+#if !defined(CONFIG_MIPI_DSI)
+	if (config->pcfg) {
+		ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_SLEEP);
+		if (ret < 0) {
+			LOG_ERR("Failed to apply sleep pinctrl state");
+			return ret;
+		}
+	}
+#endif /* !defined(CONFIG_MIPI_DSI) */
+
+	LOG_DBG("PM: Suspended %s", dev->name);
+
+	return 0;
+}
+
+/**
+ * @brief CDC200 resume handler.
+ *
+ * Restores pinctrl, clocks, and register state.
+ * All layers and outputs are reprogrammed unconditionally from config;
+ * this does not currently track or restore the pre-suspend enable state.
+ *
+ * @param dev CDC200 device struct.
+ * @return 0 on success, negative errno otherwise.
+ */
+static int cdc200_resume(const struct device *dev)
+{
+	int ret;
+
+#if !defined(CONFIG_MIPI_DSI)
+	const struct cdc200_config *config = dev->config;
+
+	if (config->pcfg) {
+		ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+		if (ret < 0) {
+			LOG_ERR("Failed to apply default pinctrl state");
+			return ret;
+		}
+	}
+#endif /* !defined(CONFIG_MIPI_DSI) */
+
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks)
+	/* Re-enable clocks */
+	ret = cdc200_setup_clocks(dev);
+	if (ret) {
+		LOG_ERR("Failed to restore clocks");
+		return ret;
+	}
+#endif /* DT_ANY_INST_HAS_PROP_STATUS_OKAY(clocks) */
+
+	/* Reprogram all CDC200 registers */
+	ret = cdc200_setup_registers(dev);
+	if (ret) {
+		LOG_ERR("Failed to restore registers");
+		return ret;
+	}
+
+	LOG_DBG("PM: Resumed %s", dev->name);
+
+	return 0;
+}
+
+/**
+ * @brief CDC200 PM device action handler
+ *
+ * Handles power management state transitions for the CDC200 device.
+ *
+ * @param dev CDC200 device struct
+ * @param action PM device action
+ * @return 0 if successful, negative errno otherwise
+ */
+static int cdc200_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		return cdc200_resume(dev);
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		return cdc200_suspend(dev);
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Power domain handling is automatic via the PM framework */
+		return 0;
+
+	default:
+		return -ENOTSUP;
+	}
+}
+#endif /* CONFIG_PM_DEVICE */
+
 /***************** Per-layer Pixel size calculation Macros. ******************/
 #define CDC200_PIXEL_SIZE_IDX_0         4 /* ARGB-8888 */
 #define CDC200_PIXEL_SIZE_IDX_1         3 /* RGB-888 */
@@ -1097,8 +1231,9 @@ static DEVICE_API(display, cdc200_display_api) = {
 		.clk_freq = DT_INST_PROP_OR(i, clock_frequency, 0),                                \
 	};                                                                                         \
                                                                                                    \
-	DEVICE_DT_INST_DEFINE(i, cdc200_init, NULL, &data##i, &config##i, POST_KERNEL,             \
-			      CONFIG_DISPLAY_INIT_PRIORITY, &cdc200_display_api);                  \
+	IF_ENABLED(CONFIG_PM_DEVICE, (PM_DEVICE_DT_INST_DEFINE(i, cdc200_pm_action);))             \
+	DEVICE_DT_INST_DEFINE(i, cdc200_init, PM_DEVICE_DT_INST_GET(i), &data##i, &config##i,      \
+			      POST_KERNEL, CONFIG_DISPLAY_INIT_PRIORITY, &cdc200_display_api);     \
                                                                                                    \
 	static void cdc200_config_func_##i(const struct device *dev)                               \
 	{                                                                                          \

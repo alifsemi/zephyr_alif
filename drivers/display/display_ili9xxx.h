@@ -21,6 +21,7 @@
 
 /* Commands/registers. */
 #define ILI9XXX_SWRESET 0x01
+#define ILI9XXX_SLPIN 0x10
 #define ILI9XXX_SLPOUT 0x11
 #define ILI9XXX_DINVON 0x21
 #define ILI9XXX_GAMSET 0x26
