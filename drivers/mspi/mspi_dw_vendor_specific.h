@@ -66,6 +66,13 @@ static inline uint8_t vendor_specific_ddr_drive_edge(const struct device *dev)
 	return 0U;
 }
 
+static inline bool vendor_specific_device_select(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return false;
+}
+
 #if defined(CONFIG_MSPI_XIP)
 static inline int vendor_specific_xip_enable(const struct device *dev,
 					     const struct mspi_dev_id *dev_id,
@@ -160,6 +167,13 @@ static inline uint8_t vendor_specific_ddr_drive_edge(const struct device *dev)
 	ARG_UNUSED(dev);
 
 	return 0U;
+}
+
+static inline bool vendor_specific_device_select(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return false;
 }
 
 /* DMA support */
@@ -333,6 +347,106 @@ static inline bool vendor_specific_read_dma_irq(const struct device *dev)
 	return (bool) preg->EVENTS_DMA.DONE;
 }
 
+#elif DT_HAS_COMPAT_STATUS_OKAY(alif_mspi_controller)
+
+#include "mspi_dw_alif.h"
+
+#define VENDOR_SPECIFIC_DATA_DEFINE(inst)					\
+	COND_CODE_1(DT_NODE_HAS_COMPAT(DT_DRV_INST(inst), alif_mspi_controller),	\
+		(ALIF_SPECIFIC_DATA_DEFINE(inst)), ())
+
+#define VENDOR_SPECIFIC_DATA_GET(inst)						\
+	COND_CODE_1(DT_NODE_HAS_COMPAT(DT_DRV_INST(inst), alif_mspi_controller),	\
+		(ALIF_SPECIFIC_DATA_GET(inst)), ((void *)NULL))
+
+static inline void vendor_specific_init(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+}
+
+static inline void vendor_specific_suspend(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+}
+
+static inline void vendor_specific_resume(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+}
+
+static inline void vendor_specific_irq_clear(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+}
+
+static inline void vendor_specific_apply_timing_config(const struct device *dev)
+{
+	alif_apply_timing_config(dev);
+}
+
+static inline uint8_t vendor_specific_ddr_drive_edge(const struct device *dev)
+{
+	return alif_ddr_drive_edge(dev);
+}
+
+static inline bool vendor_specific_device_select(const struct device *dev)
+{
+	const struct mspi_dw_data *dev_data = dev->data;
+
+	/*
+	 * Alif OSPI does not allow SER to be programmed while the
+	 * controller is enabled or busy.
+	 */
+	write_ser(dev, BIT(dev_data->dev_id->dev_idx));
+
+	return true;
+}
+
+static inline int vendor_specific_xip_enable(const struct device *dev,
+					     const struct mspi_dev_id *dev_id,
+					     const struct mspi_xip_cfg *cfg)
+{
+	ARG_UNUSED(dev);
+	ARG_UNUSED(dev_id);
+	ARG_UNUSED(cfg);
+
+	return 0;
+}
+
+static inline int vendor_specific_xip_disable(const struct device *dev,
+					      const struct mspi_dev_id *dev_id,
+					      const struct mspi_xip_cfg *cfg)
+{
+	ARG_UNUSED(dev);
+	ARG_UNUSED(dev_id);
+	ARG_UNUSED(cfg);
+
+	return 0;
+}
+
+#if defined(CONFIG_MSPI_DMA)
+static inline void vendor_specific_start_dma_xfer(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+}
+
+static inline bool vendor_specific_dma_accessible_check(const struct device *dev,
+							const uint8_t *data_buf)
+{
+	ARG_UNUSED(dev);
+	ARG_UNUSED(data_buf);
+
+	return true;
+}
+
+static inline bool vendor_specific_read_dma_irq(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return true;
+}
+#endif /* CONFIG_MSPI_DMA */
+
 #else /* Supply empty vendor specific macros for generic case */
 
 static inline void vendor_specific_init(const struct device *dev)
@@ -361,6 +475,13 @@ static inline uint8_t vendor_specific_ddr_drive_edge(const struct device *dev)
 
 	return 0U;
 }
+static inline bool vendor_specific_device_select(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return false;
+}
+
 static inline int vendor_specific_xip_enable(const struct device *dev,
 					     const struct mspi_dev_id *dev_id,
 					     const struct mspi_xip_cfg *cfg)
