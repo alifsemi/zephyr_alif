@@ -44,6 +44,12 @@ properties:
     type: boolean
     description: Enable RXDS variable latency on XiP transactions.
 
+  xip-ser-support:
+    type: boolean
+    description: |
+      Controller implements the XIP slave-enable register. When present,
+      the driver may select an XIP target through the XIPSER register.
+
   memmap-write-support:
     type: boolean
     description: Controller supports memory-mapped write/XiP write registers.
