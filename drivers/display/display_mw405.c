@@ -8,6 +8,7 @@
 #include <zephyr/drivers/mipi_dsi.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
+#include <zephyr/pm/device.h>
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(panel_mw405, CONFIG_DISPLAY_LOG_LEVEL);
@@ -67,7 +68,16 @@ struct mw405_config {
 
 struct mw405_data {
 	enum display_orientation orientation;
+#ifdef CONFIG_PM_DEVICE
+	const struct device *dev;
+	struct k_work_delayable reset_work;
+	struct k_sem resume_sem;
+#endif /* CONFIG_PM_DEVICE */
 };
+
+#ifdef CONFIG_PM_DEVICE
+static void mw405_reset_work_handler(struct k_work *work);
+#endif
 
 enum mw405_op {
 	MW405_SWITCH_PAGE,
@@ -417,6 +427,12 @@ static int mw405_init(const struct device *dev)
 	struct mipi_dsi_device mdev;
 	int ret;
 
+#ifdef CONFIG_PM_DEVICE
+	data->dev = dev;
+	k_work_init_delayable(&data->reset_work, mw405_reset_work_handler);
+	k_sem_init(&data->resume_sem, 1, 1);
+#endif
+
 	mdev.data_lanes = config->num_lanes;
 	mdev.pixfmt = config->pixel_format;
 
@@ -489,33 +505,253 @@ static int mw405_init(const struct device *dev)
 		return ret;
 	}
 
-	gpio_pin_set_dt(&config->bl_gpio, 1);
 	data->orientation = DISPLAY_ORIENTATION_NORMAL;
 
 	return 0;
 }
 
-#define MW405_PANEL(i)								\
-	static const struct mw405_config config_##i = {				\
-		.mipi_dsi = DEVICE_DT_GET(DT_INST_BUS(i)),			\
-		.reset_gpio = GPIO_DT_SPEC_INST_GET_OR(i, reset_gpios, {0}),	\
-		.bl_gpio = GPIO_DT_SPEC_INST_GET_OR(i, bl_gpios, {0}),		\
-		.num_lanes = DT_INST_PROP_BY_IDX(i, data_lanes, 0),		\
-		.pixel_format = DT_INST_PROP(i, pixel_format),			\
-		.active_width = DT_INST_PROP(i, width),				\
-		.active_height = DT_INST_PROP(i, height),			\
-		.channel = DT_INST_REG_ADDR(i),					\
-		.vid_mode = DT_INST_ENUM_IDX_OR(i, video_mode, BURST_MODE),	\
-		.cmd_type = DT_INST_ENUM_IDX_OR(i, command_tx_mode, CMD_LP),	\
-	};									\
-	static struct mw405_data data_##i;					\
-	DEVICE_DT_INST_DEFINE(i,						\
-			&mw405_init,						\
-			NULL,							\
-			&data_##i,						\
-			&config_##i,						\
-			POST_KERNEL,						\
-			CONFIG_APPLICATION_INIT_PRIORITY,			\
+#ifdef CONFIG_PM_DEVICE
+/**
+ * @brief Block the calling thread until any in-progress resume work
+ * has completed. See display_pm_wait_ready() in display_ili9xxx.c
+ * for the full contract — same semantics here.
+ *
+ * Only one panel driver is compiled into a given build (selected via
+ * Kconfig), so this shared symbol name does not collide.
+ */
+int display_pm_wait_ready(const struct device *dev)
+{
+	struct mw405_data *data = dev->data;
+
+	k_sem_take(&data->resume_sem, K_FOREVER);
+	k_sem_give(&data->resume_sem);
+
+	return 0;
+}
+
+/**
+ * @brief MW405 suspend handler.
+ *
+ * Turns the display off, enters panel sleep mode, and disables the
+ * backlight.
+ *
+ * @param dev MW405 device struct.
+ * @return 0 on success, negative errno otherwise.
+ */
+static int mw405_suspend(const struct device *dev)
+{
+	const struct mw405_config *config = dev->config;
+	struct mw405_data *data = dev->data;
+	int ret;
+
+	(void)k_work_cancel_delayable(&data->reset_work);
+
+	/* Display OFF */
+	ret = mipi_dsi_dcs_write(config->mipi_dsi,
+				 config->channel,
+				 MIPI_DCS_SET_DISPLAY_OFF,
+				 NULL,
+				 0);
+	if (ret) {
+		LOG_ERR("DISPLAY_OFF failed");
+		return ret;
+	}
+
+	/* Enter sleep mode */
+	ret = mipi_dsi_dcs_write(config->mipi_dsi,
+				 config->channel,
+				 MIPI_DCS_ENTER_SLEEP_MODE,
+				 NULL,
+				 0);
+	if (ret) {
+		LOG_ERR("ENTER_SLEEP failed");
+		return ret;
+	}
+
+	/* Disable backlight */
+	if (config->bl_gpio.port != NULL) {
+		ret = gpio_pin_set_dt(&config->bl_gpio, 0);
+		if (ret < 0) {
+			LOG_ERR("Failed to turn Backlight GPIO OFF (%d)", ret);
+			return ret;
+		}
+	}
+
+	LOG_DBG("PM: Suspended %s", dev->name);
+
+	return 0;
+}
+
+static void mw405_reset_work_handler(struct k_work *work)
+{
+	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
+	struct mw405_data *data = CONTAINER_OF(dwork, struct mw405_data, reset_work);
+	const struct device *dev = data->dev;
+	const struct mw405_config *config = dev->config;
+	struct mipi_dsi_device mdev;
+	int ret;
+
+	mdev.data_lanes = config->num_lanes;
+	mdev.pixfmt = config->pixel_format;
+
+	mdev.timings.hactive = TIMINGS_HACT;
+	mdev.timings.hfp = TIMINGS_HFP;
+	mdev.timings.hbp = TIMINGS_HBP;
+	mdev.timings.hsync = TIMINGS_HSYNC_LEN;
+	mdev.timings.vactive = TIMINGS_VACT;
+	mdev.timings.vfp = TIMINGS_VFP;
+	mdev.timings.vbp = TIMINGS_VBP;
+	mdev.timings.vsync = TIMINGS_VSYNC_LEN;
+
+	mdev.mode_flags = MIPI_DSI_MODE_VIDEO |
+		MIPI_DSI_MODE_EOT_PACKET;
+
+	if (config->cmd_type == CMD_LP) {
+		mdev.mode_flags |= MIPI_DSI_MODE_LPM;
+	}
+
+	switch (config->vid_mode) {
+	case BURST_MODE:
+		mdev.mode_flags |= MIPI_DSI_MODE_VIDEO_BURST;
+		break;
+	case NON_BURST_MODE_SYNC_PULSE:
+		mdev.mode_flags |=  MIPI_DSI_MODE_VIDEO_SYNC_PULSE;
+		break;
+	case NON_BURST_MODE_SYNC_EVENTS:
+	default:
+		break;
+	}
+
+	/* Re-attach to DSI host */
+	ret = mipi_dsi_attach(config->mipi_dsi, config->channel, &mdev);
+	if (ret < 0) {
+		LOG_ERR("Failed to re-attach to DSI host");
+		goto done;
+	}
+
+	/* Hardware reset */
+	if (config->reset_gpio.port) {
+		gpio_pin_set_dt(&config->reset_gpio, 1);
+		k_msleep(1);
+
+		gpio_pin_set_dt(&config->reset_gpio, 0);
+		k_msleep(1);
+
+		gpio_pin_set_dt(&config->reset_gpio, 1);
+
+		k_msleep(120);
+	}
+
+	/* Reprogram panel registers */
+	ret = mw405_configure(dev);
+	if (ret) {
+		LOG_ERR("Failed to reconfigure panel");
+		goto done;
+	}
+
+	data->orientation = DISPLAY_ORIENTATION_NORMAL;
+	LOG_DBG("PM: Resumed %s", dev->name);
+
+done:
+	k_sem_give(&data->resume_sem);
+}
+
+/**
+ * @brief MW405 resume handler.
+ *
+ * Re-attaches to the DSI host, performs a full hardware reset, reprograms
+ * all panel registers, and re-enables the backlight.
+ *
+ * @param dev MW405 device struct.
+ * @return 0 on success, negative errno otherwise.
+ */
+static int mw405_resume(const struct device *dev)
+{
+	const struct mw405_config *config = dev->config;
+	struct mw405_data *data = dev->data;
+	int ret;
+
+	/* Hardware reset */
+	if (config->reset_gpio.port) {
+		ret = gpio_pin_configure_dt(&config->reset_gpio,
+				GPIO_OUTPUT_ACTIVE);
+		if (ret < 0) {
+			LOG_ERR("Could not configure reset GPIO (%d)", ret);
+			return ret;
+		}
+	}
+
+	if (config->bl_gpio.port != NULL) {
+		ret = gpio_pin_configure_dt(&config->bl_gpio,
+				GPIO_OUTPUT_INACTIVE);
+		if (ret < 0) {
+			LOG_ERR("Could not configure Backlight GPIO (%d)", ret);
+			return ret;
+		}
+	}
+
+	/* DSI re-attach, hardware reset pulse, and panel reconfiguration all
+	 * involve blocking delays; offload them to the system workqueue
+	 * rather than blocking this calling context.
+	 */
+	(void)k_sem_take(&data->resume_sem, K_NO_WAIT);
+	k_work_schedule(&data->reset_work, K_NO_WAIT);
+
+	return 0;
+}
+
+/**
+ * @brief MW405 PM device action handler.
+ *
+ * Handles power management state transitions for the MW405 panel.
+ *
+ * @param dev MW405 device struct.
+ * @param action PM device action to perform.
+ * @return 0 on success, negative errno otherwise.
+ */
+static int mw405_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		return mw405_suspend(dev);
+
+	case PM_DEVICE_ACTION_RESUME:
+		return mw405_resume(dev);
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+	/* Power domain handling is automatic via the PM framework */
+		return 0;
+
+	default:
+		return -ENOTSUP;
+	}
+}
+#endif
+
+#define MW405_PANEL(i)									\
+	static const struct mw405_config config_##i = {					\
+		.mipi_dsi = DEVICE_DT_GET(DT_INST_BUS(i)),				\
+		.reset_gpio = GPIO_DT_SPEC_INST_GET_OR(i, reset_gpios, {0}),		\
+		.bl_gpio = GPIO_DT_SPEC_INST_GET_OR(i, bl_gpios, {0}),			\
+		.num_lanes = DT_INST_PROP_BY_IDX(i, data_lanes, 0),			\
+		.pixel_format = DT_INST_PROP(i, pixel_format),				\
+		.active_width = DT_INST_PROP(i, width),					\
+		.active_height = DT_INST_PROP(i, height),				\
+		.channel = DT_INST_REG_ADDR(i),						\
+		.vid_mode = DT_INST_ENUM_IDX_OR(i, video_mode, BURST_MODE),		\
+		.cmd_type = DT_INST_ENUM_IDX_OR(i, command_tx_mode, CMD_LP),		\
+	};										\
+	static struct mw405_data data_##i;						\
+	IF_ENABLED(CONFIG_PM_DEVICE, (PM_DEVICE_DT_INST_DEFINE(i, mw405_pm_action);))	\
+	DEVICE_DT_INST_DEFINE(i,							\
+			&mw405_init,							\
+			PM_DEVICE_DT_INST_GET(i),					\
+			&data_##i,							\
+			&config_##i,							\
+			POST_KERNEL,							\
+			CONFIG_APPLICATION_INIT_PRIORITY,				\
 			&mw405_api);
 
 DT_INST_FOREACH_STATUS_OKAY(MW405_PANEL)
