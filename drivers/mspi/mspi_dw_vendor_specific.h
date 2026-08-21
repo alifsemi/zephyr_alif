@@ -54,6 +54,18 @@ static inline void vendor_specific_irq_clear(const struct device *dev)
 	NRF_EXMIF->EVENTS_CORE = 0;
 }
 
+static inline void vendor_specific_apply_timing_config(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+}
+
+static inline uint8_t vendor_specific_ddr_drive_edge(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return 0U;
+}
+
 #if defined(CONFIG_MSPI_XIP)
 static inline int vendor_specific_xip_enable(const struct device *dev,
 					     const struct mspi_dev_id *dev_id,
@@ -136,6 +148,18 @@ static inline void vendor_specific_irq_clear(const struct device *dev)
 
 	preg->EVENTS_CORE = 0;
 	preg->EVENTS_DMA.DONE = 0;
+}
+
+static inline void vendor_specific_apply_timing_config(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+}
+
+static inline uint8_t vendor_specific_ddr_drive_edge(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return 0U;
 }
 
 /* DMA support */
@@ -326,6 +350,16 @@ static inline void vendor_specific_resume(const struct device *dev)
 static inline void vendor_specific_irq_clear(const struct device *dev)
 {
 	ARG_UNUSED(dev);
+}
+static inline void vendor_specific_apply_timing_config(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+}
+static inline uint8_t vendor_specific_ddr_drive_edge(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	return 0U;
 }
 static inline int vendor_specific_xip_enable(const struct device *dev,
 					     const struct mspi_dev_id *dev_id,

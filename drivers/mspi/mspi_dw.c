@@ -176,6 +176,35 @@ DEFINE_MM_REG_WR(xip_write_ctrl,	0x148)
 
 #include "mspi_dw_vendor_specific.h"
 
+static void apply_timing_config(const struct device *dev)
+{
+	const struct mspi_dw_data *dev_data = dev->data;
+
+	write_rx_sample_dly(dev, (dev_data->spi_ctrlr0 & SPI_CTRLR0_SPI_RXDS_EN_BIT) ?
+				 0U : dev_data->rx_sample_dly);
+
+	vendor_specific_apply_timing_config(dev);
+
+#if defined(CONFIG_MSPI_DW_DDR)
+	uint8_t drive_edge = vendor_specific_ddr_drive_edge(dev);
+
+	if (drive_edge != 0U) {
+		write_txd_drive_edge(dev, drive_edge);
+		return;
+	}
+
+	if (dev_data->spi_ctrlr0 & (SPI_CTRLR0_SPI_DDR_EN_BIT |
+				    SPI_CTRLR0_INST_DDR_EN_BIT)) {
+		uint32_t txd = (CONFIG_MSPI_DW_TXD_MUL * dev_data->baudr) /
+			       CONFIG_MSPI_DW_TXD_DIV;
+
+		write_txd_drive_edge(dev, txd);
+	} else {
+		write_txd_drive_edge(dev, 0);
+	}
+#endif
+}
+
 static int start_next_packet(const struct device *dev);
 static int finalize_packet(const struct device *dev, int rc);
 static int finalize_transceive(const struct device *dev, int rc);
@@ -1126,7 +1155,6 @@ static int start_next_packet(const struct device *dev)
 	uint32_t imr = 0;
 	int rc = 0;
 
-
 	if (data_only_packet && packet->num_bytes == 0) {
 		return 0;
 	}
@@ -1281,18 +1309,7 @@ static int start_next_packet(const struct device *dev)
 		: 0);
 	write_spi_ctrlr0(dev, dev_data->spi_ctrlr0);
 	write_baudr(dev, dev_data->baudr);
-	write_rx_sample_dly(dev, dev_data->rx_sample_dly);
-#if defined(CONFIG_MSPI_DW_DDR)
-	if (dev_data->spi_ctrlr0 & (SPI_CTRLR0_SPI_DDR_EN_BIT |
-				    SPI_CTRLR0_INST_DDR_EN_BIT)) {
-		int txd = (CONFIG_MSPI_DW_TXD_MUL * dev_data->baudr) /
-			CONFIG_MSPI_DW_TXD_DIV;
-
-		write_txd_drive_edge(dev, txd);
-	} else {
-		write_txd_drive_edge(dev, 0);
-	}
-#endif
+	apply_timing_config(dev);
 
 	if (xip_enabled) {
 		write_ssienr(dev, SSIENR_SSIC_EN_BIT);
