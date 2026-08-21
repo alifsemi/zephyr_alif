@@ -74,6 +74,15 @@ static inline bool vendor_specific_device_select(const struct device *dev)
 }
 
 #if defined(CONFIG_MSPI_XIP)
+static inline void vendor_specific_xip_update_ctrl(const struct device *dev,
+						   struct xip_ctrl *ctrl,
+						   const struct mspi_xip_cfg *cfg)
+{
+	ARG_UNUSED(dev);
+	ARG_UNUSED(ctrl);
+	ARG_UNUSED(cfg);
+}
+
 static inline int vendor_specific_xip_enable(const struct device *dev,
 					     const struct mspi_dev_id *dev_id,
 					     const struct mspi_xip_cfg *cfg)
@@ -175,6 +184,17 @@ static inline bool vendor_specific_device_select(const struct device *dev)
 
 	return false;
 }
+
+#if defined(CONFIG_MSPI_XIP)
+static inline void vendor_specific_xip_update_ctrl(const struct device *dev,
+						   struct xip_ctrl *ctrl,
+						   const struct mspi_xip_cfg *cfg)
+{
+	ARG_UNUSED(dev);
+	ARG_UNUSED(ctrl);
+	ARG_UNUSED(cfg);
+}
+#endif
 
 /* DMA support */
 
@@ -402,26 +422,43 @@ static inline bool vendor_specific_device_select(const struct device *dev)
 	return true;
 }
 
+#if defined(CONFIG_MSPI_XIP)
+static inline void vendor_specific_xip_update_ctrl(const struct device *dev,
+						   struct xip_ctrl *ctrl,
+						   const struct mspi_xip_cfg *cfg)
+{
+	alif_xip_update_ctrl(dev, ctrl, cfg);
+}
+#endif
+
 static inline int vendor_specific_xip_enable(const struct device *dev,
 					     const struct mspi_dev_id *dev_id,
 					     const struct mspi_xip_cfg *cfg)
 {
+#if defined(CONFIG_MSPI_XIP)
+	return alif_xip_enable(dev, dev_id, cfg);
+#else
 	ARG_UNUSED(dev);
 	ARG_UNUSED(dev_id);
 	ARG_UNUSED(cfg);
 
 	return 0;
+#endif
 }
 
 static inline int vendor_specific_xip_disable(const struct device *dev,
 					      const struct mspi_dev_id *dev_id,
 					      const struct mspi_xip_cfg *cfg)
 {
+#if defined(CONFIG_MSPI_XIP)
+	return alif_xip_disable(dev, dev_id, cfg);
+#else
 	ARG_UNUSED(dev);
 	ARG_UNUSED(dev_id);
 	ARG_UNUSED(cfg);
 
 	return 0;
+#endif
 }
 
 #if defined(CONFIG_MSPI_DMA)
@@ -482,6 +519,16 @@ static inline bool vendor_specific_device_select(const struct device *dev)
 	return false;
 }
 
+#if defined(CONFIG_MSPI_XIP)
+static inline void vendor_specific_xip_update_ctrl(const struct device *dev,
+						   struct xip_ctrl *ctrl,
+						   const struct mspi_xip_cfg *cfg)
+{
+	ARG_UNUSED(dev);
+	ARG_UNUSED(ctrl);
+	ARG_UNUSED(cfg);
+}
+#endif
 static inline int vendor_specific_xip_enable(const struct device *dev,
 					     const struct mspi_dev_id *dev_id,
 					     const struct mspi_xip_cfg *cfg)
