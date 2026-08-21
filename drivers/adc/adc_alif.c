@@ -1143,7 +1143,7 @@ struct adc_driver_api alif_adc_api = {
 #define ADC_ALIF_INIT(inst)                                                                        \
 	static void adc_config_func_##inst(const struct device *dev);                              \
 	IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, pinctrl_0), (PINCTRL_DT_INST_DEFINE(inst)));        \
-	const struct adc_config config_##inst = {                                                  \
+	static const struct adc_config config_##inst = {                                           \
 		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(comp_reg, DT_DRV_INST(inst)),                   \
 		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(analog_reg, DT_DRV_INST(inst)),                 \
 		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(adc_reg, DT_DRV_INST(inst)),                    \
@@ -1174,7 +1174,7 @@ struct adc_driver_api alif_adc_api = {
 		.adc24_bias = ADC24_BIAS(inst),                                                    \
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, pinctrl_0),                                 \
 				(.pcfg = PINCTRL_DT_DEV_CONFIG_GET(DT_DRV_INST(inst)),))};         \
-	struct adc_data data_##inst = {                                                            \
+	static struct adc_data data_##inst = {                                                     \
 		ADC_CONTEXT_INIT_LOCK(data_##inst, ctx),                                           \
 		ADC_CONTEXT_INIT_SYNC(data_##inst, ctx),                                           \
 		ADC_CONTEXT_INIT_TIMER(data_##inst, ctx),                                          \
