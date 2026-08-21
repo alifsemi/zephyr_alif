@@ -155,7 +155,7 @@ static const struct i2c_driver_api funcs = {
 	static void lpi2c_config_func_##inst(const struct device *dev);                            \
 	PINCTRL_DT_INST_DEFINE(inst);                                                              \
 	static struct lpi2c_data data_##inst;                                                      \
-	const struct lpi2c_config config_##inst = {                                                \
+	static const struct lpi2c_config config_##inst = {                                         \
 			DEVICE_MMIO_ROM_INIT(DT_DRV_INST(inst)),                                   \
 			.irq_config_func = lpi2c_config_func_##inst,                               \
 			.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(inst),                              \

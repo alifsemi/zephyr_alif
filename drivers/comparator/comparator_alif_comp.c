@@ -590,7 +590,7 @@ static DEVICE_API(comparator, alif_comp_api) = {
 	IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, pinctrl_0), (PINCTRL_DT_INST_DEFINE(inst)));        \
                                                                                                    \
 	static void cmp_config_func_##inst(const struct device *dev);                              \
-	const struct cmp_config config_##inst = {                                                  \
+	static const struct cmp_config config_##inst = {                                           \
 		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(cmp_reg, DT_DRV_INST(inst)),                    \
 		DEVICE_MMIO_NAMED_ROM_INIT_BY_NAME(config_reg, DT_DRV_INST(inst)),                 \
 		IF_ENABLED(DT_INST_REG_HAS_NAME(inst, dac6_reg),                                   \
@@ -618,7 +618,7 @@ static DEVICE_API(comparator, alif_comp_api) = {
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, pinctrl_0),                                 \
 			   (.pcfg = PINCTRL_DT_DEV_CONFIG_GET(DT_DRV_INST(inst)),))};              \
                                                                                                    \
-	struct cmp_data data_##inst;                                                               \
+	static struct cmp_data data_##inst;                                                        \
 	DEVICE_DT_INST_DEFINE(inst, cmp_init, NULL, &data_##inst, &config_##inst, POST_KERNEL,     \
 			      CONFIG_COMPARATOR_INIT_PRIORITY, &alif_comp_api);                    \
                                                                                                    \
