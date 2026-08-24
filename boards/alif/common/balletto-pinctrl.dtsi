@@ -575,23 +575,34 @@
 
 	pinctrl_gpio0:pinctrl_gpio0 {
 		group0 {
-			pinmux = <PIN_P0_0__GPIO>,
-				 <PIN_P0_1__GPIO>,
+			/* P0_0/P0_1 are SEUART_RX/TX. P0_7 is JTAG_TCK.
+			 * Driving these as GPIO can drop the debugger
+			 * connection (P0_7) or steal the Secure Enclave UART
+			 * (P0_0/P0_1). Uncomment only if those functions
+			 * are not required.
+			 */
+			pinmux = /* <PIN_P0_0__GPIO>, */
+				 /* <PIN_P0_1__GPIO>, */
 				 <PIN_P0_2__GPIO>,
 				 <PIN_P0_3__GPIO>,
 				 <PIN_P0_4__GPIO>,
 				 <PIN_P0_5__GPIO>,
-				 <PIN_P0_6__GPIO>,
-				 <PIN_P0_7__GPIO>;
+				 <PIN_P0_6__GPIO>;
+				/* <PIN_P0_7__GPIO>; */
 			read-enable = <0x1>;
 		};
 	};
 
 	pinctrl_gpio1:pinctrl_gpio1 {
 		group0 {
-			pinmux = <PIN_P1_0__GPIO>,
-				 <PIN_P1_1__GPIO>,
-				 <PIN_P1_2__GPIO>,
+			/* P1_0 to P1_2 are JTAG pins (TMS, TDI, TDO).
+			 * Directly driving these pins as GPIO will cause the
+			 * debugger to lose connection. Uncomment only if JTAG
+			 * is not required.
+			 */
+			pinmux = /* <PIN_P1_0__GPIO>, */
+				 /* <PIN_P1_1__GPIO>, */
+				 /* <PIN_P1_2__GPIO>, */
 				 <PIN_P1_3__GPIO>,
 				 <PIN_P1_4__GPIO>,
 				 <PIN_P1_5__GPIO>,
@@ -603,9 +614,12 @@
 
 	pinctrl_gpio2:pinctrl_gpio2 {
 		group0 {
+			/* P2_2 is NSRST JTAG reset (system reset).
+			 * Uncomment only if NSRST is not required.
+			 */
 			pinmux = <PIN_P2_0__GPIO>,
 				 <PIN_P2_1__GPIO>,
-				 <PIN_P2_2__GPIO>,
+				 /* <PIN_P2_2__GPIO>, */
 				 <PIN_P2_3__GPIO>,
 				 <PIN_P2_4__GPIO>,
 				 <PIN_P2_5__GPIO>,
