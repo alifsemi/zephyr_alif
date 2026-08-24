@@ -9,6 +9,7 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(ADC);
 
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <zephyr/kernel.h>
@@ -20,6 +21,14 @@ LOG_MODULE_REGISTER(ADC);
 #include <soc_common.h>
 #include "analog_ctrl.h"
 #include <zephyr/pm/device.h>
+
+#ifdef CONFIG_ADC_ALIF_DMA
+#include <zephyr/drivers/dma.h>
+#endif
+
+#ifdef CONFIG_ADC_ALIF_UTIMER_TRIGGER
+#include "utimer.h"
+#endif
 
 #define DT_DRV_COMPAT alif_adc
 
@@ -53,6 +62,20 @@ struct adc_config {
 	uint8_t comparator_threshold_comparison;
 	uint8_t adc24_output_rate;
 	uint8_t adc24_bias;
+#ifdef CONFIG_ADC_ALIF_DMA
+	const struct device *dma_dev;
+	uint32_t dma_channel;
+	uint32_t dma_slot;
+#endif
+#ifdef CONFIG_ADC_ALIF_UTIMER_TRIGGER
+	/* Zero when UTIMER trigger is not configured on this ADC instance. */
+	uintptr_t utimer_timer_base;
+	uintptr_t utimer_global_base;
+	uint32_t utimer_period;
+	uint32_t ext_trigger_src;
+	uint8_t utimer_timer_id;
+	uint8_t utimer_driver;
+#endif
 };
 
 struct adc_data {
@@ -75,6 +98,11 @@ struct adc_data {
 	uint8_t  interrupts;
 	uint8_t *comparator;
 	bool differential;
+#ifdef CONFIG_ADC_ALIF_DMA
+	struct dma_config dma_cfg;
+	struct dma_block_config dma_block;
+	int dma_error;
+#endif
 };
 
 enum ADC_INSTANCE {
@@ -407,7 +435,11 @@ static inline void adc_set_comparator_ctrl_bit(uintptr_t adc, uint32_t arg)
 
 static inline void adc_unmask_interrupt(uintptr_t adc, uint8_t arg)
 {
-	sys_write32(((~arg) & 0xF), adc + ADC_INTERRUPT_MASK);
+	uint32_t data;
+
+	data = sys_read32(adc + ADC_INTERRUPT_MASK);
+	data &= ~(arg & 0xF);
+	sys_write32(data, adc + ADC_INTERRUPT_MASK);
 }
 
 static inline void adc_mask_interrupt(uintptr_t adc, uint8_t arg)
@@ -415,7 +447,7 @@ static inline void adc_mask_interrupt(uintptr_t adc, uint8_t arg)
 	uint32_t data;
 
 	data = sys_read32(adc + ADC_INTERRUPT_MASK);
-	data = (~arg) & 0xF;
+	data |= (arg & 0xF);
 	sys_write32(data, adc + ADC_INTERRUPT_MASK);
 }
 
@@ -617,6 +649,11 @@ void adc_done0_irq_handler(const struct device *dev)
 	/* Clearing the done0 IRQ*/
 	sys_write32(ADC_INTR_DONE0_CLEAR, regs + ADC_INTERRUPT);
 
+#ifdef CONFIG_ADC_ALIF_DMA
+	if (config->dma_dev) {
+		return;
+	}
+#endif
 	if (config->conv_mode == ADC_CONV_MODE_CONTINUOUS) {
 		/* storing the address to be fetched for particular channels */
 		channel_sample_reg = sample_reg + sizeof(uint32_t) * channel;
@@ -647,6 +684,11 @@ void adc_done1_irq_handler(const struct device *dev)
 	/* Clearing the done1 IRQ*/
 	sys_write32(ADC_INTR_DONE1_CLEAR, regs + ADC_INTERRUPT);
 
+#ifdef CONFIG_ADC_ALIF_DMA
+	if (config->dma_dev) {
+		return;
+	}
+#endif
 	if (config->conv_mode == ADC_CONV_MODE_SINGLE_SHOT) {
 		/* storing the address to be fetched for particular channels */
 		channel_sample_reg = sample_reg + sizeof(uint32_t) * channel;
@@ -717,6 +759,41 @@ void adc_cmpb_irq_handler(const struct device *dev)
 	}
 }
 
+#ifdef CONFIG_ADC_ALIF_DMA
+static void adc_dma_callback(const struct device *dma_dev, void *user_data,
+			     uint32_t channel, int status)
+{
+	const struct device *dev = user_data;
+	struct adc_data *data = dev->data;
+
+	ARG_UNUSED(dma_dev);
+	ARG_UNUSED(channel);
+	LOG_DBG("ADC DMA callback status=%d", status);
+
+	if (status < 0) {
+		data->dma_error = status;
+		adc_context_on_sampling_done(&data->ctx, dev);
+		return;
+	}
+
+	if (status == 0) {
+		adc_context_on_sampling_done(&data->ctx, dev);
+		return;
+	}
+
+	/* Ignore block callbacks and complete only when transfer is fully done. */
+	if (status == DMA_STATUS_BLOCK) {
+		return;
+	}
+
+	if (status != DMA_STATUS_COMPLETE) {
+		data->dma_error = -EIO;
+	}
+
+	adc_context_on_sampling_done(&data->ctx, dev);
+}
+#endif /* CONFIG_ADC_ALIF_DMA */
+
 void adc_context_start_sampling(struct adc_context *ctx)
 {
 	struct adc_data *data = CONTAINER_OF(ctx, struct adc_data, ctx);
@@ -726,7 +803,15 @@ void adc_context_start_sampling(struct adc_context *ctx)
 
 	data->repeat_buffer = data->buffer;
 
+	/* Unmask unconditionally: DMA mode may need the done signal ungated too. */
 	adc_unmask_interrupt(regs, data->interrupts);
+
+#ifdef CONFIG_ADC_ALIF_UTIMER_TRIGGER
+	if (config->utimer_timer_base) {
+		/* UTIMER already programmed in adc_init(): hardware auto-triggers. */
+		return;
+	}
+#endif
 
 	if (config->conv_mode == ADC_CONV_MODE_SINGLE_SHOT) {
 		adc_enable_single_shot_conv(regs);
@@ -788,6 +873,13 @@ static void adc_context_on_complete(struct adc_context *ctx, int status)
 
 	ARG_UNUSED(status);
 
+#ifdef CONFIG_ADC_ALIF_DMA
+	const struct adc_config *config = data->dev->config;
+
+	if (config->dma_dev) {
+		dma_stop(config->dma_dev, config->dma_channel);
+	}
+#endif
 	disable_adc(data->dev);
 }
 
@@ -803,7 +895,7 @@ static int adc_start_read(const struct device *dev, const struct adc_sequence *s
 	data->buffer_size = sequence->buffer_size;
 	data->channels = sequence->channels;
 	data->channels_count = POPCOUNT(data->channels);
-	data->comparator = sequence->options->user_data;
+	data->comparator = (sequence->options != NULL) ? sequence->options->user_data : NULL;
 
 	adc_sequencer_msk_ch_control(regs, sequence->channels);
 
@@ -840,9 +932,87 @@ static int adc_start_read(const struct device *dev, const struct adc_sequence *s
 		return error;
 	}
 
+#ifdef CONFIG_ADC_ALIF_DMA
+	if (config->dma_dev) {
+		uintptr_t src_addr, dst_addr;
+		uint32_t ch;
+
+		if (data->channels_count != 1) {
+			LOG_ERR("DMA mode: single channel only");
+			return -ENOTSUP;
+		}
+		/* Software-triggered DMA needs continuous mode; UTIMER re-arms START in HW. */
+		if (config->conv_mode != ADC_CONV_MODE_CONTINUOUS
+#ifdef CONFIG_ADC_ALIF_UTIMER_TRIGGER
+		    && config->utimer_timer_base == 0
+#endif
+		) {
+			LOG_ERR("DMA mode: continuous conversion only (unless UTIMER trigger)");
+			return -ENOTSUP;
+		}
+		if (sequence->options != NULL && sequence->options->extra_samplings > 0) {
+			LOG_ERR("DMA mode: extra_samplings not supported");
+			return -ENOTSUP;
+		}
+
+		ch = find_lsb_set(data->channels) - 1;
+		data->dma_error = 0;
+
+		src_addr = regs + ADC_SAMPLE_REG_0 + (ch * sizeof(uint32_t));
+		dst_addr = (uintptr_t)data->buffer;
+
+		memset(&data->dma_block, 0, sizeof(data->dma_block));
+		data->dma_block.source_address = src_addr;
+		data->dma_block.dest_address = dst_addr;
+		data->dma_block.block_size = data->buffer_size;
+		data->dma_block.source_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
+		data->dma_block.dest_addr_adj = DMA_ADDR_ADJ_INCREMENT;
+
+		memset(&data->dma_cfg, 0, sizeof(data->dma_cfg));
+		data->dma_cfg.channel_direction = PERIPHERAL_TO_MEMORY;
+		data->dma_cfg.dma_slot = config->dma_slot;
+		data->dma_cfg.dma_callback = adc_dma_callback;
+		data->dma_cfg.user_data = (void *)dev;
+		data->dma_cfg.block_count = 1;
+		data->dma_cfg.head_block = &data->dma_block;
+		data->dma_cfg.source_data_size = sizeof(uint32_t);
+		data->dma_cfg.dest_data_size = sizeof(uint32_t);
+		data->dma_cfg.source_burst_length = 1;
+		data->dma_cfg.dest_burst_length = 1;
+
+		LOG_DBG("ADC DMA cfg: ch=0x%x slot=%u src=0x%" PRIxPTR " dst=0x%" PRIxPTR
+			" bytes=%u", config->dma_channel, config->dma_slot,
+			src_addr, dst_addr, data->dma_block.block_size);
+
+		error = dma_config(config->dma_dev, config->dma_channel, &data->dma_cfg);
+		if (error < 0) {
+			LOG_ERR("DMA config failed: %d", error);
+			return error;
+		}
+
+		error = dma_start(config->dma_dev, config->dma_channel);
+		if (error < 0) {
+			LOG_ERR("DMA start failed: %d", error);
+			return error;
+		}
+
+		LOG_DBG("ADC DMA started");
+	}
+#endif /* CONFIG_ADC_ALIF_DMA */
+
 	adc_context_start_read(&data->ctx, sequence);
 
 	int result = adc_context_wait_for_completion(&data->ctx);
+
+#ifdef CONFIG_ADC_ALIF_DMA
+	LOG_DBG("ADC wait done: result=%d dma_error=%d", result, data->dma_error);
+#endif
+
+#ifdef CONFIG_ADC_ALIF_DMA
+	if (config->dma_dev && result == 0) {
+		result = data->dma_error;
+	}
+#endif
 
 	return result;
 }
@@ -1097,7 +1267,63 @@ static int adc_hw_init(const struct device *dev)
 		return err;
 	}
 
-	/* disabling the interrupts */
+#ifdef CONFIG_ADC_ALIF_UTIMER_TRIGGER
+	if (config->utimer_timer_base) {
+		uint32_t timer_base = (uint32_t)config->utimer_timer_base;
+		uint32_t global_base = (uint32_t)config->utimer_global_base;
+		uint8_t timer_id = config->utimer_timer_id;
+		uint8_t driver = config->utimer_driver;
+		uint32_t period = config->utimer_period;
+
+		alif_utimer_disable_timer_output(global_base, timer_id);
+		alif_utimer_enable_timer_clock(global_base, timer_id);
+		alif_utimer_enable_soft_counter_ctrl(timer_base);
+		alif_utimer_set_up_counter(timer_base);
+		alif_utimer_set_counter_reload_value(timer_base, period);
+		/* 50% duty */
+		alif_utimer_set_compare_value(timer_base, driver, period / 2U);
+		alif_utimer_config_driver_output(timer_base, driver,
+			COMPARE_CTRL_DRV_HIGH_AT_COMP_MATCH |
+			COMPARE_CTRL_DRV_LOW_AT_CYCLE_END);
+		alif_utimer_enable_driver_output(global_base, driver, timer_id);
+		alif_utimer_enable_driver(timer_base, driver);
+		alif_utimer_enable_compare_match(timer_base, driver);
+		alif_utimer_enable_counter(timer_base);
+		alif_utimer_start_counter(global_base, timer_id);
+
+		/* Route the UTIMER pulse into the ADC external trigger mux. */
+		sys_write32((config->ext_trigger_src & ADC_EXTERNAL_TRIGGER_MAX_VAL) |
+				ADC_START_ENABLE,
+			regs + ADC_START_SRC);
+
+		/* Diagnostic: sample the UTIMER counter twice — if it doesn't move
+		 * between reads the timer is not clocked/running.
+		 */
+		{
+			uint32_t running1 = sys_read32(UTIMER_GLB_CNTR_RUNNING(global_base));
+			uint32_t cnt1 = sys_read32(UTIMER_CNTR(timer_base));
+
+			k_busy_wait(100);
+
+			uint32_t cnt2 = sys_read32(UTIMER_CNTR(timer_base));
+			uint32_t running2 = sys_read32(UTIMER_GLB_CNTR_RUNNING(global_base));
+
+			LOG_INF("UTIMER diag: running=0x%08x/0x%08x cnt=%u -> %u (delta=%d)",
+				running1, running2, cnt1, cnt2, (int)(cnt2 - cnt1));
+		}
+
+		LOG_INF("ADC UTIMER trigger: timer_id=%u drv=%u period=%u src=0x%x",
+			timer_id, driver, period, config->ext_trigger_src);
+	}
+#endif
+
+#ifdef CONFIG_ADC_ALIF_DMA
+	if (config->dma_dev && !device_is_ready(config->dma_dev)) {
+		LOG_ERR("DMA device not ready");
+		return -ENODEV;
+	}
+#endif
+	/* Unmask ADC-level IRQs: also required to ungate the DMA request line. */
 	adc_unmask_interrupt(regs, data->interrupts);
 
 	/* Install ISR handler. */
@@ -1227,6 +1453,21 @@ struct adc_driver_api alif_adc_api = {
 
 #define ADC24_BIAS(inst) UTIL_CAT(ADC24_BIAS_GAIN_, DT_INST_ENUM_IDX_OR(inst, adc24_bias, 0))
 
+#define ADC_ALIF_DMA_CHANNEL(inst) DT_INST_DMAS_CELL_BY_NAME(inst, rxdma, channel)
+#define ADC_ALIF_DMA_SLOT(inst) DT_INST_DMAS_CELL_BY_NAME(inst, rxdma, periph)
+
+#define ADC_ALIF_UTIMER_NODE(inst) DT_INST_PHANDLE(inst, alif_utimer_trigger)
+
+#define ADC_ALIF_UTIMER_FIELDS(inst)								\
+	COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, alif_utimer_trigger),				\
+		(.utimer_timer_base = DT_REG_ADDR_BY_NAME(ADC_ALIF_UTIMER_NODE(inst), timer),	\
+		 .utimer_global_base = DT_REG_ADDR_BY_NAME(ADC_ALIF_UTIMER_NODE(inst), global),	\
+		 .utimer_timer_id = DT_PROP(ADC_ALIF_UTIMER_NODE(inst), timer_id),		\
+		 .utimer_driver = DT_INST_PROP(inst, alif_utimer_driver),			\
+		 .utimer_period = DT_INST_PROP(inst, alif_utimer_period),			\
+		 .ext_trigger_src = DT_INST_PROP(inst, alif_ext_trigger_src),),			\
+		())
+
 #define ADC_ALIF_INIT(inst)                                                                        \
 	static void adc_config_func_##inst(const struct device *dev);                              \
 	IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, pinctrl_0), (PINCTRL_DT_INST_DEFINE(inst)));        \
@@ -1260,7 +1501,14 @@ struct adc_driver_api alif_adc_api = {
 						(0)),                                              \
 		.adc24_bias = ADC24_BIAS(inst),                                                    \
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, pinctrl_0),                                 \
-				(.pcfg = PINCTRL_DT_DEV_CONFIG_GET(DT_DRV_INST(inst)),))};         \
+				(.pcfg = PINCTRL_DT_DEV_CONFIG_GET(DT_DRV_INST(inst)),))           \
+		IF_ENABLED(CONFIG_ADC_ALIF_DMA,                                                    \
+			(COND_CODE_1(DT_INST_DMAS_HAS_NAME(inst, rxdma),                           \
+				(.dma_dev = DEVICE_DT_GET(DT_INST_DMAS_CTLR_BY_NAME(inst, rxdma)), \
+				 .dma_channel = ADC_ALIF_DMA_CHANNEL(inst),                  \
+				 .dma_slot = ADC_ALIF_DMA_SLOT(inst),), ())))                 \
+		IF_ENABLED(CONFIG_ADC_ALIF_UTIMER_TRIGGER, (ADC_ALIF_UTIMER_FIELDS(inst)))         \
+	};                                                                                         \
 	static struct adc_data data_##inst = {                                                     \
 		ADC_CONTEXT_INIT_LOCK(data_##inst, ctx),                                           \
 		ADC_CONTEXT_INIT_SYNC(data_##inst, ctx),                                           \
