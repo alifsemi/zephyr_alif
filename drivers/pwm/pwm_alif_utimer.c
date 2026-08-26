@@ -256,9 +256,19 @@ static int pwm_alif_utimer_suspend(const struct device *dev)
 	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
 	int ret;
 
-	LOG_DBG("PM: Suspending %s", dev->name);
+	if (alif_utimer_any_counter_running(global_base)) {
+		LOG_DBG("PM: UTIMER IP in use, refusing suspend");
+		return -EBUSY;
+	}
 
 	alif_utimer_disable_timer_clock(global_base, cfg->timer_id);
+	if (alif_utimer_all_channel_clocks_disabled(global_base)) {
+		ret = clock_control_off(cfg->clk_dev, cfg->clkid);
+		if (ret != 0 && ret != -EALREADY &&
+		    ret != -ENOSYS && ret != -ENOTSUP) {
+			LOG_WRN("clock off failed: %d", ret);
+		}
+	}
 
 	ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_SLEEP);
 	if (ret < 0 && ret != -ENOENT) {
@@ -278,11 +288,15 @@ static int pwm_alif_utimer_resume(const struct device *dev)
 	uintptr_t global_base = DEVICE_MMIO_NAMED_GET(dev, global);
 	int ret;
 
-	LOG_DBG("PM: Resuming %s", dev->name);
-
 	ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_DEFAULT);
 	if (ret < 0 && ret != -ENOENT) {
 		LOG_ERR("pinctrl default failed: %d", ret);
+		return ret;
+	}
+
+	ret = clock_control_on(cfg->clk_dev, cfg->clkid);
+	if (ret != 0 && ret != -EALREADY) {
+		LOG_ERR("Unable to turn on clock: err:%d", ret);
 		return ret;
 	}
 
