@@ -25,6 +25,8 @@ union ic_con_register {
 		uint32_t stop_det: 1 __packed;
 		uint32_t tx_empty_ctl: 1 __packed;
 		uint32_t rx_fifo_full: 1 __packed;
+		uint32_t reserved: 1 __packed;
+		uint32_t bus_clear_feature_ctrl: 1 __packed;
 	} bits;
 };
 
@@ -127,6 +129,7 @@ union ic_comp_param_1_register {
 #define DW_IC_REG_HS_SCL_LCNT   (0x28)
 #define DW_IC_REG_INTR_STAT     (0x2C)
 #define DW_IC_REG_INTR_MASK     (0x30)
+#define DW_IC_REG_RAW_INTR_STAT (0x34)
 #define DW_IC_REG_RX_TL         (0x38)
 #define DW_IC_REG_TX_TL         (0x3C)
 #define DW_IC_REG_CLR_INTR      (0x40)
@@ -144,13 +147,33 @@ union ic_comp_param_1_register {
 #define DW_IC_REG_STATUS        (0x70)
 #define DW_IC_REG_TXFLR         (0x74)
 #define DW_IC_REG_RXFLR         (0x78)
+#define DW_IC_REG_TX_ABRT_SOURCE (0x80)
 #define DW_IC_REG_DMA_CR        (0x88)
 #define DW_IC_REG_TDLR          (0x8C)
 #define DW_IC_REG_RDLR          (0x90)
 #define DW_IC_REG_FS_SPKLEN     (0xA0)
 #define DW_IC_REG_HS_SPKLEN     (0xA4)
+#define DW_IC_REG_SCL_STUCK_AT_LOW_TIMEOUT (0xAC)
+#define DW_IC_REG_SDA_STUCK_AT_LOW_TIMEOUT (0xB0)
+#define DW_IC_REG_CLR_SCL_STUCK_DET        (0xB4)
 #define DW_IC_REG_COMP_PARAM_1  (0xF4)
 #define DW_IC_REG_COMP_TYPE     (0xFC)
+
+/* TX_ABRT_SOURCE bits relevant to bus clear */
+#define DW_IC_TX_ABRT_SDA_STUCK_AT_LOW BIT(17)
+
+/* RAW_INTR_STAT bits relevant to bus clear */
+#define DW_IC_RAW_INTR_SCL_STUCK_AT_LOW BIT(14)
+
+/* STATUS bit for SDA recovery result */
+#define DW_IC_STATUS_SDA_STUCK_NOT_RECOVERED_BIT (11)
+
+/* ENABLE bit for SDA stuck recovery trigger */
+#define DW_IC_ENABLE_SDA_RECOVERY_BIT (3)
+
+/* Default stuck-at-low timeout: hardware detects stuck after this many IC_CLK cycles. */
+#define DW_IC_SDA_STUCK_TIMEOUT_DEFAULT 0x200000U
+#define DW_IC_SCL_STUCK_TIMEOUT_DEFAULT 0x200000U
 
 #define IDMA_REG_INTR_STS    0xAE8
 #define IDMA_TX_RX_CHAN_MASK 0x3
@@ -234,6 +257,16 @@ DEFINE_MM_REG_READ(fs_spklen, DW_IC_REG_FS_SPKLEN, 32)
 DEFINE_MM_REG_READ(hs_spklen, DW_IC_REG_HS_SPKLEN, 32)
 DEFINE_MM_REG_WRITE(fs_spklen, DW_IC_REG_FS_SPKLEN, 32)
 DEFINE_MM_REG_WRITE(hs_spklen, DW_IC_REG_HS_SPKLEN, 32)
+
+DEFINE_MM_REG_WRITE(scl_stuck_timeout, DW_IC_REG_SCL_STUCK_AT_LOW_TIMEOUT, 32)
+DEFINE_MM_REG_WRITE(sda_stuck_timeout, DW_IC_REG_SDA_STUCK_AT_LOW_TIMEOUT, 32)
+DEFINE_MM_REG_READ(tx_abrt_source, DW_IC_REG_TX_ABRT_SOURCE, 32)
+DEFINE_MM_REG_READ(raw_intr_stat, DW_IC_REG_RAW_INTR_STAT, 32)
+DEFINE_MM_REG_READ(clr_scl_stuck_det, DW_IC_REG_CLR_SCL_STUCK_DET, 32)
+DEFINE_SET_BIT_OP(enable_sda_recovery, DW_IC_REG_ENABLE, DW_IC_ENABLE_SDA_RECOVERY_BIT)
+DEFINE_TEST_BIT_OP(enable_sda_recovery, DW_IC_REG_ENABLE, DW_IC_ENABLE_SDA_RECOVERY_BIT)
+DEFINE_TEST_BIT_OP(status_sda_stuck_not_recovered, DW_IC_REG_STATUS,
+		   DW_IC_STATUS_SDA_STUCK_NOT_RECOVERED_BIT)
 
 DEFINE_MM_REG_READ(comp_param_1, DW_IC_REG_COMP_PARAM_1, 32)
 DEFINE_MM_REG_READ(comp_type, DW_IC_REG_COMP_TYPE, 32)
