@@ -623,6 +623,7 @@ static int i2c_dw_setup(const struct device *dev, uint16_t slave_address)
 		LOG_DBG("I2C: host configured as Master Device");
 		ic_con.bits.master_mode = 1U;
 		ic_con.bits.slave_disable = 1U;
+		ic_con.bits.bus_clear_feature_ctrl = 1U;
 	} else {
 		return -EINVAL;
 	}
@@ -1137,10 +1138,64 @@ static void i2c_dw_slave_read_clear_intr_bits(const struct device *dev)
 }
 #endif /* CONFIG_I2C_TARGET */
 
+/* Implements the hardware SDA stuck-at-low recovery flow
+ * BUS_CLEAR_FEATURE_CTRL must already be enabled (set in i2c_dw_setup).
+ */
+static int i2c_dw_recover_bus(const struct device *dev)
+{
+	uint32_t reg_base = get_regs(dev);
+	struct i2c_dw_dev_config *const dw = dev->data;
+	int ret = 0;
+	int i;
+
+	k_mutex_lock(&dw->bus_mutex, K_FOREVER);
+
+	if (read_raw_intr_stat(reg_base) & DW_IC_RAW_INTR_SCL_STUCK_AT_LOW) {
+		LOG_ERR("%s: SCL stuck at low, hardware reset required", dev->name);
+		ret = -EIO;
+		goto out;
+	}
+
+	if (!(read_tx_abrt_source(reg_base) & DW_IC_TX_ABRT_SDA_STUCK_AT_LOW)) {
+		goto out;
+	}
+
+	LOG_WRN("%s: SDA stuck at low detected, initiating hardware recovery", dev->name);
+
+	/* I2C must be enabled for SDA_STUCK_RECOVERY_ENABLE to take effect. */
+	set_bit_enable_en(reg_base);
+	set_bit_enable_sda_recovery(reg_base);
+
+	for (i = 0; i < 1000 && test_bit_enable_sda_recovery(reg_base); i++) {
+		k_busy_wait(10);
+	}
+
+	if (test_bit_enable_sda_recovery(reg_base)) {
+		LOG_ERR("%s: SDA recovery timed out", dev->name);
+		ret = -ETIMEDOUT;
+		goto out;
+	}
+
+	if (test_bit_status_sda_stuck_not_recovered(reg_base)) {
+		LOG_ERR("%s: SDA stuck not recovered, hardware reset required", dev->name);
+		ret = -EIO;
+		goto out;
+	}
+
+	LOG_INF("%s: SDA stuck at low recovered", dev->name);
+
+out:
+	(void)read_clr_tx_abrt(reg_base);
+	dw->state = I2C_DW_STATE_READY;
+	k_mutex_unlock(&dw->bus_mutex);
+	return ret;
+}
+
 static DEVICE_API(i2c, funcs) = {
 	.configure = i2c_dw_runtime_configure,
 	.get_config = i2c_dw_get_configuration,
 	.transfer = i2c_dw_transfer,
+	.recover_bus = i2c_dw_recover_bus,
 #ifdef CONFIG_I2C_TARGET
 	.target_register = i2c_dw_slave_register,
 	.target_unregister = i2c_dw_slave_unregister,
@@ -1259,6 +1314,12 @@ static int i2c_dw_initialize(const struct device *dev)
 	/* Set spike length */
 	write_fs_spklen(rom->fs_spk_len, reg_base);
 	write_hs_spklen(rom->hs_spk_len, reg_base);
+
+	/* Configure stuck-at-low detection timeouts for the controller's bus clear
+	 * feature. Must be written while I2C is disabled.
+	 */
+	write_scl_stuck_timeout(DW_IC_SCL_STUCK_TIMEOUT_DEFAULT, reg_base);
+	write_sda_stuck_timeout(DW_IC_SDA_STUCK_TIMEOUT_DEFAULT, reg_base);
 
 	dw->app_config = I2C_MODE_CONTROLLER | i2c_map_dt_bitrate(rom->bitrate);
 
