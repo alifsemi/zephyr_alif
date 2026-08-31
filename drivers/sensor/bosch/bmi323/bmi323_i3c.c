@@ -7,6 +7,7 @@
 #include "bmi323.h"
 #include <zephyr/device.h>
 #include <zephyr/drivers/i3c.h>
+#include <zephyr/kernel.h>
 
 #define IMU_BOSCH_BMI323_REG_I3C_DUMMY_OFFSET 0x2
 
@@ -22,7 +23,7 @@ static int bosch_bmi323_i3c_read_words(const void *context, uint8_t offset, uint
 		/* Copy actual data except first 2 bytes of dummy data */
 		memcpy(words, &dbuf[IMU_BOSCH_BMI323_REG_I3C_DUMMY_OFFSET], (words_count * 2));
 	}
-	k_usleep(2);
+	k_busy_wait(2);
 
 	return ret;
 }
@@ -39,7 +40,7 @@ static int bosch_bmi323_i3c_write_words(const void *context, uint8_t offset, uin
 	memcpy(&dbuf[sizeof(offset)], words, (words_count * 2));
 
 	ret = i3c_write_dt(i3c, dbuf, sizeof(dbuf));
-	k_usleep(2);
+	k_busy_wait(2);
 
 	return ret;
 }
