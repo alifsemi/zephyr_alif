@@ -2231,6 +2231,42 @@ static int dw_i3c_target_unregister(const struct device *dev, struct i3c_target_
 	return 0;
 }
 
+/* Flushes FIFOs and resumes the controller from an error halt without clearing DAT/DCT. */
+static int dw_i3c_recover_bus(const struct device *dev)
+{
+	const struct dw_i3c_config *config = dev->config;
+	struct dw_i3c_data *data = dev->data;
+	uint32_t nibis;
+	int ret;
+
+	if (!(sys_read32(config->regs + PRESENT_STATE) & PRESENT_STATE_CURRENT_MASTER)) {
+		return -EACCES;
+	}
+
+	ret = k_mutex_lock(&data->mt, K_MSEC(1000));
+	if (ret) {
+		LOG_ERR("%s: recover_bus mutex err (%d)", dev->name, ret);
+		return ret;
+	}
+
+	nibis = QUEUE_STATUS_IBI_BUF_BLR(sys_read32(config->regs + QUEUE_STATUS_LEVEL));
+	while (nibis--) {
+		(void)sys_read32(config->regs + IBI_QUEUE_STATUS);
+	}
+
+	sys_write32(RESET_CTRL_RX_FIFO | RESET_CTRL_TX_FIFO |
+		    RESET_CTRL_RESP_QUEUE | RESET_CTRL_CMD_QUEUE |
+		    RESET_CTRL_IBI_QUEUE,
+		    config->regs + RESET_CTRL);
+
+	sys_write32(sys_read32(config->regs + DEVICE_CTRL) | DEV_CTRL_RESUME,
+		    config->regs + DEVICE_CTRL);
+
+	k_mutex_unlock(&data->mt);
+
+	return 0;
+}
+
 static int dw_i3c_init(const struct device *dev)
 {
 	const struct dw_i3c_config *config = dev->config;
@@ -2357,6 +2393,7 @@ static int dw_i3c_init(const struct device *dev)
 
 static DEVICE_API(i3c, dw_i3c_api) = {
 	.i2c_api.transfer = dw_i3c_i2c_api_transfer,
+	.i2c_api.recover_bus = dw_i3c_recover_bus,
 
 	.configure = dw_i3c_configure,
 	.config_get = dw_i3c_config_get,
@@ -2371,6 +2408,8 @@ static DEVICE_API(i3c, dw_i3c_api) = {
 	.do_ccc = dw_i3c_do_ccc,
 
 	.i3c_device_find = dw_i3c_device_find,
+
+	.recover_bus = dw_i3c_recover_bus,
 
 	.i3c_xfers = dw_i3c_xfers,
 
