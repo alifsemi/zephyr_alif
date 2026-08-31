@@ -39,3 +39,17 @@ properties:
       Configure the DW I3C controller in target role
       at startup, so the role is deterministic across
       warm boots and partial resets.
+
+  scl-gpios:
+    type: phandle-array
+    description: |
+      GPIO for the SCL line. Required together with sda-gpios to enable
+      boot-time bus recovery (bit-bang SCL pulses to unstick a target holding
+      SDA low). Also requires a "recovery" pinctrl state that muxes the
+      SCL/SDA pads to GPIO. Optional; omit to disable recovery.
+
+  sda-gpios:
+    type: phandle-array
+    description: |
+      GPIO for the SDA line, sampled during boot-time bus recovery to detect
+      when the stuck target releases the line. Optional; see scl-gpios.

@@ -11,6 +11,10 @@
 #include <zephyr/sys/util.h>
 #include <assert.h>
 #include <zephyr/drivers/pinctrl.h>
+#include <zephyr/drivers/gpio.h>
+
+/* Pinctrl state for GPIO mux during boot-time bus recovery. */
+#define PINCTRL_STATE_RECOVERY PINCTRL_STATE_PRIV_START
 
 #define NANO_SEC        1000000000ULL
 #define BYTES_PER_DWORD 4
@@ -367,6 +371,8 @@ struct dw_i3c_config {
 	uint32_t regs;
 
 	const struct pinctrl_dev_config *pcfg;
+	struct gpio_dt_spec scl_gpio;
+	struct gpio_dt_spec sda_gpio;
 
 	void (*irq_config_func)();
 
@@ -2231,6 +2237,66 @@ static int dw_i3c_target_unregister(const struct device *dev, struct i3c_target_
 	return 0;
 }
 
+/* Clocks SCL via GPIO until a stuck target releases SDA. Runs once at boot. */
+static int dw_i3c_gpio_bus_recovery(const struct device *dev)
+{
+	const struct dw_i3c_config *config = dev->config;
+	int ret = 0;
+	int pulses;
+
+	if (config->scl_gpio.port == NULL || config->sda_gpio.port == NULL) {
+		return -ENOSYS;
+	}
+
+	if (!gpio_is_ready_dt(&config->scl_gpio) || !gpio_is_ready_dt(&config->sda_gpio)) {
+		LOG_ERR("%s: recovery GPIOs not ready", dev->name);
+		return -ENODEV;
+	}
+
+	ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_RECOVERY);
+	if (ret != 0) {
+		LOG_ERR("%s: recovery pinctrl failed (%d)", dev->name, ret);
+		return ret;
+	}
+
+	gpio_pin_configure_dt(&config->scl_gpio, GPIO_OUTPUT_HIGH);
+	gpio_pin_configure_dt(&config->sda_gpio, GPIO_INPUT);
+	k_busy_wait(5);
+
+	if (gpio_pin_get_dt(&config->sda_gpio) == 0) {
+		LOG_WRN("%s: SDA stuck low, clocking SCL to recover", dev->name);
+
+		for (pulses = 0;
+		     pulses < 9 && gpio_pin_get_dt(&config->sda_gpio) == 0;
+		     pulses++) {
+			gpio_pin_set_dt(&config->scl_gpio, 0);
+			k_busy_wait(5);
+			gpio_pin_set_dt(&config->scl_gpio, 1);
+			k_busy_wait(5);
+		}
+
+		/* STOP: SDA low while SCL high, then release SDA */
+		gpio_pin_configure_dt(&config->sda_gpio, GPIO_OUTPUT_LOW);
+		k_busy_wait(5);
+		gpio_pin_set_dt(&config->scl_gpio, 1);
+		k_busy_wait(5);
+		gpio_pin_set_dt(&config->sda_gpio, 1);
+		k_busy_wait(5);
+		gpio_pin_configure_dt(&config->sda_gpio, GPIO_INPUT);
+
+		if (gpio_pin_get_dt(&config->sda_gpio) != 1) {
+			LOG_ERR("%s: bus still stuck after %d SCL pulses", dev->name, pulses);
+			ret = -EBUSY;
+		} else {
+			LOG_INF("%s: bus recovered after %d SCL pulse(s)", dev->name, pulses);
+		}
+	}
+
+	pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+
+	return ret;
+}
+
 /* Flushes FIFOs and resumes the controller from an error halt without clearing DAT/DCT. */
 static int dw_i3c_recover_bus(const struct device *dev)
 {
@@ -2285,6 +2351,11 @@ static int dw_i3c_init(const struct device *dev)
 	ret = clock_control_on(config->clock, config->clock_subsys);
 	if (ret < 0) {
 		return ret;
+	}
+
+	ret = dw_i3c_gpio_bus_recovery(dev);
+	if (ret != 0 && ret != -ENOSYS) {
+		LOG_ERR("%s: boot-time bus recovery failed (%d)", dev->name, ret);
 	}
 
 	ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
@@ -2453,6 +2524,8 @@ static DEVICE_API(i3c, dw_i3c_api) = {
 				((clock_control_subsys_t)DT_INST_CLOCKS_CELL(n, clkid)),           \
 				((clock_control_subsys_t)0)),                                      \
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(n),                                         \
+		.scl_gpio = GPIO_DT_SPEC_INST_GET_OR(n, scl_gpios, {0}),                           \
+		.sda_gpio = GPIO_DT_SPEC_INST_GET_OR(n, sda_gpios, {0}),                           \
 		.irq_config_func = &i3c_dw_irq_config_##n,                                         \
 		.common.dev_list.i3c = dw_i3c_device_array_##n,                                    \
 		.common.dev_list.num_i3c = ARRAY_SIZE(dw_i3c_device_array_##n),                    \
