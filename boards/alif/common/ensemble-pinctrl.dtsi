@@ -357,6 +357,14 @@
 		};
 	};
 
+	pinctrl_i3c0_recovery: pinctrl_i3c0_recovery {
+		group0 {
+			pinmux = < PIN_P7_6__GPIO >,
+				 < PIN_P7_7__GPIO >;
+			read-enable = <0x1>;
+		};
+	};
+
 	pinctrl_can0: pinctrl_can0 {
 		group0 {
 			pinmux = <PIN_P7_0__CAN_RXD_A>,
@@ -1351,4 +1359,9 @@
 			read-enable = <0x0>;
 		};
 	};
+};
+
+&i3c0 {
+	scl-gpios = <&gpio7 7 GPIO_ACTIVE_HIGH>;
+	sda-gpios = <&gpio7 6 GPIO_ACTIVE_HIGH>;
 };
