@@ -10,9 +10,10 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/dt-bindings/clock/alif_ensemble_clocks.h>
 #ifdef CONFIG_HAS_ALIF_SE_SERVICES
-#include <se_service.h>
-#if IS_ENABLED(CONFIG_PM)
 #include <string.h>
+#include <se_service.h>
+#include <zephyr/drivers/clock_control/clock_control_alif.h>
+#if IS_ENABLED(CONFIG_PM)
 #include <zephyr/pm/pm.h>
 #endif
 #endif
@@ -731,13 +732,20 @@ static inline int alif_clock_control_configure(const struct device *dev,
 	return 0;
 }
 
+#ifdef CONFIG_HAS_ALIF_SE_SERVICES
+void alif_clock_sys_clk_cache_invalidate(void)
+{
+	memset(&ensemble_clk.sys_clk_cache, 0, sizeof(ensemble_clk.sys_clk_cache));
+}
+#endif
+
 #if defined(CONFIG_HAS_ALIF_SE_SERVICES) && IS_ENABLED(CONFIG_PM)
 static void ensemble_clk_pre_device_resume(enum pm_state state)
 {
 	if (state == PM_STATE_RUNTIME_IDLE || state == PM_STATE_SUSPEND_TO_IDLE) {
 		return;
 	}
-	memset(&ensemble_clk.sys_clk_cache, 0, sizeof(ensemble_clk.sys_clk_cache));
+	alif_clock_sys_clk_cache_invalidate();
 }
 
 static struct pm_notifier ensemble_clk_pm_notifier = {
