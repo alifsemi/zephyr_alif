@@ -9,8 +9,9 @@
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/dt-bindings/clock/alif_balletto_clocks.h>
-#if IS_ENABLED(CONFIG_PM)
 #include <string.h>
+#include <zephyr/drivers/clock_control/clock_control_alif.h>
+#if IS_ENABLED(CONFIG_PM)
 #include <zephyr/pm/pm.h>
 #endif
 #include <zephyr/pm/device.h>
@@ -698,13 +699,18 @@ static inline int alif_clock_control_configure(const struct device *dev,
 	return 0;
 }
 
+void alif_clock_sys_clk_cache_invalidate(void)
+{
+	memset(&balletto_clk.sys_clk_cache, 0, sizeof(balletto_clk.sys_clk_cache));
+}
+
 #if IS_ENABLED(CONFIG_PM)
 static void balletto_clk_pre_device_resume(enum pm_state state)
 {
 	if (state == PM_STATE_RUNTIME_IDLE || state == PM_STATE_SUSPEND_TO_IDLE) {
 		return;
 	}
-	memset(&balletto_clk.sys_clk_cache, 0, sizeof(balletto_clk.sys_clk_cache));
+	alif_clock_sys_clk_cache_invalidate();
 }
 
 static struct pm_notifier balletto_clk_pm_notifier = {
