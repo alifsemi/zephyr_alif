@@ -9,6 +9,10 @@
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/dt-bindings/clock/alif_ensemble_e1c_clocks.h>
+#ifdef CONFIG_HAS_ALIF_SE_SERVICES
+#include <se_service.h>
+#endif
+#include "soc_common.h"
 
 LOG_MODULE_REGISTER(alif_clock_control, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
 
@@ -20,6 +24,31 @@ struct clock_control_alif_config {
 	uint32_t vbat_base;
 	uint32_t m55he_cfg_base;
 };
+
+#ifdef CONFIG_HAS_ALIF_SE_SERVICES
+struct ensemble_e1c_clk_data {
+	uint32_t axi_freq;
+	uint32_t ahb_freq;
+	uint32_t apb_freq;
+	uint32_t sysref_freq;
+	uint32_t hfosc_freq;
+	uint32_t extsys1_freq;
+};
+
+static struct ensemble_e1c_clk_data ensemble_e1c_clk;
+
+static uint32_t alif_get_se_clock(uint32_t *cache, clock_setting_t setting)
+{
+	if (*cache != 0U) {
+		return *cache;
+	}
+	if (se_service_clock_setting_get(setting, cache) != 0) {
+		LOG_ERR("SE clock query failed for setting %d", setting);
+		return 0U;
+	}
+	return *cache;
+}
+#endif /* CONFIG_HAS_ALIF_SE_SERVICES */
 
 #define ALIF_CAMERA_PIX_CLK_DIV_MASK     BIT_MASK(9U)
 #define ALIF_CAMERA_PIX_CLK_DIV_POS      16U
@@ -44,16 +73,18 @@ struct clock_control_alif_config {
 #define PLL_CLOCK1_SRC_FREQ           DT_PROP(DT_PATH(clocks, pll_clk1), clock_frequency)
 #define PLL_CLOCK2_SRC_FREQ           DT_PROP(DT_PATH(clocks, pll_clk2), clock_frequency)
 
+#ifndef CONFIG_HAS_ALIF_SE_SERVICES
 #define ALIF_CLOCK_SYST_CORE_FREQ     CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC
 #define ALIF_CLOCK_SYST_ACLK_FREQ     PLL_CLOCK1_SRC_FREQ
 #define ALIF_CLOCK_SYST_HCLK_FREQ     (PLL_CLOCK1_SRC_FREQ / 2U)
 #define ALIF_CLOCK_SYST_PCLK_FREQ     (PLL_CLOCK1_SRC_FREQ / 4U)
 #define ALIF_CLOCK_REFCLK_FREQ        (PLL_CLOCK1_SRC_FREQ / 2U)
-#define ALIF_CLOCK_USB_CLK_FREQ       (PLL_CLOCK1_SRC_FREQ / 8U)
 #define ALIF_CLOCK_160M_CLK_FREQ      PLL_CLOCK1_SRC_FREQ
-#define ALIF_CLOCK_10M_CLK_FREQ       (PLL_CLOCK1_SRC_FREQ / 16U)
-#define ALIF_CLOCK_USB_CLK_FREQ       (PLL_CLOCK1_SRC_FREQ / 8U)
 #define ALIF_CLOCK_HFOSC_CLK_FREQ     OSC_CLOCK_SRC_FREQ(hfxo)
+#endif
+
+#define ALIF_CLOCK_USB_CLK_FREQ       (PLL_CLOCK1_SRC_FREQ / 8U)
+#define ALIF_CLOCK_10M_CLK_FREQ       (PLL_CLOCK1_SRC_FREQ / 16U)
 #define ALIF_CLOCK_76M8_CLK_FREQ      (OSC_CLOCK_SRC_FREQ(hfxo) * 2U)
 #define ALIF_CLOCK_128K_CLK_FREQ      (OSC_CLOCK_SRC_FREQ(lfrc) * 4U)
 #define ALIF_CLOCK_S32K_CLK_FREQ      OSC_CLOCK_SRC_FREQ(lfxo)
@@ -86,19 +117,92 @@ struct clock_control_alif_config {
 #define ALIF_EXPMST0_CTRL_IPCLK_FORCE_BIT BIT(31U)
 #define ALIF_EXPMST0_CTRL_PCLK_FORCE_BIT  BIT(30U)
 
-static uint32_t alif_get_input_clock(uint32_t clock_name)
+/* Per-source freq helpers: SE query + cache on RTSS, static DT macro otherwise. */
+static inline uint32_t alif_axi_freq(const struct device *dev)
+{
+#ifdef CONFIG_HAS_ALIF_SE_SERVICES
+	struct ensemble_e1c_clk_data *data = dev->data;
+
+	return alif_get_se_clock(&data->axi_freq, CLOCK_SETTING_AXI_FREQ);
+#else
+	ARG_UNUSED(dev);
+	return ALIF_CLOCK_SYST_ACLK_FREQ;
+#endif
+}
+
+static inline uint32_t alif_ahb_freq(const struct device *dev)
+{
+#ifdef CONFIG_HAS_ALIF_SE_SERVICES
+	struct ensemble_e1c_clk_data *data = dev->data;
+
+	return alif_get_se_clock(&data->ahb_freq, CLOCK_SETTING_AHB_FREQ);
+#else
+	ARG_UNUSED(dev);
+	return ALIF_CLOCK_SYST_HCLK_FREQ;
+#endif
+}
+
+static inline uint32_t alif_apb_freq(const struct device *dev)
+{
+#ifdef CONFIG_HAS_ALIF_SE_SERVICES
+	struct ensemble_e1c_clk_data *data = dev->data;
+
+	return alif_get_se_clock(&data->apb_freq, CLOCK_SETTING_APB_FREQ);
+#else
+	ARG_UNUSED(dev);
+	return ALIF_CLOCK_SYST_PCLK_FREQ;
+#endif
+}
+
+static inline uint32_t alif_sysref_freq(const struct device *dev)
+{
+#ifdef CONFIG_HAS_ALIF_SE_SERVICES
+	struct ensemble_e1c_clk_data *data = dev->data;
+
+	return alif_get_se_clock(&data->sysref_freq, CLOCK_SETTING_SYSREF_FREQ);
+#else
+	ARG_UNUSED(dev);
+	return ALIF_CLOCK_REFCLK_FREQ;
+#endif
+}
+
+static inline uint32_t alif_hfosc_freq(const struct device *dev)
+{
+#ifdef CONFIG_HAS_ALIF_SE_SERVICES
+	struct ensemble_e1c_clk_data *data = dev->data;
+
+	return alif_get_se_clock(&data->hfosc_freq, CLOCK_SETTING_HFOSC_FREQ);
+#else
+	ARG_UNUSED(dev);
+	return ALIF_CLOCK_HFOSC_CLK_FREQ;
+#endif
+}
+
+static inline uint32_t alif_extsys1_freq(const struct device *dev)
+{
+#ifdef CONFIG_HAS_ALIF_SE_SERVICES
+	struct ensemble_e1c_clk_data *data = dev->data;
+
+	return alif_get_se_clock(&data->extsys1_freq, CLOCK_SETTING_EXTSYS1_FREQ);
+#else
+	ARG_UNUSED(dev);
+	return ALIF_CLOCK_SYST_CORE_FREQ;
+#endif
+}
+
+static uint32_t alif_get_input_clock(const struct device *dev, uint32_t clock_name)
 {
 	switch (clock_name) {
 	case ALIF_CDC200_PIX_SYST_ACLK:
 	case ALIF_OSPI_CLK:
 	case ALIF_UTIMER_CLK:
-		return ALIF_CLOCK_SYST_ACLK_FREQ;
+		return alif_axi_freq(dev);
 	case ALIF_CANFD0_HFOSC_CLK:
 	case ALIF_CANFD1_HFOSC_CLK:
-		return ALIF_CLOCK_HFOSC_CLK_FREQ;
+		return alif_hfosc_freq(dev);
 	case ALIF_CANFD0_160M_CLK:
 	case ALIF_CANFD1_160M_CLK:
-		return ALIF_CLOCK_160M_CLK_FREQ;
+		return alif_extsys1_freq(dev);
 	case ALIF_I2S0_76M8_CLK:
 	case ALIF_I2S1_76M8_CLK:
 	case ALIF_LPI2S_76M8_CLK:
@@ -135,22 +239,21 @@ static uint32_t alif_get_input_clock(uint32_t clock_name)
 	case ALIF_UART5_SYST_PCLK:
 	case ALIF_I2C0_GATED_CLK:
 	case ALIF_I2C1_GATED_CLK:
-		return ALIF_CLOCK_SYST_PCLK_FREQ;
+		return alif_apb_freq(dev);
 	case ALIF_UART0_38M4_CLK:
 	case ALIF_UART1_38M4_CLK:
 	case ALIF_UART2_38M4_CLK:
 	case ALIF_UART3_38M4_CLK:
 	case ALIF_UART4_38M4_CLK:
 	case ALIF_UART5_38M4_CLK:
-		return ALIF_CLOCK_HFOSC_CLK_FREQ;
+		return alif_hfosc_freq(dev);
 	case ALIF_LPUART_CLK:
-		return ALIF_CLOCK_SYST_CORE_FREQ;
-	case ALIF_I3C_CLK:
-		return ALIF_CLOCK_SYST_ACLK_FREQ;
 	case ALIF_LPSPI_CLK:
-		return ALIF_CLOCK_SYST_CORE_FREQ;
+		return alif_extsys1_freq(dev);
+	case ALIF_I3C_CLK:
+		return alif_axi_freq(dev);
 	case ALIF_SPI_CLK:
-		return ALIF_CLOCK_SYST_HCLK_FREQ;
+		return alif_ahb_freq(dev);
 	default:
 		return 0;
 	}
@@ -342,7 +445,7 @@ static int alif_clock_control_get_rate(const struct device *dev,
 	uint32_t div_mask, freq_div, div_pos;
 	int32_t ret;
 
-	clk_freq = alif_get_input_clock(clk_id);
+	clk_freq = alif_get_input_clock(dev, clk_id);
 	if (!clk_freq) {
 		return -ENOTSUP;
 	}
@@ -386,7 +489,7 @@ static int alif_clock_control_set_rate(const struct device *dev,
 		return 0;
 	}
 
-	clk_freq = alif_get_input_clock(clk_id);
+	clk_freq = alif_get_input_clock(dev, clk_id);
 
 	ret = alif_get_module_base(dev, ALIF_CLOCK_CFG_MODULE(clk_id),
 					&module_base);
@@ -519,6 +622,13 @@ static const struct clock_control_alif_config config = {
 	.m55he_cfg_base = DT_INST_REG_ADDR_BY_NAME(0, m55he_cfg),
 };
 
-DEVICE_DT_DEFINE(DT_NODELABEL(clockctrl), clockctrl_init, NULL, NULL, &config, PRE_KERNEL_1,
+#ifdef CONFIG_HAS_ALIF_SE_SERVICES
+#define ALIF_CLOCK_DATA (&ensemble_e1c_clk)
+#else
+#define ALIF_CLOCK_DATA NULL
+#endif
+
+DEVICE_DT_DEFINE(DT_NODELABEL(clockctrl), clockctrl_init, NULL,
+				ALIF_CLOCK_DATA, &config, PRE_KERNEL_1,
 				CONFIG_CLOCK_CONTROL_INIT_PRIORITY,
 				&alif_clock_control_driver_api);
