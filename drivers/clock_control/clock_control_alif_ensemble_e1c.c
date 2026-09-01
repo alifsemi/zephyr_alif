@@ -31,12 +31,14 @@ struct clock_control_alif_config {
 
 #ifdef CONFIG_HAS_ALIF_SE_SERVICES
 struct ensemble_e1c_clk_data {
-	uint32_t axi_freq;
-	uint32_t ahb_freq;
-	uint32_t apb_freq;
-	uint32_t sysref_freq;
-	uint32_t hfosc_freq;
-	uint32_t extsys1_freq;
+	struct {
+		uint32_t axi_freq;
+		uint32_t ahb_freq;
+		uint32_t apb_freq;
+		uint32_t sysref_freq;
+		uint32_t hfosc_freq;
+		uint32_t extsys1_freq;
+	} sys_clk_cache;
 };
 
 static struct ensemble_e1c_clk_data ensemble_e1c_clk;
@@ -127,7 +129,7 @@ static inline uint32_t alif_axi_freq(const struct device *dev)
 #ifdef CONFIG_HAS_ALIF_SE_SERVICES
 	struct ensemble_e1c_clk_data *data = dev->data;
 
-	return alif_get_se_clock(&data->axi_freq, CLOCK_SETTING_AXI_FREQ);
+	return alif_get_se_clock(&data->sys_clk_cache.axi_freq, CLOCK_SETTING_AXI_FREQ);
 #else
 	ARG_UNUSED(dev);
 	return ALIF_CLOCK_SYST_ACLK_FREQ;
@@ -139,7 +141,7 @@ static inline uint32_t alif_ahb_freq(const struct device *dev)
 #ifdef CONFIG_HAS_ALIF_SE_SERVICES
 	struct ensemble_e1c_clk_data *data = dev->data;
 
-	return alif_get_se_clock(&data->ahb_freq, CLOCK_SETTING_AHB_FREQ);
+	return alif_get_se_clock(&data->sys_clk_cache.ahb_freq, CLOCK_SETTING_AHB_FREQ);
 #else
 	ARG_UNUSED(dev);
 	return ALIF_CLOCK_SYST_HCLK_FREQ;
@@ -151,7 +153,7 @@ static inline uint32_t alif_apb_freq(const struct device *dev)
 #ifdef CONFIG_HAS_ALIF_SE_SERVICES
 	struct ensemble_e1c_clk_data *data = dev->data;
 
-	return alif_get_se_clock(&data->apb_freq, CLOCK_SETTING_APB_FREQ);
+	return alif_get_se_clock(&data->sys_clk_cache.apb_freq, CLOCK_SETTING_APB_FREQ);
 #else
 	ARG_UNUSED(dev);
 	return ALIF_CLOCK_SYST_PCLK_FREQ;
@@ -163,7 +165,7 @@ static inline uint32_t alif_sysref_freq(const struct device *dev)
 #ifdef CONFIG_HAS_ALIF_SE_SERVICES
 	struct ensemble_e1c_clk_data *data = dev->data;
 
-	return alif_get_se_clock(&data->sysref_freq, CLOCK_SETTING_SYSREF_FREQ);
+	return alif_get_se_clock(&data->sys_clk_cache.sysref_freq, CLOCK_SETTING_SYSREF_FREQ);
 #else
 	ARG_UNUSED(dev);
 	return ALIF_CLOCK_REFCLK_FREQ;
@@ -175,7 +177,7 @@ static inline uint32_t alif_hfosc_freq(const struct device *dev)
 #ifdef CONFIG_HAS_ALIF_SE_SERVICES
 	struct ensemble_e1c_clk_data *data = dev->data;
 
-	return alif_get_se_clock(&data->hfosc_freq, CLOCK_SETTING_HFOSC_FREQ);
+	return alif_get_se_clock(&data->sys_clk_cache.hfosc_freq, CLOCK_SETTING_HFOSC_FREQ);
 #else
 	ARG_UNUSED(dev);
 	return ALIF_CLOCK_HFOSC_CLK_FREQ;
@@ -187,7 +189,7 @@ static inline uint32_t alif_extsys1_freq(const struct device *dev)
 #ifdef CONFIG_HAS_ALIF_SE_SERVICES
 	struct ensemble_e1c_clk_data *data = dev->data;
 
-	return alif_get_se_clock(&data->extsys1_freq, CLOCK_SETTING_EXTSYS1_FREQ);
+	return alif_get_se_clock(&data->sys_clk_cache.extsys1_freq, CLOCK_SETTING_EXTSYS1_FREQ);
 #else
 	ARG_UNUSED(dev);
 	return ALIF_CLOCK_SYST_CORE_FREQ;
@@ -578,7 +580,7 @@ static void ensemble_e1c_clk_pre_device_resume(enum pm_state state)
 	if (state == PM_STATE_RUNTIME_IDLE || state == PM_STATE_SUSPEND_TO_IDLE) {
 		return;
 	}
-	memset(&ensemble_e1c_clk, 0, sizeof(ensemble_e1c_clk));
+	memset(&ensemble_e1c_clk.sys_clk_cache, 0, sizeof(ensemble_e1c_clk.sys_clk_cache));
 }
 
 static struct pm_notifier ensemble_e1c_clk_pm_notifier = {
