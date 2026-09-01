@@ -1,0 +1,87 @@
+# SPDX-FileCopyrightText: Copyright Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Alif RTSS performance state (P-state).
+
+  Each child of /performance-states overlays only the properties it sets
+  onto the compile-time aipm_run_default run profile. cpu_freq_pstate_set()
+  sends that composed run_profile_t to the Secure Enclave.
+
+  Properties use the same names and values as alif,aipm-run children.
+  Omit a property to keep aipm_run_default's value. Memory-block, gating,
+  ioflex, and aon-clk stay with the run default unless added later.
+
+  Example:
+
+    performance-states {
+            pstate_0: pstate_0 {
+                    compatible = "alif,rtss-pstate";
+                    load-threshold = <0>;
+                    cpu-clk-freq = <ALIF_CLOCK_FREQ_160MHZ>;
+            };
+            pstate_1: pstate_1 {
+                    compatible = "alif,rtss-pstate";
+                    load-threshold = <0>;
+                    cpu-clk-freq = <ALIF_CLOCK_FREQ_80MHZ>;
+            };
+    };
+
+compatible: "alif,rtss-pstate"
+
+include: "zephyr,pstate.yaml"
+
+properties:
+  cpu-clk-freq:
+    type: int
+    required: true
+    description: |
+      CPU clock frequency (run_profile_t.cpu_clk_freq).
+      Use ALIF_CLOCK_FREQ_* constants from
+      dt-bindings/misc/alif_aipm_common.h.
+
+  clk-src:
+    type: string
+    enum:
+      - "hfrc"
+      - "hfxo"
+      - "pll"
+    description: |
+      High-frequency run clock source (run_profile_t.run_clk_src).
+        "hfrc" - CLK_SRC_HFRC
+        "hfxo" - CLK_SRC_HFXO
+        "pll"  - CLK_SRC_PLL
+
+  scaled-clk-freq:
+    type: int
+    description: |
+      Scaled clock frequency (run_profile_t.scaled_clk_freq).
+      Use ALIF_SCALED_FREQ_* constants from
+      dt-bindings/misc/alif_aipm_common.h.
+
+  dcdc-voltage:
+    type: int
+    description: |
+      DCDC output voltage in millivolts (run_profile_t.dcdc_voltage).
+      Valid values: 800, 825, 850.
+
+  dcdc-mode:
+    type: string
+    enum:
+      - "off"
+      - "pfm-auto"
+      - "pfm-forced"
+      - "pwm"
+    description: |
+      DCDC operating mode (run_profile_t.dcdc_mode).
+        "off"        - DCDC_MODE_OFF
+        "pfm-auto"   - DCDC_MODE_PFM_AUTO
+        "pfm-forced" - DCDC_MODE_PFM_FORCED
+        "pwm"        - DCDC_MODE_PWM
+
+  aipm-power-domains:
+    type: int
+    description: |
+      Power domain bitmask (run_profile_t.power_domains).
+      Use ALIF_PD_*_MASK constants from
+      dt-bindings/misc/alif_aipm_common.h.
