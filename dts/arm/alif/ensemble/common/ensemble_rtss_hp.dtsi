@@ -188,3 +188,34 @@
 &aipm_off {
 	vtor-address = <0x80200000>; /* Default MRAM boot address */
 };
+
+/*
+ * Full HP PLL menu. Only the boot row is okay; unused rows stay
+ * disabled so they do not create struct pstate objects.
+ */
+/ {
+	performance-states {
+		pstate_pll_400: pstate-pll-400 {
+			compatible = "alif,rtss-pstate";
+			load-threshold = <0>;
+			cpu-clk-freq = <ALIF_CLOCK_FREQ_400MHZ>;
+			clk-src = "pll";
+		};
+		pstate_pll_200: pstate-pll-200 {
+			compatible = "alif,rtss-pstate";
+			status = "disabled";
+			load-threshold = <0>;
+			cpu-clk-freq = <ALIF_CLOCK_FREQ_200MHZ>;
+			clk-src = "pll";
+		};
+		pstate_pll_100: pstate-pll-100 {
+			compatible = "alif,rtss-pstate";
+			status = "disabled";
+			load-threshold = <0>;
+			cpu-clk-freq = <ALIF_CLOCK_FREQ_100MHZ>;
+			clk-src = "pll";
+		};
+	};
+};
+
+#include <alif/common/rtss_pstate_hfrc.dtsi>

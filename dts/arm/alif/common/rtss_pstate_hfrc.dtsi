@@ -1,0 +1,39 @@
+/* Copyright (c) 2026 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * HFRC scaled P-states shared by all RTSS SoCs. Disabled so they do
+ * not create struct pstate objects until an overlay sets status okay.
+ */
+#include <dt-bindings/misc/alif_aipm_common.h>
+
+/ {
+	performance-states {
+		pstate_scaled_hfrc_76p8: pstate-scaled-hfrc-76p8 {
+			compatible = "alif,rtss-pstate";
+			status = "disabled";
+			load-threshold = <0>;
+			cpu-clk-freq = <ALIF_CLOCK_FREQ_76_8_RC_MHZ>;
+			clk-src = "hfrc";
+			scaled-clk-freq = <ALIF_SCALED_FREQ_RC_ACTIVE_76_8_MHZ>;
+		};
+		pstate_scaled_hfrc_38p4: pstate-scaled-hfrc-38p4 {
+			compatible = "alif,rtss-pstate";
+			status = "disabled";
+			load-threshold = <0>;
+			cpu-clk-freq = <ALIF_CLOCK_FREQ_76_8_RC_MHZ>;
+			clk-src = "hfrc";
+			scaled-clk-freq = <ALIF_SCALED_FREQ_RC_ACTIVE_38_4_MHZ>;
+		};
+		pstate_scaled_hfrc_19p2: pstate-scaled-hfrc-19p2 {
+			compatible = "alif,rtss-pstate";
+			status = "disabled";
+			load-threshold = <0>;
+			cpu-clk-freq = <ALIF_CLOCK_FREQ_76_8_RC_MHZ>;
+			clk-src = "hfrc";
+			scaled-clk-freq = <ALIF_SCALED_FREQ_RC_ACTIVE_19_2_MHZ>;
+		};
+	};
+};
