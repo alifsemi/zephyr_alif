@@ -16,6 +16,7 @@
 #include <zephyr/pm/pm.h>
 #endif
 #endif
+#include <zephyr/pm/device.h>
 #include "soc_common.h"
 
 LOG_MODULE_REGISTER(alif_clock_control, CONFIG_CLOCK_CONTROL_LOG_LEVEL);
@@ -29,8 +30,9 @@ struct clock_control_alif_config {
 	uint32_t m55he_cfg_base;
 };
 
-#ifdef CONFIG_HAS_ALIF_SE_SERVICES
+#if defined(CONFIG_HAS_ALIF_SE_SERVICES) || IS_ENABLED(CONFIG_PM_DEVICE)
 struct ensemble_e1c_clk_data {
+#ifdef CONFIG_HAS_ALIF_SE_SERVICES
 	struct {
 		uint32_t axi_freq;
 		uint32_t ahb_freq;
@@ -39,10 +41,16 @@ struct ensemble_e1c_clk_data {
 		uint32_t hfosc_freq;
 		uint32_t extsys1_freq;
 	} sys_clk_cache;
+#endif
+#if IS_ENABLED(CONFIG_PM_DEVICE)
+	uint32_t cgu_mask;
+#endif
 };
 
 static struct ensemble_e1c_clk_data ensemble_e1c_clk;
+#endif
 
+#ifdef CONFIG_HAS_ALIF_SE_SERVICES
 static uint32_t alif_get_se_clock(uint32_t *cache, clock_setting_t setting)
 {
 	if (*cache != 0U) {
@@ -588,6 +596,31 @@ static struct pm_notifier ensemble_e1c_clk_pm_notifier = {
 };
 #endif /* CONFIG_HAS_ALIF_SE_SERVICES && CONFIG_PM */
 
+#if IS_ENABLED(CONFIG_PM_DEVICE)
+static int alif_clock_pm_action(const struct device *dev,
+				enum pm_device_action action)
+{
+	struct ensemble_e1c_clk_data *data = dev->data;
+	const struct clock_control_alif_config *cfg = dev->config;
+	const uint32_t reg_addr = cfg->cgu_base + ALIF_CLK_ENA_REG;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		/* Nothing to save; mask is cached at init. */
+		break;
+	case PM_DEVICE_ACTION_RESUME:
+		if (data->cgu_mask != 0U) {
+			sys_set_bits(reg_addr, data->cgu_mask);
+		}
+		break;
+	default:
+		return -ENOTSUP;
+	}
+	return 0;
+}
+PM_DEVICE_DT_DEFINE(DT_NODELABEL(clockctrl), alif_clock_pm_action);
+#endif /* CONFIG_PM_DEVICE */
+
 static int clockctrl_init(const struct device *dev)
 {
 	uint32_t cgu_mask = 0;
@@ -621,6 +654,10 @@ static int clockctrl_init(const struct device *dev)
 		sys_set_bits(cgu_module_base + ALIF_CLK_ENA_REG, cgu_mask);
 	}
 
+#if IS_ENABLED(CONFIG_PM_DEVICE)
+	((struct ensemble_e1c_clk_data *)dev->data)->cgu_mask = cgu_mask;
+#endif
+
 #if defined(CONFIG_HAS_ALIF_SE_SERVICES) && IS_ENABLED(CONFIG_PM)
 	pm_notifier_register(&ensemble_e1c_clk_pm_notifier);
 #endif
@@ -646,13 +683,14 @@ static const struct clock_control_alif_config config = {
 	.m55he_cfg_base = DT_INST_REG_ADDR_BY_NAME(0, m55he_cfg),
 };
 
-#ifdef CONFIG_HAS_ALIF_SE_SERVICES
+#if defined(CONFIG_HAS_ALIF_SE_SERVICES) || IS_ENABLED(CONFIG_PM_DEVICE)
 #define ALIF_CLOCK_DATA (&ensemble_e1c_clk)
 #else
 #define ALIF_CLOCK_DATA NULL
 #endif
 
-DEVICE_DT_DEFINE(DT_NODELABEL(clockctrl), clockctrl_init, NULL,
+DEVICE_DT_DEFINE(DT_NODELABEL(clockctrl), clockctrl_init,
+				PM_DEVICE_DT_GET(DT_NODELABEL(clockctrl)),
 				ALIF_CLOCK_DATA, &config, PRE_KERNEL_1,
 				CONFIG_CLOCK_CONTROL_INIT_PRIORITY,
 				&alif_clock_control_driver_api);
