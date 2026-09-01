@@ -12,7 +12,9 @@
 #include <zephyr/pm/policy.h>
 #include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
 #endif
+#ifdef CONFIG_HAS_ALIF_SE_SERVICES
 #include <se_service.h>
+#endif
 
 /* ENSENBLE_GEN2 soc and SOC_SERIES_E1C */
 #if CONFIG_ENSEMBLE_GEN2 || CONFIG_SOC_SERIES_E1C
@@ -147,7 +149,9 @@ static void soc_pm_restore_dma(void)
 {
 #if DT_NODE_HAS_COMPAT_STATUS(DT_NODELABEL(dma0), arm_dma_pl330, okay)
 	/* DMA0 registers are in SYSTOP — ensure it is ON before restoring. */
+#if IS_ENABLED(CONFIG_HAS_ALIF_SE_SERVICES)
 	se_service_enable_pd(ALIF_PD_SYST);
+#endif
 	sys_clear_bits(CLKCTRL_PER_MST_DMA_CTRL, BIT(0));
 	sys_write32(0U, CLKCTRL_PER_MST_DMA_IRQ);
 	sys_write32(0U, CLKCTRL_PER_MST_DMA_PERIPH);
@@ -214,7 +218,7 @@ SYS_INIT(soc_pm_notifier_init, PRE_KERNEL_2, 1);
 /* Enable analog peripheral supply (LDO + bandgap). Required by the
  * regular comparator (cmp) instances when no LPCMP node is present.
  */
-#if DT_HAS_COMPAT_STATUS_OKAY(alif_cmp)
+#if IS_ENABLED(CONFIG_HAS_ALIF_SE_SERVICES) && DT_HAS_COMPAT_STATUS_OKAY(alif_cmp)
 static int soc_ana_periph_enable(void)
 {
 	return se_service_power_settings_set(POWER_SETTING_ANA_PERIPH_EN, true);
@@ -223,7 +227,7 @@ SYS_INIT(soc_ana_periph_enable, POST_KERNEL, CONFIG_COMPARATOR_INIT_PRIORITY);
 #endif /* alif_cmp without lpcmp */
 
 #if IS_ENABLED(CONFIG_SOC_SERIES_E1C)
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(lpcmp), okay)
+#if IS_ENABLED(CONFIG_HAS_ALIF_SE_SERVICES) && DT_NODE_HAS_STATUS(DT_NODELABEL(lpcmp), okay)
 /* Enable analog supply and configure LPCMP in one init step so the
  * analog peripheral is guaranteed to be powered before LPCMP setup.
  */
