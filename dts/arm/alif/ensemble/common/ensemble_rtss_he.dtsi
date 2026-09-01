@@ -248,3 +248,41 @@
 &aipm_off {
 	vtor-address = <0x80000000>; /* Default MRAM boot address */
 };
+
+/*
+ * Full HE PLL menu. Only the boot row is okay; unused rows stay
+ * disabled so they do not create struct pstate objects.
+ */
+/ {
+	performance-states {
+		pstate_pll_160: pstate-pll-160 {
+			compatible = "alif,rtss-pstate";
+			load-threshold = <0>;
+			cpu-clk-freq = <ALIF_CLOCK_FREQ_160MHZ>;
+			clk-src = "pll";
+		};
+		pstate_pll_120: pstate-pll-120 {
+			compatible = "alif,rtss-pstate";
+			status = "disabled";
+			load-threshold = <0>;
+			cpu-clk-freq = <ALIF_CLOCK_FREQ_120MHZ>;
+			clk-src = "pll";
+		};
+		pstate_pll_80: pstate-pll-80 {
+			compatible = "alif,rtss-pstate";
+			status = "disabled";
+			load-threshold = <0>;
+			cpu-clk-freq = <ALIF_CLOCK_FREQ_80MHZ>;
+			clk-src = "pll";
+		};
+		pstate_pll_60: pstate-pll-60 {
+			compatible = "alif,rtss-pstate";
+			status = "disabled";
+			load-threshold = <0>;
+			cpu-clk-freq = <ALIF_CLOCK_FREQ_60MHZ>;
+			clk-src = "pll";
+		};
+	};
+};
+
+#include <alif/common/rtss_pstate_hfrc.dtsi>

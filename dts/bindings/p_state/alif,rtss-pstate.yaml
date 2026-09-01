@@ -12,18 +12,24 @@ description: |
   Omit a property to keep aipm_run_default's value. Memory-block, gating,
   ioflex, and aon-clk stay with the run default unless added later.
 
+  SoC dtsi lists the full PLL and HFRC menu. Only the boot PLL row is
+  okay; set status okay on other children to include them in the image.
+
   Example:
 
     performance-states {
-            pstate_0: pstate_0 {
+            pstate_pll_160: pstate-pll-160 {
                     compatible = "alif,rtss-pstate";
                     load-threshold = <0>;
                     cpu-clk-freq = <ALIF_CLOCK_FREQ_160MHZ>;
+                    clk-src = "pll";
             };
-            pstate_1: pstate_1 {
+            pstate_pll_80: pstate-pll-80 {
                     compatible = "alif,rtss-pstate";
+                    status = "disabled";
                     load-threshold = <0>;
                     cpu-clk-freq = <ALIF_CLOCK_FREQ_80MHZ>;
+                    clk-src = "pll";
             };
     };
 
