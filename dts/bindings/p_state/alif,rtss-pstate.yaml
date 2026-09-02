@@ -10,7 +10,8 @@ description: |
 
   Properties use the same names and values as alif,aipm-run children.
   Omit a property to keep aipm_run_default's value. Memory-block, gating,
-  ioflex, and aon-clk stay with the run default unless added later.
+  ioflex, aon-clk, and aipm-power-domains stay with the run default.
+  Power-domain overlays wait for runtime device PM.
 
   SoC dtsi lists the full PLL and HFRC menu. Only the boot PLL row is
   okay; set status okay on other children to include them in the image.
@@ -84,10 +85,3 @@ properties:
         "pfm-auto"   - DCDC_MODE_PFM_AUTO
         "pfm-forced" - DCDC_MODE_PFM_FORCED
         "pwm"        - DCDC_MODE_PWM
-
-  aipm-power-domains:
-    type: int
-    description: |
-      Power domain bitmask (run_profile_t.power_domains).
-      Use ALIF_PD_*_MASK constants from
-      dt-bindings/misc/alif_aipm_common.h.

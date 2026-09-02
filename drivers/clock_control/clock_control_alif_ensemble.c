@@ -737,6 +737,15 @@ void alif_clock_sys_clk_cache_invalidate(void)
 {
 	memset(&ensemble_clk.sys_clk_cache, 0, sizeof(ensemble_clk.sys_clk_cache));
 }
+
+void alif_clock_sys_clk_cache_invalidate_cpu(void)
+{
+#if defined(CONFIG_RTSS_HP)
+	ensemble_clk.sys_clk_cache.extsys0_freq = 0;
+#else
+	ensemble_clk.sys_clk_cache.extsys1_freq = 0;
+#endif
+}
 #endif
 
 #if defined(CONFIG_HAS_ALIF_SE_SERVICES) && IS_ENABLED(CONFIG_PM)

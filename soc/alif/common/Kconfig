@@ -1,0 +1,20 @@
+# Copyright (c) 2026 Alif Semiconductor
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config ALIF_CPU_FREQ_PSTATE
+	bool "RTSS cpu_freq_pstate_set hook"
+	depends on RTSS_HE || RTSS_HP
+	select HAS_CPU_FREQ
+	select SYSTEM_CLOCK_HW_CYCLES_PER_SEC_RUNTIME_UPDATE
+	select PM_DEVICE
+	help
+	  Implement cpu_freq_pstate_set() for Alif RTSS. Each P-state
+	  overlays aipm_run_default and is sent to the Secure Enclave.
+	  Off by default until the hook is stable; enable from prj.conf.
+
+	  The hook is not IRQ-safe (device PM, SE service). Do not set
+	  CONFIG_CPU_FREQ; the governor calls cpu_freq_pstate_set() from
+	  a timer ISR. The SoC file build-asserts if both are on. Drop
+	  that assert when a workqueue owns the governor and any manual
+	  P-states.
