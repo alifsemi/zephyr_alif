@@ -111,3 +111,5 @@ config LPTIMER3_EXT_CLK_FREQ
 	help
 	  Provide lptimer 3 clock frequency for external clock source.
 endif # COUNTER_SNPS_DW
+
+rsource "../../common/Kconfig"

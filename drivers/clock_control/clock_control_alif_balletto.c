@@ -704,6 +704,11 @@ void alif_clock_sys_clk_cache_invalidate(void)
 	memset(&balletto_clk.sys_clk_cache, 0, sizeof(balletto_clk.sys_clk_cache));
 }
 
+void alif_clock_sys_clk_cache_invalidate_cpu(void)
+{
+	balletto_clk.sys_clk_cache.extsys1_freq = 0;
+}
+
 #if IS_ENABLED(CONFIG_PM)
 static void balletto_clk_pre_device_resume(enum pm_state state)
 {
