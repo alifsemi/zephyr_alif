@@ -8,10 +8,47 @@
  * I2S_4(LPI2S) => Mic Input
  */
 
+&dma0 {
+	status = "okay";
+};
+
+&dma2 {
+	status = "okay";
+};
+
+#include <zephyr/dt-bindings/dma/alif_dma_event_router.h>
+
+&evtrtr2 {
+	status = "okay";
+};
+
+&evtrtr0 {
+	status = "okay";
+};
 i2s_tx: &i2s3 {
+	/*
+	 * Cell 0: ALIF_DMA_ENCODE(channel, dma_group, handshake)
+	 *   - channel: Physical DMA channel (0 for TX, 1 for RX)
+	 *   - dma_group: Input source selection (1) - selects which peripheral input
+	 *   - handshake: Enable hardware handshaking (1 for I2S)
+	 * Cell 1: Peripheral request number (31 for TX, 27 for RX)
+	 */
+	dmas = <&evtrtr0 ALIF_DMA_ENCODE(0, 1, 1) 31>,
+	       <&evtrtr0 ALIF_DMA_ENCODE(1, 1, 1) 27>;
+	dma-names = "txdma", "rxdma";
 	status = "okay";
 };
 
 i2s_rx: &i2s4 {
+	/*
+	 * Cell 0: ALIF_DMA_ENCODE(channel, dma_group, handshake)
+	 *   - channel: Physical DMA channel (2 for TX, 3 for RX)
+	 *   - dma_group: Input source selection (0) - selects which peripheral input
+	 *   - handshake: Enable hardware handshaking (1 for I2S)
+	 * Cell 1: Peripheral request number (15 for TX, 14 for RX)
+	 */
+	dmas = <&evtrtr2 ALIF_DMA_ENCODE(2, 0, 1) 15>,
+	       <&evtrtr2 ALIF_DMA_ENCODE(3, 0, 1) 14>;
+	dma-names = "txdma", "rxdma";
 	status = "okay";
 };
