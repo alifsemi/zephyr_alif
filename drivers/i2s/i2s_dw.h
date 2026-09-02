@@ -122,6 +122,14 @@ enum i2s_dw_wlen {
 	I2S_DW_WLEN_32BIT  = 5,
 };
 
+#ifdef CONFIG_I2S_DW_USE_DMA
+struct i2s_dw_dma_ch {
+	bool enabled;
+	uint32_t ch;
+	uint32_t periph;
+};
+#endif /* CONFIG_I2S_DW_USE_DMA */
+
 /* Driver structures */
 struct i2s_dw_stream {
 	int32_t state;
@@ -152,6 +160,11 @@ struct i2s_dw_cfg {
 	clock_control_subsys_t clkid;
 #if defined(CONFIG_PINCTRL)
 	const struct pinctrl_dev_config *pincfg;
+#endif
+#ifdef CONFIG_I2S_DW_USE_DMA
+	const struct device *dma_dev;
+	struct i2s_dw_dma_ch dma_tx;
+	struct i2s_dw_dma_ch dma_rx;
 #endif
 };
 

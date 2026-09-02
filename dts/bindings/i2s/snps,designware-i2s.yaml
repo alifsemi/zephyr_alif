@@ -14,6 +14,18 @@ properties:
   interrupts:
     required: true
 
+  dmas:
+    description: |
+      Optional TX and/or RX DMA channel specifiers. If provided, DMA will be
+      used for data transfer instead of interrupt-driven FIFO access.
+      Requires CONFIG_I2S_DW_USE_DMA to be enabled.
+      If both TX and RX channels are specified they must use the same DMA
+      controller; the driver stores a single dma_dev pointer.
+
+  dma-names:
+    description: |
+      DMA channel names. Must be "txdma" for transmit and/or "rxdma" for receive.
+
   tx-fifo-watermark:
     type: int
     default: 8
