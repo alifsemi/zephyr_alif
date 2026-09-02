@@ -19,4 +19,13 @@ config I2S_DW_TX_BLOCK_COUNT
 	int "TX queue length"
 	default 10
 
+config I2S_DW_USE_DMA
+	bool "DMA path for I2S transfers"
+	default n
+	help
+	  Enable DMA-based data transfers for Designware I2S.
+	  When enabled, DMA channels defined in the device tree
+	  will be used for TX and/or RX data movement instead of
+	  interrupt-driven FIFO access.
+
 endif # I2S_DW

@@ -16,6 +16,10 @@
 #include <zephyr/pm/policy.h>
 #include <zephyr/sys/util.h>
 
+#ifdef CONFIG_I2S_DW_USE_DMA
+#include <zephyr/drivers/dma.h>
+#endif
+
 #include "i2s_dw.h"
 
 LOG_MODULE_REGISTER(i2s_dw, CONFIG_I2S_LOG_LEVEL);
@@ -183,6 +187,14 @@ static void i2s_dw_disable_controller_if_idle(const struct device *dev)
 static void rx_stream_disable(const struct device *dev,
 			      struct i2s_dw_stream *stream)
 {
+#ifdef CONFIG_I2S_DW_USE_DMA
+	const struct i2s_dw_cfg *cfg = dev->config;
+
+	if (cfg->dma_rx.enabled) {
+		dma_stop(cfg->dma_dev, cfg->dma_rx.ch);
+		i2s_reg_update(dev, I2S_DW_DMACR, I2S_DW_DMACR_RXEN, 0);
+	}
+#endif
 	if (stream->mem_block != NULL) {
 		k_mem_slab_free(stream->cfg.mem_slab, stream->mem_block);
 		stream->mem_block = NULL;
@@ -198,6 +210,14 @@ static void rx_stream_disable(const struct device *dev,
 static void tx_stream_disable(const struct device *dev,
 			      struct i2s_dw_stream *stream)
 {
+#ifdef CONFIG_I2S_DW_USE_DMA
+	const struct i2s_dw_cfg *cfg = dev->config;
+
+	if (cfg->dma_tx.enabled) {
+		dma_stop(cfg->dma_dev, cfg->dma_tx.ch);
+		i2s_reg_update(dev, I2S_DW_DMACR, I2S_DW_DMACR_TXEN, 0);
+	}
+#endif
 	if (stream->mem_block != NULL) {
 		k_mem_slab_free(stream->cfg.mem_slab, stream->mem_block);
 		stream->mem_block = NULL;
@@ -235,6 +255,203 @@ static void tx_queue_drop(const struct device *dev,
 		k_sem_give(&stream->sem);
 	}
 }
+
+#ifdef CONFIG_I2S_DW_USE_DMA
+/* DMA support functions */
+
+static int i2s_dw_dma_start_tx(const struct device *dev);
+static int i2s_dw_dma_start_rx(const struct device *dev);
+
+static void i2s_dw_dma_tx_callback(const struct device *dma_dev, void *user_data,
+				   uint32_t channel, int status)
+{
+	const struct device *dev = (const struct device *)user_data;
+	struct i2s_dw_data *data = dev->data;
+	struct i2s_dw_stream *stream = &data->tx;
+	int ret;
+
+	if (status < 0) {
+		LOG_ERR("I2S TX DMA error: %d", status);
+		stream->state = I2S_STATE_ERROR;
+		tx_stream_disable(dev, stream);
+		return;
+	}
+
+	/* Free the completed block */
+	if (stream->mem_block != NULL) {
+		k_mem_slab_free(stream->cfg.mem_slab, stream->mem_block);
+		stream->mem_block = NULL;
+	}
+
+	if (stream->last_block) {
+		stream->state = I2S_STATE_READY;
+		tx_stream_disable(dev, stream);
+		return;
+	}
+
+	/* Get next block from queue */
+	ret = queue_get(&stream->msgq, &stream->mem_block,
+			&stream->mem_block_size);
+	if (ret < 0) {
+		if (stream->state == I2S_STATE_STOPPING) {
+			stream->state = I2S_STATE_READY;
+		} else {
+			stream->state = I2S_STATE_ERROR;
+		}
+		tx_stream_disable(dev, stream);
+		return;
+	}
+	k_sem_give(&stream->sem);
+
+	/* Start DMA for next block */
+	ret = i2s_dw_dma_start_tx(dev);
+	if (ret < 0) {
+		stream->state = I2S_STATE_ERROR;
+		tx_stream_disable(dev, stream);
+	}
+}
+
+static void i2s_dw_dma_rx_callback(const struct device *dma_dev, void *user_data,
+				   uint32_t channel, int status)
+{
+	const struct device *dev = (const struct device *)user_data;
+	struct i2s_dw_data *data = dev->data;
+	struct i2s_dw_stream *stream = &data->rx;
+	void *mblk_tmp;
+	int ret;
+
+	if (status < 0) {
+		LOG_ERR("I2S RX DMA error: %d", status);
+		stream->state = I2S_STATE_ERROR;
+		rx_stream_disable(dev, stream);
+		return;
+	}
+
+	/* Put completed block into output queue. Drop the driver
+	 * reference first so a later disable cannot double-free it.
+	 */
+	mblk_tmp = stream->mem_block;
+	stream->mem_block = NULL;
+	ret = queue_put(&stream->msgq, mblk_tmp, stream->cfg.block_size);
+	if (ret < 0) {
+		stream->mem_block = mblk_tmp;
+		stream->state = I2S_STATE_ERROR;
+		rx_stream_disable(dev, stream);
+		return;
+	}
+	k_sem_give(&stream->sem);
+
+	if (stream->state == I2S_STATE_STOPPING) {
+		stream->state = I2S_STATE_READY;
+		rx_stream_disable(dev, stream);
+		return;
+	}
+
+	/* Allocate new block */
+	ret = k_mem_slab_alloc(stream->cfg.mem_slab, &stream->mem_block,
+			       K_NO_WAIT);
+	if (ret < 0) {
+		stream->state = I2S_STATE_ERROR;
+		rx_stream_disable(dev, stream);
+		return;
+	}
+
+	/* Start DMA for next block */
+	ret = i2s_dw_dma_start_rx(dev);
+	if (ret < 0) {
+		stream->state = I2S_STATE_ERROR;
+		rx_stream_disable(dev, stream);
+	}
+}
+
+static int i2s_dw_dma_start_tx(const struct device *dev)
+{
+	const struct i2s_dw_cfg *cfg = dev->config;
+	struct i2s_dw_data *data = dev->data;
+	struct i2s_dw_stream *stream = &data->tx;
+	struct dma_config dma_cfg = {0};
+	struct dma_block_config dma_block = {0};
+	uint8_t dma_data_size;
+	int ret;
+
+	dma_data_size = (stream->cfg.word_size <= 16) ? 2 : 4;
+
+	dma_cfg.block_count = 1U;
+	dma_cfg.dma_callback = i2s_dw_dma_tx_callback;
+	dma_cfg.user_data = (void *)dev;
+	dma_cfg.channel_direction = MEMORY_TO_PERIPHERAL;
+	dma_cfg.dma_slot = cfg->dma_tx.periph;
+	dma_cfg.source_data_size = dma_data_size;
+	dma_cfg.dest_data_size = dma_data_size;
+	dma_cfg.source_burst_length = cfg->tx_fifo_trg_lvl;
+	dma_cfg.dest_burst_length = cfg->tx_fifo_trg_lvl;
+	dma_cfg.head_block = &dma_block;
+
+	dma_block.source_address = (uintptr_t)stream->mem_block;
+	dma_block.dest_address = (uintptr_t)(DEVICE_MMIO_GET(dev) + I2S_DW_TXDMA);
+	dma_block.block_size = stream->mem_block_size;
+	dma_block.source_addr_adj = DMA_ADDR_ADJ_INCREMENT;
+	dma_block.dest_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
+
+	ret = dma_config(cfg->dma_dev, cfg->dma_tx.ch, &dma_cfg);
+	if (ret < 0) {
+		LOG_ERR("I2S TX DMA config failed: %d", ret);
+		return ret;
+	}
+
+	ret = dma_start(cfg->dma_dev, cfg->dma_tx.ch);
+	if (ret < 0) {
+		LOG_ERR("I2S TX DMA start failed: %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int i2s_dw_dma_start_rx(const struct device *dev)
+{
+	const struct i2s_dw_cfg *cfg = dev->config;
+	struct i2s_dw_data *data = dev->data;
+	struct i2s_dw_stream *stream = &data->rx;
+	struct dma_config dma_cfg = {0};
+	struct dma_block_config dma_block = {0};
+	uint8_t dma_data_size;
+	int ret;
+
+	dma_data_size = (stream->cfg.word_size <= 16) ? 2 : 4;
+
+	dma_cfg.block_count = 1U;
+	dma_cfg.dma_callback = i2s_dw_dma_rx_callback;
+	dma_cfg.user_data = (void *)dev;
+	dma_cfg.channel_direction = PERIPHERAL_TO_MEMORY;
+	dma_cfg.dma_slot = cfg->dma_rx.periph;
+	dma_cfg.source_data_size = dma_data_size;
+	dma_cfg.dest_data_size = dma_data_size;
+	dma_cfg.source_burst_length = cfg->rx_fifo_trg_lvl;
+	dma_cfg.dest_burst_length = cfg->rx_fifo_trg_lvl;
+	dma_cfg.head_block = &dma_block;
+
+	dma_block.source_address = (uintptr_t)(DEVICE_MMIO_GET(dev) + I2S_DW_RXDMA);
+	dma_block.dest_address = (uintptr_t)stream->mem_block;
+	dma_block.block_size = stream->cfg.block_size;
+	dma_block.source_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
+	dma_block.dest_addr_adj = DMA_ADDR_ADJ_INCREMENT;
+
+	ret = dma_config(cfg->dma_dev, cfg->dma_rx.ch, &dma_cfg);
+	if (ret < 0) {
+		LOG_ERR("I2S RX DMA config failed: %d", ret);
+		return ret;
+	}
+
+	ret = dma_start(cfg->dma_dev, cfg->dma_rx.ch);
+	if (ret < 0) {
+		LOG_ERR("I2S RX DMA start failed: %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
+#endif /* CONFIG_I2S_DW_USE_DMA */
 
 static int rx_stream_start(const struct device *dev,
 			   struct i2s_dw_stream *stream)
@@ -280,9 +497,28 @@ static int rx_stream_start(const struct device *dev,
 	/* Clear overrun */
 	(void)i2s_reg_read(dev, I2S_DW_ROR);
 
-	/* Enable Rx channel, interrupts, and block */
+	/* Enable Rx channel and block */
 	i2s_reg_write(dev, I2S_DW_RER, I2S_DW_RER_RXCHEN);
+
+#ifdef CONFIG_I2S_DW_USE_DMA
+	if (cfg->dma_rx.enabled) {
+		/* Enable DMA handshake and start DMA */
+		i2s_reg_update(dev, I2S_DW_DMACR, I2S_DW_DMACR_RXEN,
+			       I2S_DW_DMACR_RXEN);
+		ret = i2s_dw_dma_start_rx(dev);
+		if (ret < 0) {
+			rx_stream_disable(dev, stream);
+			return ret;
+		}
+		/* Mask FIFO interrupts since DMA handles data */
+		i2s_dw_disable_rx_irq(dev);
+	} else {
+		i2s_dw_enable_rx_irq(dev);
+	}
+#else
 	i2s_dw_enable_rx_irq(dev);
+#endif
+
 	i2s_reg_write(dev, I2S_DW_IRER, I2S_DW_IRER_RXEN);
 
 	return 0;
@@ -334,9 +570,28 @@ static int tx_stream_start(const struct device *dev,
 	/* Clear overrun */
 	(void)i2s_reg_read(dev, I2S_DW_TOR);
 
-	/* Enable Tx channel, interrupts, and block */
+	/* Enable Tx channel and block */
 	i2s_reg_write(dev, I2S_DW_TER, I2S_DW_TER_TXCHEN);
+
+#ifdef CONFIG_I2S_DW_USE_DMA
+	if (cfg->dma_tx.enabled) {
+		/* Enable DMA handshake and start DMA */
+		i2s_reg_update(dev, I2S_DW_DMACR, I2S_DW_DMACR_TXEN,
+			       I2S_DW_DMACR_TXEN);
+		ret = i2s_dw_dma_start_tx(dev);
+		if (ret < 0) {
+			tx_stream_disable(dev, stream);
+			return ret;
+		}
+		/* Mask FIFO interrupts since DMA handles data */
+		i2s_dw_disable_tx_irq(dev);
+	} else {
+		i2s_dw_enable_tx_irq(dev);
+	}
+#else
 	i2s_dw_enable_tx_irq(dev);
+#endif
+
 	i2s_reg_write(dev, I2S_DW_ITER, I2S_DW_ITER_TXEN);
 
 	return 0;
@@ -647,6 +902,23 @@ static int i2s_dw_configure(const struct device *dev, enum i2s_dir dir,
 		return 0;
 	}
 
+#ifdef CONFIG_I2S_DW_USE_DMA
+	/*
+	 * TXDMA/RXDMA is stereo-cyclic: each access feeds left then right.
+	 * A mono buffer would be split across L/R instead of matching the
+	 * IRQ path (sample on left, silence on right).
+	 */
+	if (i2s_cfg->channels == 1U) {
+		bool dma_en = (dir == I2S_DIR_TX) ? cfg->dma_tx.enabled
+						  : cfg->dma_rx.enabled;
+
+		if (dma_en) {
+			LOG_ERR("DMA path does not support mono (channels=1)");
+			return -EINVAL;
+		}
+	}
+#endif
+
 	memcpy(&stream->cfg, i2s_cfg, sizeof(struct i2s_config));
 
 	/* Set FIFO trigger level */
@@ -907,6 +1179,16 @@ static int i2s_dw_init(const struct device *dev)
 	i2s_dw_disable_tx_irq(dev);
 	i2s_dw_disable_rx_irq(dev);
 
+#ifdef CONFIG_I2S_DW_USE_DMA
+	if (cfg->dma_tx.enabled || cfg->dma_rx.enabled) {
+		if (!device_is_ready(cfg->dma_dev)) {
+			LOG_ERR("I2S DMA device %s not ready",
+				cfg->dma_dev->name);
+			return -ENODEV;
+		}
+	}
+#endif
+
 	LOG_DBG("%s initialized", dev->name);
 
 	return 0;
@@ -989,6 +1271,35 @@ static int i2s_dw_pm_action(const struct device *dev,
 #endif /* CONFIG_PM_DEVICE */
 
 /* Device instantiation */
+
+#ifdef CONFIG_I2S_DW_USE_DMA
+#define I2S_DW_INST_DMA_IS_ENABLED(inst)				\
+	UTIL_OR(DT_INST_DMAS_HAS_NAME(inst, txdma),			\
+		DT_INST_DMAS_HAS_NAME(inst, rxdma))
+
+#define I2S_DW_DMA_INIT(inst)						\
+	IF_ENABLED(DT_INST_DMAS_HAS_NAME(inst, txdma),			\
+		(.dma_tx.enabled = 1,					\
+		 .dma_tx.ch = DT_INST_DMAS_CELL_BY_NAME(inst, txdma,	\
+							 channel),	\
+		 .dma_tx.periph = DT_INST_DMAS_CELL_BY_NAME(inst, txdma,\
+							     periph),))	\
+	IF_ENABLED(DT_INST_DMAS_HAS_NAME(inst, rxdma),			\
+		(.dma_rx.enabled = 1,					\
+		 .dma_rx.ch = DT_INST_DMAS_CELL_BY_NAME(inst, rxdma,	\
+							 channel),	\
+		 .dma_rx.periph = DT_INST_DMAS_CELL_BY_NAME(inst, rxdma,\
+							     periph),))	\
+	COND_CODE_1(DT_INST_DMAS_HAS_NAME(inst, txdma),		\
+		(.dma_dev = DEVICE_DT_GET(				\
+			DT_INST_DMAS_CTLR_BY_NAME(inst, txdma)),),	\
+		(.dma_dev = DEVICE_DT_GET(				\
+			DT_INST_DMAS_CTLR_BY_NAME(inst, rxdma)),))
+#else
+#define I2S_DW_INST_DMA_IS_ENABLED(inst) 0
+#define I2S_DW_DMA_INIT(inst)
+#endif /* CONFIG_I2S_DW_USE_DMA */
+
 #define I2S_DW_INIT(index)						\
 									\
 static void i2s_dw_irq_config_##index(const struct device *dev);	\
@@ -1013,6 +1324,9 @@ static const struct i2s_dw_cfg i2s_dw_cfg_##index = {			\
 	.irq_config = i2s_dw_irq_config_##index,			\
 	IF_ENABLED(DT_INST_NODE_HAS_PROP(index, pinctrl_0),		\
 		(.pincfg = PINCTRL_DT_INST_DEV_CONFIG_GET(index),))	\
+	IF_ENABLED(CONFIG_I2S_DW_USE_DMA,				\
+		(COND_CODE_1(I2S_DW_INST_DMA_IS_ENABLED(index),	\
+		(I2S_DW_DMA_INIT(index)), ())))				\
 };									\
 									\
 static struct i2s_dw_data i2s_dw_data_##index;				\
