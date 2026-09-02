@@ -800,7 +800,7 @@ static void alif_iface_init(struct net_if *iface)
 
 	alif_mac154_version_get(&version_major, &version_minor, &version_patch);
 	capabilities = alif_mac154_capabilities_get();
-	alif_mac154_tx_power_set(dev, alif_radio->dbm);
+	alif_mac154_tx_power_set(alif_radio->dbm);
 
 	if (IS_ENABLED(CONFIG_NET_PKT_TIMESTAMP) && IS_ENABLED(CONFIG_NET_PKT_TXTIME) &&
 	    capabilities & ALIF_IEEE802154_MAC_TXTIME) {
