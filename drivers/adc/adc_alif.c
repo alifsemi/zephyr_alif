@@ -166,8 +166,6 @@ enum ADC_INSTANCE {
 #define ADC_VREF_BUF_RDIV_EN (0x0U << 16)
 #define ADC_VREF_BUF_EN      (0x1U << 15)
 #define ADC_VREF_CONT        (0x10U << 10)
-#define ANA_PERIPH_LDO_CONT  (0xAU << 6)
-#define ANA_PERIPH_BG_CONT   (0xAU << 1)
 
 #ifdef CONFIG_ANALOG_ALIASING
 /* ADC reg1 position macro */
