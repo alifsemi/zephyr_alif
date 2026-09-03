@@ -20,6 +20,9 @@ ns: &ns {
 	status = "okay";
 };
 
+&uart2 {
+	status = "okay";
+};
 
 sdhc: &sdhc {
 	compatible = "snps,dwc-sdhc";
@@ -36,3 +39,9 @@ sdhc: &sdhc {
 	};
 };
 
+/ {
+	chosen {
+		zephyr,console = &uart2;
+		zephyr,shell-uart = &uart2;
+	};
+};

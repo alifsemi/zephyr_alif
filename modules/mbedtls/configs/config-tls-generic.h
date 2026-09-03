@@ -368,6 +368,10 @@
 #define MBEDTLS_MD_C
 #endif
 
+#if defined(CONFIG_MBEDTLS_DHM_C)
+#define MBEDTLS_DHM_C
+#endif
+
 /* Automatic dependencies */
 
 #if defined(MBEDTLS_KEY_EXCHANGE_DHE_PSK_ENABLED) || \
@@ -516,10 +520,6 @@
 
 #if defined(CONFIG_MBEDTLS_NIST_KW_C)
 #define MBEDTLS_NIST_KW_C
-#endif
-
-#if defined(CONFIG_MBEDTLS_DHM_C)
-#define MBEDTLS_DHM_C
 #endif
 
 #if defined(CONFIG_MBEDTLS_X509_CRL_PARSE_C)
