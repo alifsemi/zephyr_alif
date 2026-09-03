@@ -1216,6 +1216,51 @@
 			driver-state-control = <2>; /* pull-down */
 		};
 	};
+	pinctrl_lput0:pinctrl_lput0 {
+		group0 {
+			pinmux = <PIN_P7_0__LPUT0_T0_A>,
+				 <PIN_P7_1__LPUT0_T1_A>;
+			read-enable = <0x1>;
+		};
+	};
+	pinctrl_lput0_sleep:pinctrl_lput0_sleep {
+		group0 {
+			pinmux = <PIN_P7_0__GPIO>,
+				 <PIN_P7_1__GPIO>;
+			read-enable = <0x1>;
+			driver-state-control = <2>; /* pull-down */
+		};
+	};
+	pinctrl_lput1:pinctrl_lput1 {
+		group0 {
+			pinmux = <PIN_P7_2__LPUT1_T0_A>,
+				 <PIN_P7_3__LPUT1_T1_A>;
+			read-enable = <0x1>;
+		};
+	};
+	pinctrl_lput1_sleep:pinctrl_lput1_sleep {
+		group0 {
+			pinmux = <PIN_P7_2__GPIO>,
+				 <PIN_P7_3__GPIO>;
+			read-enable = <0x1>;
+			driver-state-control = <2>; /* pull-down */
+		};
+	};
+	pinctrl_lput2:pinctrl_lput2 {
+		group0 {
+			pinmux = <PIN_P7_4__LPUT2_T0_A>,
+				 <PIN_P7_5__LPUT2_T1_A>;
+			read-enable = <0x1>;
+		};
+	};
+	pinctrl_lput2_sleep:pinctrl_lput2_sleep {
+		group0 {
+			pinmux = <PIN_P7_4__GPIO>,
+				 <PIN_P7_5__GPIO>;
+			read-enable = <0x1>;
+			driver-state-control = <2>; /* pull-down */
+		};
+	};
 	pinctrl_can0:pinctrl_can0 {
 		group0 {
 			pinmux = <PIN_P12_4__CAN_RXD_C>,
