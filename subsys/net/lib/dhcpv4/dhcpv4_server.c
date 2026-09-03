@@ -37,6 +37,14 @@ LOG_MODULE_REGISTER(net_dhcpv4_server, CONFIG_NET_DHCPV4_SERVER_LOG_LEVEL);
 #define ADDRESS_PROBE_TIMEOUT K_MSEC(CONFIG_NET_DHCPV4_SERVER_ICMP_PROBE_TIMEOUT)
 #define ADDRESS_DECLINED_TIMEOUT K_SECONDS(CONFIG_NET_DHCPV4_SERVER_ADDR_DECLINE_TIME)
 
+/*
+ * Datagrams handled per net_socket_service callback. Must stay a small
+ * constant: tying this to CONFIG_NET_PKT_RX_COUNT would let a large RX
+ * pool monopolize the service thread. Leftover socket data stays
+ * readable (level-triggered poll) so the next poll iteration continues.
+ */
+#define DHCPV4_SERVER_MAX_DGRAMS_PER_EVENT 8
+
 #if (CONFIG_NET_DHCPV4_SERVER_ICMP_PROBE_TIMEOUT > 0)
 #define DHCPV4_SERVER_ICMP_PROBE 1
 #endif
@@ -1525,19 +1533,28 @@ static void dhcpv4_server_cb(struct net_socket_service_event *evt)
 		return;
 	}
 
-	ret = zsock_recvfrom(evt->event.fd, recv_buf, sizeof(recv_buf),
-			     ZSOCK_MSG_DONTWAIT, NULL, 0);
-	if (ret < 0) {
-		if (errno == EAGAIN) {
-			return;
-		}
+	/*
+	 * Drain a bounded burst. Each unread UDP datagram holds an RX
+	 * net_pkt until recvfrom() copies it out. Do not scale the burst
+	 * with CONFIG_NET_PKT_RX_COUNT: a large pool must not pin
+	 * net_socket_service. Leftover data remains readable; the next
+	 * poll iteration re-enters this callback.
+	 */
+	for (int n = 0; n < DHCPV4_SERVER_MAX_DGRAMS_PER_EVENT; n++) {
+		ret = zsock_recvfrom(evt->event.fd, recv_buf, sizeof(recv_buf),
+				     ZSOCK_MSG_DONTWAIT, NULL, 0);
+		if (ret < 0) {
+			if (errno == EAGAIN) {
+				return;
+			}
 
-		LOG_ERR("DHCPv4 server recv error, %d", errno);
-		net_dhcpv4_server_stop(ctx->iface);
-		return;
+			LOG_ERR("DHCPv4 server recv error, %d", errno);
+			net_dhcpv4_server_stop(ctx->iface);
+ 			return;
+ 		}
+ 
+		dhcpv4_process_data(ctx, recv_buf, ret);
 	}
-
-	dhcpv4_process_data(ctx, recv_buf, ret);
 }
 
 NET_SOCKET_SERVICE_SYNC_DEFINE_STATIC(dhcpv4_server, dhcpv4_server_cb,
