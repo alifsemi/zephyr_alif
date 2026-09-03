@@ -814,6 +814,22 @@ static int dphy_dw_pm_action(const struct device *dev, enum pm_device_action act
 			}
 		}
 
+		if (config->rxdphy_cid) {
+			ret = clock_control_off(config->clk_dev, config->rxdphy_cid);
+			if (ret) {
+				LOG_ERR("Failed to disable RX DPHY clock");
+				return ret;
+			}
+		}
+
+		if (config->pllbypass_cid) {
+			ret = clock_control_off(config->clk_dev, config->pllbypass_cid);
+			if (ret) {
+				LOG_ERR("Failed to disable PLL bypass clock");
+				return ret;
+			}
+		}
+
 		ret = clock_control_off(config->clk_dev, config->pllref_cid);
 		if (ret) {
 			LOG_ERR("Failed to disable PLL reference clock");

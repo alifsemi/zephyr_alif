@@ -305,6 +305,9 @@ struct isp_data {
 	struct k_poll_signal *signal;
 
 	struct isp_config_params init_cfg;
+#ifdef CONFIG_PM_DEVICE
+	bool needs_reinit;
+#endif
 };
 
 #endif /* _VIDEO_ALIF_ISP_H_ */

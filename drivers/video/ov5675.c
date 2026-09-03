@@ -13,6 +13,8 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/pinctrl.h>
+#include <zephyr/pm/device.h>
 
 #define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
 #include <zephyr/logging/log.h>
@@ -45,11 +47,17 @@ struct ov5675_config {
 	const struct gpio_dt_spec reset_gpio;
 	const struct gpio_dt_spec power_gpio;
 	struct i2c_dt_spec i2c;
+#ifdef CONFIG_PINCTRL
+	const struct pinctrl_dev_config *pcfg;
+#endif
 };
 
 struct ov5675_data {
 	struct video_format fmt;
 	bool is_streaming;
+#ifdef CONFIG_PM_DEVICE
+	bool needs_reinit;
+#endif
 };
 
 struct ov5675_reg {
@@ -359,6 +367,47 @@ static int ov5675_hard_reset(const struct device *dev)
 	return 0;
 }
 
+static const struct ov5675_mode *ov5675_find_mode(const struct video_format *fmt)
+{
+	for (size_t i = 0; i < ARRAY_SIZE(ov5675_modes); i++) {
+		if (ov5675_modes[i].width == fmt->width &&
+		    ov5675_modes[i].height == fmt->height) {
+			return &ov5675_modes[i];
+		}
+	}
+
+	return NULL;
+}
+
+static int ov5675_program_fmt(const struct device *dev, const struct video_format *fmt)
+{
+	const struct ov5675_mode *mode = ov5675_find_mode(fmt);
+	int ret;
+
+	if (!mode) {
+		LOG_ERR("Unsupported resolution %ux%u", fmt->width, fmt->height);
+		return -ENOTSUP;
+	}
+
+	ret = ov5675_write_all(dev, ov5675_common_regs, ARRAY_SIZE(ov5675_common_regs));
+	if (ret) {
+		LOG_ERR("Failed to write common config: %d", ret);
+		return ret;
+	}
+
+	ret = ov5675_write_all(dev, mode->mode_regs, mode->mode_regs_len);
+	if (ret) {
+		LOG_ERR("Failed to write mode config: %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+#ifdef CONFIG_PM_DEVICE
+static int ov5675_reinit_after_pm(const struct device *dev);
+#endif
+
 static int ov5675_init(const struct device *dev)
 {
 	const struct ov5675_config *cfg = dev->config;
@@ -366,6 +415,16 @@ static int ov5675_init(const struct device *dev)
 	uint8_t val_h, val_l;
 	uint16_t chip_id;
 	int ret;
+
+#ifdef CONFIG_PINCTRL
+	if (cfg->pcfg) {
+		ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_DEFAULT);
+		if (ret < 0 && ret != -ENOENT) {
+			LOG_ERR("Failed to apply default pinctrl state: %d", ret);
+			return ret;
+		}
+	}
+#endif
 
 	if (!device_is_ready(cfg->i2c.bus)) {
 		LOG_ERR("I2C bus not ready");
@@ -413,24 +472,17 @@ static int ov5675_set_fmt(const struct device *dev, enum video_endpoint_id ep,
 	ARG_UNUSED(ep);
 
 	struct ov5675_data *data = dev->data;
-	const struct ov5675_mode *mode = NULL;
 	int ret;
+
+#ifdef CONFIG_PM_DEVICE
+	ret = ov5675_reinit_after_pm(dev);
+	if (ret) {
+		return ret;
+	}
+#endif
 
 	if (fmt->pixelformat != VIDEO_PIX_FMT_Y10P) {
 		LOG_ERR("Unsupported pixel format");
-		return -ENOTSUP;
-	}
-
-	for (size_t i = 0; i < ARRAY_SIZE(ov5675_modes); i++) {
-		if (ov5675_modes[i].width == fmt->width &&
-		    ov5675_modes[i].height == fmt->height) {
-			mode = &ov5675_modes[i];
-			break;
-		}
-	}
-
-	if (!mode) {
-		LOG_ERR("Unsupported resolution %ux%u", fmt->width, fmt->height);
 		return -ENOTSUP;
 	}
 
@@ -438,15 +490,8 @@ static int ov5675_set_fmt(const struct device *dev, enum video_endpoint_id ep,
 		return 0;
 	}
 
-	ret = ov5675_write_all(dev, ov5675_common_regs, ARRAY_SIZE(ov5675_common_regs));
+	ret = ov5675_program_fmt(dev, fmt);
 	if (ret) {
-		LOG_ERR("Failed to write common config: %d", ret);
-		return ret;
-	}
-
-	ret = ov5675_write_all(dev, mode->mode_regs, mode->mode_regs_len);
-	if (ret) {
-		LOG_ERR("Failed to write mode config: %d", ret);
 		return ret;
 	}
 
@@ -510,6 +555,15 @@ static int ov5675_set_stream(const struct device *dev, bool enable)
 
 	uint8_t val;
 	int ret;
+
+#ifdef CONFIG_PM_DEVICE
+	if (enable) {
+		ret = ov5675_reinit_after_pm(dev);
+		if (ret) {
+			return ret;
+		}
+	}
+#endif
 
 	if (enable && data->is_streaming) {
 		return 0;
@@ -575,6 +629,14 @@ static int ov5675_set_gain(const struct device *dev, uint32_t val)
 static int ov5675_set_ctrl(const struct device *dev, unsigned int cid, void *value)
 {
 	uint32_t val;
+#ifdef CONFIG_PM_DEVICE
+	int ret;
+
+	ret = ov5675_reinit_after_pm(dev);
+	if (ret) {
+		return ret;
+	}
+#endif
 
 	val = (uint32_t)POINTER_TO_UINT(value);
 
@@ -596,17 +658,158 @@ static DEVICE_API(video, ov5675_driver_api) = {
 	.set_ctrl   = ov5675_set_ctrl,
 };
 
+#if defined(CONFIG_PM_DEVICE)
+
+/** OV5675 Camera: Suspend */
+static int ov5675_suspend(const struct device *dev)
+{
+	const struct ov5675_config *cfg = dev->config;
+	struct ov5675_data *data = dev->data;
+	int ret;
+
+	/* Stop streaming if active */
+	if (data->is_streaming) {
+		ret = ov5675_set_stream(dev, false);
+		if (ret) {
+			LOG_ERR("Failed to stop stream during suspend: %d", ret);
+			return ret;
+		}
+	}
+
+	/* Put camera in low power mode via reset GPIO */
+	if (cfg->reset_gpio.port) {
+		gpio_pin_set_dt(&cfg->reset_gpio, 0);
+	}
+
+	/* Power down camera if power GPIO available */
+	if (cfg->power_gpio.port) {
+		gpio_pin_set_dt(&cfg->power_gpio, 0);
+	}
+
+#ifdef CONFIG_PINCTRL
+	/* Apply sleep pin configuration if available */
+	if (cfg->pcfg) {
+		ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_SLEEP);
+		if (ret < 0 && ret != -ENOENT) {
+			LOG_ERR("Failed to apply sleep pinctrl state: %d", ret);
+			return ret;
+		}
+	}
+#endif
+
+	LOG_DBG("PM: Suspended %s", dev->name);
+
+	return 0;
+}
+
+/*
+ * Sleep-free resume: restore pinmux only and mark the sensor for
+ * re-init. Reset, I2C and stabilization delays run later on an
+ * application thread via set_stream/set_fmt/set_ctrl.
+ */
+static int ov5675_resume(const struct device *dev)
+{
+	struct ov5675_data *data = dev->data;
+#ifdef CONFIG_PINCTRL
+	const struct ov5675_config *cfg = dev->config;
+	int ret;
+
+	if (cfg->pcfg) {
+		ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_DEFAULT);
+		if (ret < 0 && ret != -ENOENT) {
+			LOG_ERR("Failed to apply default pinctrl state: %d", ret);
+			return ret;
+		}
+	}
+#endif
+
+	data->is_streaming = false;
+	data->needs_reinit = true;
+
+	LOG_DBG("PM: Resumed %s", dev->name);
+
+	return 0;
+}
+
+static int ov5675_reinit_after_pm(const struct device *dev)
+{
+	const struct ov5675_config *cfg = dev->config;
+	struct ov5675_data *data = dev->data;
+	int ret;
+
+	if (!data->needs_reinit) {
+		return 0;
+	}
+
+	ret = ov5675_hard_reset(dev);
+	if (ret) {
+		LOG_ERR("Failed to hard-reset sensor on resume: %d", ret);
+		return ret;
+	}
+
+	ret = ov5675_write_reg(&cfg->i2c, OV5675_REG_MODE_SELECT, OV5675_MODE_STANDBY);
+	if (ret) {
+		LOG_ERR("Failed to set standby mode on resume: %d", ret);
+		return ret;
+	}
+
+	if (data->fmt.pixelformat != 0) {
+		ret = ov5675_program_fmt(dev, &data->fmt);
+		if (ret) {
+			return ret;
+		}
+	}
+
+	data->is_streaming = false;
+	data->needs_reinit = false;
+
+	return 0;
+}
+
+static int ov5675_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		return ov5675_resume(dev);
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		return ov5675_suspend(dev);
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		return 0;
+
+	default:
+		return -ENOTSUP;
+	}
+}
+#endif /* CONFIG_PM_DEVICE */
+
+#define OV5675_PINCTRL_DEFINE(i) \
+	IF_ENABLED(CONFIG_PINCTRL, \
+		(COND_CODE_1(DT_INST_PINCTRL_HAS_IDX(i, 0), \
+			     (PINCTRL_DT_INST_DEFINE(i);), ())))
+
+#define OV5675_PINCTRL_CONFIG(i) \
+	IF_ENABLED(CONFIG_PINCTRL, \
+		(COND_CODE_1(DT_INST_PINCTRL_HAS_IDX(i, 0), \
+			     (.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(i),), ())))
+
 #define OV5675_DEVICE_DEFINE(i)                                                    \
+	OV5675_PINCTRL_DEFINE(i)                                                   \
 	static const struct ov5675_config ov5675_cfg_##i = {                       \
 		.i2c        = I2C_DT_SPEC_INST_GET(i),                            \
 		.reset_gpio = GPIO_DT_SPEC_INST_GET_OR(i, reset_gpios, {}),       \
 		.power_gpio = GPIO_DT_SPEC_INST_GET_OR(i, power_gpios, {}),       \
+		OV5675_PINCTRL_CONFIG(i)					  \
 	};                                                                         \
                                                                                    \
 	static struct ov5675_data ov5675_data_##i;                                 \
                                                                                    \
-	DEVICE_DT_INST_DEFINE(i, &ov5675_init, NULL, &ov5675_data_##i,            \
-			      &ov5675_cfg_##i, POST_KERNEL,                        \
-			      CONFIG_VIDEO_INIT_PRIORITY, &ov5675_driver_api);
+	PM_DEVICE_DT_INST_DEFINE(i, ov5675_pm_action);				   \
+                                                                                   \
+	DEVICE_DT_INST_DEFINE(i, &ov5675_init, PM_DEVICE_DT_INST_GET(i),	   \
+			&ov5675_data_##i, &ov5675_cfg_##i, POST_KERNEL,		   \
+			CONFIG_VIDEO_INIT_PRIORITY, &ov5675_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(OV5675_DEVICE_DEFINE)

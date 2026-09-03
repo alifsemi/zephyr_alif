@@ -14,6 +14,7 @@
 #include "video_csi_dw.h"
 #include <zephyr/drivers/mipi_dphy/dphy_dw.h>
 #include <zephyr/drivers/video/video_alif.h>
+#include <zephyr/pm/device.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(csi2_dw, CONFIG_VIDEO_LOG_LEVEL);
@@ -568,7 +569,12 @@ static int csi2_dw_set_format(const struct device *dev, enum video_endpoint_id e
 		return tmp;
 	}
 
+#ifdef CONFIG_PM_DEVICE
+	if (!data->needs_reinit &&
+	    data->csi_cpi_settings[data->current_sensor] != NULL) {
+#else
 	if (data->csi_cpi_settings[data->current_sensor] != NULL) {
+#endif
 		if (tmp == data->csi_cpi_settings[data->current_sensor]->dt) {
 			LOG_INF("FourCC format already set.");
 			return 0;
@@ -586,7 +592,13 @@ static int csi2_dw_set_format(const struct device *dev, enum video_endpoint_id e
 	data->time[data->current_sensor].hact = fmt->width;
 	data->time[data->current_sensor].vact = fmt->height;
 
-	return csi2_dw_configure(dev);
+	ret = csi2_dw_configure(dev);
+#ifdef CONFIG_PM_DEVICE
+	if (!ret) {
+		data->needs_reinit = false;
+	}
+#endif
+	return ret;
 }
 
 static int csi2_dw_get_format(const struct device *dev, enum video_endpoint_id ep,
@@ -725,6 +737,7 @@ static int csi2_dw_get_ctrl(const struct device *dev, unsigned int cid, void *va
 	}
 }
 
+
 static DEVICE_API(video, csi2_dw_driver_api) = {
 	.set_format = csi2_dw_set_format,
 	.get_format = csi2_dw_get_format,
@@ -815,6 +828,56 @@ static int csi2_dw_init(const struct device *dev)
 
 	return 0;
 }
+
+#ifdef CONFIG_PM_DEVICE
+/**
+ * @brief CSI-2 PM device action handler
+ *
+ * Handles power management state transitions for the CSI-2 controller.
+ *
+ * @param dev CSI-2 device struct
+ * @param action PM device action
+ * @return 0 if successful, negative errno otherwise
+ */
+static int csi2_dw_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	const struct csi2_dw_config *config = dev->config;
+	struct csi2_dw_data *data = dev->data;
+	int ret;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+	ret = csi_enable_clocks(dev);
+	if (ret) {
+		return ret;
+	}
+	irq_enable(config->irq);
+	/* Keep cached CPI settings so set_fmt()/set_stream() after resume
+	 * still have a valid pipeline configuration, but force the next
+	 * set_fmt() to re-run CSI/D-PHY setup after S2RAM.
+	 */
+	data->needs_reinit = true;
+	data->streaming_map = 0;
+	return 0;
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		/* Mask all CSI2 interrupts to prevent spurious PHY errors */
+		irq_disable(config->irq);
+		clock_control_off(config->clk_dev, config->pixclk);
+		clock_control_off(config->clk_dev, config->csiclk);
+		data->streaming_map = 0;
+		return 0;
+
+	case PM_DEVICE_ACTION_TURN_OFF:
+	case PM_DEVICE_ACTION_TURN_ON:
+		/* Power domain handling is automatic via PM framework */
+		return 0;
+
+	default:
+		return -ENOTSUP;
+	}
+}
+#endif /* CONFIG_PM_DEVICE */
 
 #define CSI_GET_CLK(i)                                                            \
 	IF_ENABLED(DT_INST_NODE_HAS_PROP(i, clocks),                              \
@@ -941,8 +1004,9 @@ static int csi2_dw_init(const struct device *dev)
 		},                                                                                 \
 	};                                                                                         \
                                                                                                    \
-	DEVICE_DT_INST_DEFINE(i, &csi2_dw_init, NULL, &data_##i, &config_##i, POST_KERNEL,         \
-			      CONFIG_VIDEO_MIPI_CSI2_DW_INIT_PRIORITY, &csi2_dw_driver_api);       \
+	IF_ENABLED(CONFIG_PM_DEVICE, (PM_DEVICE_DT_INST_DEFINE(i, csi2_dw_pm_action);))           \
+	DEVICE_DT_INST_DEFINE(i, &csi2_dw_init, PM_DEVICE_DT_INST_GET(i), &data_##i, &config_##i, \
+		POST_KERNEL, CONFIG_VIDEO_MIPI_CSI2_DW_INIT_PRIORITY, &csi2_dw_driver_api);       \
                                                                                                    \
 	static void csi2_dw_config_func_##i(const struct device *dev)                              \
 	{                                                                                          \
