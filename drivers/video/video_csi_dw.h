@@ -378,6 +378,9 @@ struct csi2_dw_data {
 
 	const struct cpi_csi2_mode_settings *csi_cpi_settings[CSI2_NUM_SENSORS];
 	struct dphy_csi2_settings phy[CSI2_NUM_SENSORS];
+#ifdef CONFIG_PM_DEVICE
+	bool needs_reinit;
+#endif
 };
 
 #endif /* _CSI_DW_H_ */

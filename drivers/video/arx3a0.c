@@ -8,6 +8,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/pinctrl.h>
+#include <zephyr/pm/device.h>
 
 #include <zephyr/sys/byteorder.h>
 
@@ -57,11 +58,17 @@ struct arx3a0_config {
 	const struct gpio_dt_spec reset_gpio;
 	const struct gpio_dt_spec power_gpio;
 	struct i2c_dt_spec i2c;
+#ifdef CONFIG_PINCTRL
+	const struct pinctrl_dev_config *pcfg;
+#endif
 };
 
 struct arx3a0_data {
 	struct video_format fmt;
 	bool is_streaming;
+#ifdef CONFIG_PM_DEVICE
+	bool needs_reinit;
+#endif
 };
 
 struct arx3a0_reg {
@@ -845,8 +852,9 @@ static int arx3a0_write_all(const struct device *dev, struct arx3a0_reg *reg)
 
 	while (reg[i].value_size) {
 		int err;
+		uint32_t val = reg[i].value;
 
-		err = arx3a0_write_reg(dev, reg[i].addr, reg[i].value_size, &reg[i].value);
+		err = arx3a0_write_reg(dev, reg[i].addr, reg[i].value_size, &val);
 		if (err) {
 			LOG_ERR("Failed to write R0x%04x register. ret - %d", reg[i].addr, err);
 			return err;
@@ -857,6 +865,10 @@ static int arx3a0_write_all(const struct device *dev, struct arx3a0_reg *reg)
 
 	return 0;
 }
+
+#ifdef CONFIG_PM_DEVICE
+static int arx3a0_reinit_after_pm(const struct device *dev);
+#endif
 
 static int arx3a0_set_output_format(const struct device *dev, int pixel_format)
 {
@@ -880,6 +892,13 @@ static int arx3a0_set_fmt(const struct device *dev, enum video_endpoint_id ep,
 {
 	struct arx3a0_data *drv_data = dev->data;
 	int ret;
+
+#ifdef CONFIG_PM_DEVICE
+	ret = arx3a0_reinit_after_pm(dev);
+	if (ret) {
+		return ret;
+	}
+#endif
 
 	LOG_DBG("ARX3A0 Set Format. fmt - %c%c%c%c", (char)fmt->pixelformat,
 		(char)(fmt->pixelformat >> 8), (char)(fmt->pixelformat >> 16),
@@ -980,6 +999,15 @@ static int arx3a0_stream_stop(const struct device *dev)
 
 static int arx3a0_set_stream(const struct device *dev, bool enable)
 {
+#ifdef CONFIG_PM_DEVICE
+	if (enable) {
+		int ret = arx3a0_reinit_after_pm(dev);
+
+		if (ret) {
+			return ret;
+		}
+	}
+#endif
 	if (enable) {
 		return arx3a0_stream_start(dev);
 	} else {
@@ -1175,6 +1203,13 @@ static int arx3a0_set_camera_exp(const struct device *dev, uint32_t intline)
 
 static int arx3a0_set_ctrl(const struct device *dev, unsigned int cid, void *value)
 {
+#ifdef CONFIG_PM_DEVICE
+	int ret = arx3a0_reinit_after_pm(dev);
+
+	if (ret) {
+		return ret;
+	}
+#endif
 	switch (cid) {
 	case VIDEO_CID_GAIN:
 		return arx3a0_set_camera_gain(dev, (uint32_t)POINTER_TO_UINT(value));
@@ -1187,6 +1222,13 @@ static int arx3a0_set_ctrl(const struct device *dev, unsigned int cid, void *val
 
 static int arx3a0_get_ctrl(const struct device *dev, unsigned int cid, void *value)
 {
+#ifdef CONFIG_PM_DEVICE
+	int ret = arx3a0_reinit_after_pm(dev);
+
+	if (ret) {
+		return ret;
+	}
+#endif
 	switch (cid) {
 	case VIDEO_CID_GAIN:
 		return arx3a0_get_camera_gain(dev, (uint32_t *)value);
@@ -1267,6 +1309,16 @@ static int arx3a0_init(const struct device *dev)
 	struct arx3a0_data *data = dev->data;
 	uint16_t val;
 	int ret;
+
+#ifdef CONFIG_PINCTRL
+	if (config->pcfg != NULL) {
+		ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
+		if (ret < 0 && ret != -ENOENT) {
+			LOG_ERR("Failed to apply default pinctrl state: %d", ret);
+			return ret;
+		}
+	}
+#endif
 
 	if (!device_is_ready(config->i2c.bus)) {
 		LOG_ERR("Bus device is not ready");
@@ -1362,16 +1414,234 @@ static int arx3a0_init(const struct device *dev)
 	return 0;
 }
 
+#if defined(CONFIG_PM_DEVICE)
+
+/** ARX3A0 Camera: Suspend */
+static int arx3a0_suspend(const struct device *dev)
+{
+	const struct arx3a0_config *cfg = dev->config;
+	struct arx3a0_data *data = dev->data;
+	int ret;
+
+	/* Stop streaming if active */
+	if (data->is_streaming) {
+		ret = arx3a0_stream_stop(dev);
+		if (ret) {
+			LOG_ERR("Failed to stop stream during suspend: %d", ret);
+			return ret;
+		}
+	}
+
+	/* Put camera in low power mode via reset GPIO */
+	if (cfg->reset_gpio.port) {
+		gpio_pin_set_dt(&cfg->reset_gpio, 0);
+	}
+
+	/* Power down camera if power GPIO available */
+	if (cfg->power_gpio.port) {
+		gpio_pin_set_dt(&cfg->power_gpio, 0);
+	}
+
+#ifdef CONFIG_PINCTRL
+	/* Apply sleep pin configuration if available */
+	if (cfg->pcfg != NULL) {
+		ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_SLEEP);
+		if (ret < 0 && ret != -ENOENT) {
+			LOG_ERR("Failed to apply sleep pinctrl state: %d", ret);
+			return ret;
+		}
+	}
+#endif
+
+	LOG_DBG("PM: Suspended %s", dev->name);
+
+	return 0;
+}
+
+/*
+ * Sleep-free resume: restore pinmux only and mark the sensor for
+ * re-init. Reset, I2C, MODE_SELECT and stabilization delays run later
+ * on an application thread via set_stream/set_fmt/set_ctrl.
+ */
+static int arx3a0_resume(const struct device *dev)
+{
+	struct arx3a0_data *data = dev->data;
+#ifdef CONFIG_PINCTRL
+	const struct arx3a0_config *cfg = dev->config;
+	int ret;
+
+	if (cfg->pcfg != NULL) {
+		ret = pinctrl_apply_state(cfg->pcfg, PINCTRL_STATE_DEFAULT);
+		if (ret < 0 && ret != -ENOENT) {
+			LOG_ERR("Failed to apply default pinctrl state: %d", ret);
+			return ret;
+		}
+	}
+#endif
+
+	data->is_streaming = false;
+	data->needs_reinit = true;
+
+	LOG_DBG("PM: Resumed %s", dev->name);
+
+	return 0;
+}
+
+static int arx3a0_restore_fmt(const struct device *dev)
+{
+	struct arx3a0_data *data = dev->data;
+	int ret;
+
+	if (data->fmt.pixelformat == 0) {
+		return 0;
+	}
+
+	ret = arx3a0_write_all(dev, arx3a0_560_regs);
+	if (ret) {
+		LOG_ERR("Unable to restore arx3a0 config. ret - %d", ret);
+		return ret;
+	}
+
+	ret = arx3a0_set_output_format(dev, data->fmt.pixelformat);
+	if (ret) {
+		LOG_ERR("Unable to restore output format. ret - %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int arx3a0_reinit_after_pm(const struct device *dev)
+{
+	struct arx3a0_data *data = dev->data;
+	uint16_t val;
+	int ret;
+
+	if (!data->needs_reinit) {
+		return 0;
+	}
+
+	ret = arx3a0_hard_reseten(dev);
+	if (ret) {
+		LOG_ERR("Failed to Hard-Reset camera on resume: %d", ret);
+		return ret;
+	}
+
+	ret = arx3a0_soft_reseten(dev);
+	if (ret) {
+		LOG_ERR("Failed to Soft-Reset camera on resume: %d", ret);
+		return ret;
+	}
+
+	val = 0;
+	ret = arx3a0_write_reg(dev, ARX3A0_MODE_SELECT_REGISTER, 1, &val);
+	if (ret) {
+		LOG_ERR("Failed to put sensor in standby on resume: %d", ret);
+		return ret;
+	}
+
+	/* Enable LP11 state on STANDBY mode — critical for D-PHY stop-state detection. */
+	ret = arx3a0_read_reg(dev, ARX3A0_MIPI_CONFIG_REGISTER, 2, &val);
+	if (ret) {
+		LOG_ERR("Failed to read MIPI config on resume: %d", ret);
+		return ret;
+	}
+	val |= ARX3A0_MIPI_CONFIG_LP11_ON_STANDBY;
+	ret = arx3a0_write_reg(dev, ARX3A0_MIPI_CONFIG_REGISTER, 2, &val);
+	if (ret) {
+		LOG_ERR("Failed to write MIPI config on resume: %d", ret);
+		return ret;
+	}
+
+	/* Start then stop streaming to initialize the MIPI interface. */
+	val = 1;
+	ret = arx3a0_write_reg(dev, ARX3A0_MODE_SELECT_REGISTER, 1, &val);
+	if (ret) {
+		LOG_ERR("Failed to start stream on resume: %d", ret);
+		return ret;
+	}
+
+	k_msleep(50);
+
+	val = 0;
+	ret = arx3a0_write_reg(dev, ARX3A0_MODE_SELECT_REGISTER, 1, &val);
+	if (ret) {
+		LOG_ERR("Failed to stop stream on resume: %d", ret);
+		return ret;
+	}
+
+	k_msleep(500);
+
+	ret = arx3a0_restore_fmt(dev);
+	if (ret) {
+		return ret;
+	}
+
+	data->is_streaming = false;
+	data->needs_reinit = false;
+
+	return 0;
+}
+
+/**
+ * @brief ARX3A0 Camera PM device action handler
+ *
+ * Handles power management state transitions for the camera device.
+ *
+ * @param dev Camera device struct
+ * @param action PM device action
+ *
+ * @return 0 if successful, negative errno otherwise
+ */
+static int arx3a0_pm_action(const struct device *dev, enum pm_device_action action)
+{
+		switch (action) {
+		case PM_DEVICE_ACTION_RESUME:
+			/* Device is powered - restore camera state */
+			return arx3a0_resume(dev);
+
+		case PM_DEVICE_ACTION_SUSPEND:
+			/* Save camera state and prepare for power down */
+			return arx3a0_suspend(dev);
+
+		case PM_DEVICE_ACTION_TURN_OFF:
+		case PM_DEVICE_ACTION_TURN_ON:
+			/* Power domain handling is automatic via PM framework */
+			return 0;
+
+		default:
+			return -ENOTSUP;
+		}
+}
+#endif /* CONFIG_PM_DEVICE */
+
+#define ARX3A0_PINCTRL_DEFINE(i) \
+	IF_ENABLED(CONFIG_PINCTRL, \
+		(COND_CODE_1(DT_INST_PINCTRL_HAS_IDX(i, 0), \
+			     (PINCTRL_DT_INST_DEFINE(i);), ())))
+
+#define ARX3A0_PINCTRL_CONFIG(i) \
+	IF_ENABLED(CONFIG_PINCTRL, \
+		(COND_CODE_1(DT_INST_PINCTRL_HAS_IDX(i, 0), \
+			     (.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(i),), ())))
+
+
 #define ARX3A0_DEVICE_DEFINE(i)                                                 \
+	ARX3A0_PINCTRL_DEFINE(i)                                                 \
 	static const struct arx3a0_config arx3a0_cfg_##i = {                    \
 		.i2c = I2C_DT_SPEC_INST_GET(i),                                 \
 		.reset_gpio = GPIO_DT_SPEC_INST_GET_OR(i, reset_gpios, {}),     \
 		.power_gpio = GPIO_DT_SPEC_INST_GET_OR(i, power_gpios, {}),     \
+		ARX3A0_PINCTRL_CONFIG(i)                                        \
 	};                                                                      \
                                                                                 \
-static struct arx3a0_data arx3a0_data_##i;                                      \
+	static struct arx3a0_data arx3a0_data_##i;                              \
                                                                                 \
-DEVICE_DT_INST_DEFINE(i, &arx3a0_init, NULL, &arx3a0_data_##i, &arx3a0_cfg_##i, \
+	PM_DEVICE_DT_INST_DEFINE(i, arx3a0_pm_action);                          \
+                                                                                \
+	DEVICE_DT_INST_DEFINE(i, &arx3a0_init,                                  \
+		PM_DEVICE_DT_INST_GET(i),                                       \
+		&arx3a0_data_##i, &arx3a0_cfg_##i,                              \
 		POST_KERNEL, CONFIG_VIDEO_INIT_PRIORITY, &arx3a0_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(ARX3A0_DEVICE_DEFINE)
