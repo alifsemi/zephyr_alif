@@ -62,6 +62,15 @@ config APSS
 config ENSEMBLE_GEN2
 	bool
 
+config ALIF_NET_PKT_SRAM0
+	bool "Place Zephyr network packet pools in SRAM0"
+	depends on NETWORKING && !APSS
+	default n
+	help
+	  Place the static net_pkt RX/TX slabs and net_buf data pools in the
+	  large SRAM0 region instead of the RTSS non-secure DTCM window. Use
+	  this only when SRAM0 ownership is reserved for the current image.
+
 rsource "*/Kconfig"
 
 endif # SOC_FAMILY_ENSEMBLE

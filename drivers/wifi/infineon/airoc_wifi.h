@@ -49,6 +49,9 @@ struct airoc_wifi_data {
 	bool second_interface_init;
 	bool is_ap_up;
 	bool is_sta_connected;
+#if defined(CONFIG_AIROC_WIFI_P2P)
+	bool p2p_initialized;
+#endif
 	uint8_t mac_addr[6];
 	scan_result_cb_t scan_rslt_cb;
 	whd_ssid_t ssid;
@@ -92,3 +95,32 @@ struct airoc_wifi_config {
  */
 
 whd_interface_t airoc_wifi_get_whd_interface(void);
+
+#if defined(CONFIG_AIROC_WIFI_P2P) && !defined(CONFIG_AIROC_WIFI6)
+/*
+ * Declared in WHD whd_int.h. Prototype lives here so airoc_wifi.c need not
+ * include that private header (it conflicts with public whd_events.h).
+ */
+whd_result_t whd_add_interface(whd_driver_t whd_driver, uint8_t bsscfgidx,
+			       uint8_t ifidx, const char *name,
+			       whd_mac_t *mac_addr, whd_interface_t *ifpp);
+#endif
+
+/** Transmit a raw Ethernet frame on the active WHD interface (SoftAP/GO). */
+int airoc_wifi_send_raw_eth(const uint8_t *frame, size_t len);
+
+#if defined(CONFIG_AIROC_WIFI_P2P)
+/**
+ * SoftAP-style P2P GO bring-up.
+ * @param p2p_if_mac  address of the GO bsscfg created by p2p_ifadd → GO runs on
+ *                    tertiary bsscfg2 and p2p_disc keeps bsscfg1. NULL when
+ *                    p2p_ifadd was unavailable → secondary bsscfg1 SoftAP.
+ */
+int airoc_wifi_go_softap_start(const char *ssid_str, size_t ssid_len,
+			       const char *psk, size_t psk_len,
+			       uint8_t channel, const whd_mac_t *p2p_if_mac,
+			       whd_interface_t *out_if);
+
+/** Tear down softAP-style P2P GO started by airoc_wifi_go_softap_start(). */
+int airoc_wifi_go_softap_stop(void);
+#endif

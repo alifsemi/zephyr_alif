@@ -1428,6 +1428,43 @@ void wifi_mgmt_raise_ap_sta_disconnected_event(struct net_if *iface,
 					sizeof(struct wifi_ap_sta_info));
 }
 
+#if defined(CONFIG_WIFI_MGMT_P2P)
+static int wifi_p2p_oper(uint32_t mgmt_request, struct net_if *iface,
+			 void *data, size_t len)
+{
+	const struct device *dev = net_if_get_device(iface);
+	const struct wifi_mgmt_ops *const wifi_mgmt_api = get_wifi_api(iface);
+	struct wifi_p2p_params *params = data;
+
+	ARG_UNUSED(mgmt_request);
+	ARG_UNUSED(len);
+
+	if (wifi_mgmt_api == NULL || wifi_mgmt_api->p2p_oper == NULL) {
+		return -ENOTSUP;
+	}
+
+	if (!net_if_is_admin_up(iface)) {
+		return -ENETDOWN;
+	}
+
+	if (params == NULL) {
+		return -EINVAL;
+	}
+
+	return wifi_mgmt_api->p2p_oper(dev, iface, params);
+}
+
+NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_WIFI_P2P_OPER, wifi_p2p_oper);
+
+void wifi_mgmt_raise_p2p_device_found_event(struct net_if *iface,
+					    struct wifi_p2p_device_info *peer_info)
+{
+	net_mgmt_event_notify_with_info(NET_EVENT_WIFI_P2P_DEVICE_FOUND,
+					iface, peer_info,
+					sizeof(struct wifi_p2p_device_info));
+}
+#endif /* CONFIG_WIFI_MGMT_P2P */
+
 #ifdef CONFIG_WIFI_CREDENTIALS_CONNECT_STORED
 
 #include <zephyr/net/wifi_credentials.h>

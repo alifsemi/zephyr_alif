@@ -10,6 +10,12 @@ SECTION_PROLOGUE(_ALIF_SRAM0_SECTION_NAME, (NOLOAD),)
 	{
 KEEP(*(.alif_sram0))
 KEEP(*(".alif_sram0.*"))
+#if defined(CONFIG_ALIF_NET_PKT_SRAM0)
+/* Keep the Zephyr network packet slabs and data pools out of the small
+ * RTSS non-secure DTCM window. net_pkt.c defines these as NOLOAD storage.
+ */
+KEEP(*net_pkt.c.obj*(.noinit*))
+#endif
 KEEP(*(.noinit.*kheap_buf_video_buffer_pool))
 KEEP(*(.bss.disk_buf_0))
 #if defined(CONFIG_SYSTEM_HEAP_SRAM0)

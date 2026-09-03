@@ -11,9 +11,24 @@
 
 #include <zephyr/logging/log.h>
 #include <zephyr/net/conn_mgr/connectivity_wifi_mgmt.h>
+#include <string.h>
+#include <errno.h>
 #include <airoc_wifi.h>
+#include <whd_sdpcm.h>
 #include <airoc_whd_hal_common.h>
 #include <whd_wlioctl.h>
+#if defined(CONFIG_AIROC_WIFI_P2P) || defined(CONFIG_AIROC_WIFI6)
+/* Avoid #include <whd_int.h> here — conflicts with public whd_events.h via
+ * other WHD headers. Declare only what softAP bring-up needs. */
+whd_result_t whd_wifi_set_iovar_value(whd_interface_t ifp, const char *iovar,
+				      uint32_t value);
+whd_result_t whd_wifi_get_iovar_value(whd_interface_t ifp, const char *iovar,
+				      uint32_t *value);
+#endif
+#if defined(CONFIG_AIROC_WIFI_P2P)
+#include <airoc_wifi_p2p.h>
+#include <airoc_wifi_wps_reg.h>
+#endif
 
 LOG_MODULE_REGISTER(infineon_airoc_wifi, CONFIG_WIFI_LOG_LEVEL);
 
@@ -55,6 +70,7 @@ NET_BUF_POOL_FIXED_DEFINE(airoc_pool, AIROC_WIFI_PACKET_POOL_COUNT,
 
 /* AIROC globals */
 static uint16_t ap_event_handler_index = 0xFF;
+static uint16_t ap_event_handler_index_prim = 0xFF;
 
 /* Use global iface pointer to support any Ethernet driver */
 /* necessary for wifi callback functions */
@@ -63,14 +79,34 @@ static struct net_if *airoc_wifi_iface;
 static whd_interface_t airoc_if;
 static whd_interface_t airoc_sta_if;
 static whd_interface_t airoc_ap_if;
+static whd_interface_t airoc_active_ap_if;
+static bool airoc_ap_on_primary;
 
 static const whd_event_num_t sta_link_events[] = {
 	WLC_E_LINK,    WLC_E_DEAUTH_IND,       WLC_E_DISASSOC_IND,
 	WLC_E_PSK_SUP, WLC_E_CSA_COMPLETE_IND, WLC_E_NONE};
 
-static const whd_event_num_t ap_link_events[] = {WLC_E_DISASSOC_IND, WLC_E_DEAUTH_IND,
-						 WLC_E_ASSOC_IND,    WLC_E_REASSOC_IND,
-						 WLC_E_AUTHORIZED,   WLC_E_NONE};
+#ifndef WLC_EVENT_MSG_LINK
+#define WLC_EVENT_MSG_LINK (0x01)
+#endif
+/* Not in public whd_events.h; WHD SoftAP uses this for IF add/change */
+#ifndef WLC_E_IF
+#define WLC_E_IF 54
+#endif
+
+static const whd_event_num_t ap_link_events[] = {
+	WLC_E_DISASSOC_IND, WLC_E_DEAUTH_IND, WLC_E_ASSOC_IND, WLC_E_REASSOC_IND,
+	WLC_E_AUTHORIZED,   WLC_E_AUTH,	     WLC_E_LINK,      WLC_E_IF,
+	WLC_E_NONE};
+
+struct airoc_wifi_event_t {
+	uint8_t is_ap_event;
+	uint32_t event_type;
+	uint16_t flags;
+	uint32_t status;
+	uint32_t reason;
+	uint8_t addr[6];
+};
 
 static uint16_t sta_event_handler_index = 0xFF;
 static void airoc_event_task(void);
@@ -109,14 +145,9 @@ static whd_netif_funcs_t airoc_wifi_netif_if_default = {
 	.whd_network_process_ethernet_data = airoc_wifi_network_process_ethernet_data,
 };
 
-K_MSGQ_DEFINE(airoc_wifi_msgq, sizeof(whd_event_header_t), 10, 4);
+K_MSGQ_DEFINE(airoc_wifi_msgq, sizeof(struct airoc_wifi_event_t), 10, 4);
 K_THREAD_STACK_DEFINE(airoc_wifi_event_stack, CONFIG_AIROC_WIFI_EVENT_TASK_STACK_SIZE);
 static struct k_thread airoc_wifi_event_thread;
-
-struct airoc_wifi_event_t {
-	uint8_t is_ap_event;
-	uint32_t event_type;
-};
 
 /*
  * AIROC Wi-Fi helper functions
@@ -124,6 +155,34 @@ struct airoc_wifi_event_t {
 whd_interface_t airoc_wifi_get_whd_interface(void)
 {
 	return airoc_if;
+}
+
+int airoc_wifi_send_raw_eth(const uint8_t *frame, size_t len)
+{
+	struct net_buf *buf = NULL;
+	cy_rslt_t ret;
+
+	if (frame == NULL || len == 0 || airoc_if == NULL) {
+		return -EINVAL;
+	}
+
+	ret = airoc_wifi_host_buffer_get((whd_buffer_t *)&buf, WHD_NETWORK_TX,
+					 (uint16_t)(len + sizeof(data_header_t)),
+					 0);
+	if ((ret != WHD_SUCCESS) || (buf == NULL)) {
+		return -ENOBUFS;
+	}
+
+	net_buf_reserve(buf, sizeof(data_header_t));
+	memcpy(buf->data, frame, len);
+	buf->len = len;
+
+	/* WHD owns the buffer from here on and releases it on error too. */
+	ret = whd_network_send_ethernet_data(airoc_if, (void *)buf);
+	if (ret != WHD_SUCCESS) {
+		return -EIO;
+	}
+	return 0;
 }
 
 static void airoc_wifi_scan_cb_search(whd_scan_result_t **result_ptr, void *user_data,
@@ -405,9 +464,26 @@ static int airoc_mgmt_send(const struct device *dev, struct net_pkt *pkt)
 static void airoc_wifi_network_process_ethernet_data(whd_interface_t interface, whd_buffer_t buffer)
 {
 	struct net_pkt *pkt;
-	uint8_t *data = whd_buffer_get_current_piece_data_pointer(interface->whd_driver, buffer);
-	uint32_t len = whd_buffer_get_current_piece_size(interface->whd_driver, buffer);
+	uint8_t *data;
+	uint32_t len;
 	bool net_pkt_unref_flag = false;
+
+	if (interface == NULL || interface->whd_driver == NULL || buffer == NULL) {
+		if (buffer != NULL) {
+			airoc_wifi_buffer_release(buffer, WHD_NETWORK_RX);
+		}
+		return;
+	}
+
+	data = whd_buffer_get_current_piece_data_pointer(interface->whd_driver, buffer);
+	len = whd_buffer_get_current_piece_size(interface->whd_driver, buffer);
+
+#if defined(CONFIG_AIROC_WIFI_P2P)
+	if (airoc_p2p_eapol_rx(data, len)) {
+		airoc_wifi_buffer_release(buffer, WHD_NETWORK_RX);
+		return;
+	}
+#endif
 
 	if ((airoc_wifi_iface != NULL) && net_if_flag_is_set(airoc_wifi_iface, NET_IF_UP)) {
 
@@ -424,7 +500,7 @@ static void airoc_wifi_network_process_ethernet_data(whd_interface_t interface, 
 				net_pkt_unref_flag = true;
 			}
 		} else {
-			LOG_ERR("Failed to get net buffer");
+			LOG_ERR("Failed to get net buffer (len=%u)", len);
 		}
 	}
 
@@ -478,22 +554,58 @@ static int airoc_set_config(const struct device *dev,
 static void *link_events_handler(whd_interface_t ifp, const whd_event_header_t *event_header,
 				 const uint8_t *event_data, void *handler_user_data)
 {
+	struct airoc_wifi_event_t airoc_event = {
+		.is_ap_event = 0,
+		.event_type = event_header->event_type,
+		.flags = event_header->flags,
+		.status = event_header->status,
+		.reason = event_header->reason,
+	};
+
 	ARG_UNUSED(ifp);
 	ARG_UNUSED(event_data);
 	ARG_UNUSED(handler_user_data);
 
-	k_msgq_put(&airoc_wifi_msgq, event_header, K_FOREVER);
+	k_msgq_put(&airoc_wifi_msgq, &airoc_event, K_FOREVER);
 	return NULL;
 }
 
 static void airoc_event_task(void)
 {
-	whd_event_header_t event_header;
+	struct airoc_wifi_event_t event;
 
 	while (1) {
-		k_msgq_get(&airoc_wifi_msgq, &event_header, K_FOREVER);
+		k_msgq_get(&airoc_wifi_msgq, &event, K_FOREVER);
 
-		switch ((whd_event_num_t)event_header.event_type) {
+		if (event.is_ap_event) {
+			switch ((whd_event_num_t)event.event_type) {
+			case WLC_E_ASSOC_IND:
+			case WLC_E_REASSOC_IND:
+				LOG_INF("AP/GO: station associating "
+					"%02x:%02x:%02x:%02x:%02x:%02x",
+					event.addr[0], event.addr[1], event.addr[2],
+					event.addr[3], event.addr[4], event.addr[5]);
+#if defined(CONFIG_AIROC_WIFI_P2P)
+				airoc_wps_reg_on_assoc(event.addr);
+#endif
+				break;
+			case WLC_E_AUTHORIZED:
+				LOG_INF("AP/GO: station authorized");
+				break;
+			case WLC_E_DEAUTH_IND:
+			case WLC_E_DISASSOC_IND:
+				LOG_INF("AP/GO: station left "
+					"%02x:%02x:%02x:%02x:%02x:%02x",
+					event.addr[0], event.addr[1], event.addr[2],
+					event.addr[3], event.addr[4], event.addr[5]);
+				break;
+			default:
+				break;
+			}
+			continue;
+		}
+
+		switch ((whd_event_num_t)event.event_type) {
 		case WLC_E_LINK:
 			break;
 
@@ -517,6 +629,10 @@ static void airoc_mgmt_init(struct net_if *iface)
 	eth_ctx->eth_if_type = L2_ETH_IF_TYPE_WIFI;
 	data->iface = iface;
 	airoc_wifi_iface = iface;
+
+#if defined(CONFIG_AIROC_WIFI_P2P)
+	airoc_p2p_set_iface(iface);
+#endif
 
 	/* Read WLAN MAC Address */
 	if (whd_wifi_get_mac_address(airoc_sta_if, &airoc_sta_if->mac_addr) != WHD_SUCCESS) {
@@ -686,9 +802,17 @@ static void *airoc_wifi_ap_link_events_handler(whd_interface_t ifp,
 {
 	struct airoc_wifi_event_t airoc_event = {
 		.is_ap_event = 1,
-		.event_type = event_header->event_type
+		.event_type = event_header->event_type,
+		.flags = event_header->flags,
+		.status = event_header->status,
+		.reason = event_header->reason,
 	};
 
+	ARG_UNUSED(ifp);
+	ARG_UNUSED(event_data);
+	ARG_UNUSED(handler_user_data);
+
+	memcpy(airoc_event.addr, event_header->addr.octet, 6);
 	k_msgq_put(&airoc_wifi_msgq, &airoc_event, K_FOREVER);
 
 	return NULL;
@@ -699,6 +823,7 @@ static int airoc_mgmt_ap_enable(const struct device *dev, struct wifi_connect_re
 	struct airoc_wifi_data *data = dev->data;
 	whd_security_t security;
 	whd_ssid_t ssid;
+	whd_interface_t ap_if;
 	uint16_t chanspec;
 	int ret = 0;
 
@@ -718,7 +843,18 @@ static int airoc_mgmt_ap_enable(const struct device *dev, struct wifi_connect_re
 		goto error;
 	}
 
+#if defined(CONFIG_AIROC_WIFI6)
+	/* CYW55500/55572: secondary SoftAP beacons sporadically and won't
+	 * accept associations. WHD primary path disables apsta and runs
+	 * classic SoftAP with stable beacon TX.
+	 */
+	ap_if = airoc_sta_if;
+	airoc_ap_on_primary = true;
+#else
 	if (!data->second_interface_init) {
+		/* NULL MAC: init_ap + set_mac toggles LAA for AP role.
+		 * Do not pre-set LAA — that makes WHD toggle back to STA MAC.
+		 */
 		if (whd_add_secondary_interface(data->whd_drv, NULL, &airoc_ap_if) !=
 		    CY_RSLT_SUCCESS) {
 			LOG_ERR("Error Unable to bring up the whd secondary interface");
@@ -727,40 +863,57 @@ static int airoc_mgmt_ap_enable(const struct device *dev, struct wifi_connect_re
 		}
 		data->second_interface_init = true;
 	}
+	ap_if = airoc_ap_if;
+	airoc_ap_on_primary = false;
+#endif
+
+	(void)whd_wifi_set_iovar_value(ap_if, IOVAR_STR_MPC, 0);
 
 	ssid.length = params->ssid_length;
 	memcpy(ssid.value, params->ssid, ssid.length);
 
-	/* make sure to set valid channels for 2G and 5G:
-	 * - 2G channels from 1 to 11,
-	 * - 5G channels from 36 to 165
+	/*
+	 * WIFI6: pass a full chanspec (band|bw|channel); WHD CH20MHZ_CHSPEC uses
+	 * CHSPEC_IS2G(). WIFI5 (e.g. CYW43439): pass channel number only — WHD
+	 * CH20MHZ_CHSPEC uses (chspec <= 14) to pick 2G vs 5G. Passing 0x1006
+	 * wrongly selects 5G (0xd006) and returns WHD_WLAN_BADCHAN.
 	 */
 	if ((params->channel > 0) && (params->channel < 12)) {
-		chanspec = params->channel | GET_C_VAR(airoc_ap_if->whd_driver, CHANSPEC_BAND_2G);
+		chanspec = params->channel;
 	} else if ((params->channel > 35) && (params->channel < 166)) {
-		chanspec = params->channel | GET_C_VAR(airoc_ap_if->whd_driver, CHANSPEC_BAND_5G);
+		chanspec = params->channel;
 	} else {
-		chanspec = 1 | GET_C_VAR(airoc_ap_if->whd_driver, CHANSPEC_BAND_2G);
+		chanspec = 1;
 		LOG_WRN("Discard of setting unsupported channel: %u (will set 1)",
 			params->channel);
 	}
 
+#if defined(CONFIG_AIROC_WIFI6)
+	if ((chanspec > 0) && (chanspec < 12)) {
+		chanspec |= GET_C_VAR(ap_if->whd_driver, CHANSPEC_BAND_2G);
+	} else {
+		chanspec |= GET_C_VAR(ap_if->whd_driver, CHANSPEC_BAND_5G);
+	}
+
 	switch (params->bandwidth) {
 	case WIFI_FREQ_BANDWIDTH_20MHZ:
-		chanspec |= GET_C_VAR(airoc_ap_if->whd_driver, CHANSPEC_BW_20);
+		chanspec |= GET_C_VAR(ap_if->whd_driver, CHANSPEC_BW_20);
 		break;
 	case WIFI_FREQ_BANDWIDTH_40MHZ:
-		chanspec |= GET_C_VAR(airoc_ap_if->whd_driver, CHANSPEC_BW_40);
+		chanspec |= GET_C_VAR(ap_if->whd_driver, CHANSPEC_BW_40);
 		break;
 	case WIFI_FREQ_BANDWIDTH_80MHZ:
-		chanspec |= GET_C_VAR(airoc_ap_if->whd_driver, CHANSPEC_BW_80);
+		chanspec |= GET_C_VAR(ap_if->whd_driver, CHANSPEC_BW_80);
 		break;
 	default:
-		chanspec |= GET_C_VAR(airoc_ap_if->whd_driver, CHANSPEC_BW_20);
+		chanspec |= GET_C_VAR(ap_if->whd_driver, CHANSPEC_BW_20);
 		LOG_WRN("Discard of setting unsupported bandwidth: %u (will set 20MHz)",
 			params->bandwidth);
 		break;
 	}
+#else
+	ARG_UNUSED(params->bandwidth);
+#endif
 
 	switch (params->security) {
 	case WIFI_SECURITY_TYPE_NONE:
@@ -776,30 +929,48 @@ static int airoc_mgmt_ap_enable(const struct device *dev, struct wifi_connect_re
 		goto error;
 	}
 
-	if (whd_wifi_init_ap(airoc_ap_if, &ssid, security, (const uint8_t *)params->psk,
+	if (whd_wifi_init_ap(ap_if, &ssid, security, (const uint8_t *)params->psk,
 			     params->psk_length, chanspec) != 0) {
 		LOG_ERR("Failed to init whd ap interface");
 		ret = -EAGAIN;
 		goto error;
 	}
 
-	if (whd_wifi_start_ap(airoc_ap_if) != 0) {
+	/* Keep radio awake for SoftAP beaconing. Chip init enables PM2 for
+	 * CYW55500; BSS-up can reassert sleep — set before and after start_ap.
+	 */
+	(void)whd_wifi_ap_set_beacon_interval(ap_if, 100);
+#if defined(CONFIG_AIROC_WIFI6)
+	/* set_max_assoc is WIFI6-only in this WHD tree */
+	(void)whd_wifi_ap_set_max_assoc(ap_if, 8);
+#endif
+	(void)whd_wifi_set_iovar_value(ap_if, IOVAR_STR_MPC, 0);
+	(void)whd_wifi_disable_powersave(ap_if);
+	(void)whd_wifi_set_ioctl_value(ap_if, WLC_SET_PM, 0);
+
+	if (whd_wifi_start_ap(ap_if) != 0) {
 		LOG_ERR("Failed to start whd ap interface");
 		ret = -EAGAIN;
 		goto error;
 	}
 
+	/* Re-assert after BSS-up; FW may restore PM/mpc during start_ap */
+	(void)whd_wifi_set_iovar_value(ap_if, IOVAR_STR_MPC, 0);
+	(void)whd_wifi_disable_powersave(ap_if);
+	(void)whd_wifi_set_ioctl_value(ap_if, WLC_SET_PM, 0);
+
 	/* set event handler */
-	if (whd_management_set_event_handler(airoc_ap_if, ap_link_events,
+	if (whd_management_set_event_handler(ap_if, ap_link_events,
 					     airoc_wifi_ap_link_events_handler, NULL,
 					     &ap_event_handler_index) != 0) {
-		whd_wifi_stop_ap(airoc_ap_if);
+		whd_wifi_stop_ap(ap_if);
 		ret = -EAGAIN;
 		goto error;
 	}
 
 	data->is_ap_up = true;
-	airoc_if = airoc_ap_if;
+	airoc_active_ap_if = ap_if;
+	airoc_if = ap_if;
 	net_if_dormant_off(data->iface);
 error:
 
@@ -833,18 +1004,28 @@ static int airoc_mgmt_ap_disable(const struct device *dev)
 {
 	cy_rslt_t whd_ret;
 	struct airoc_wifi_data *data = dev->data;
+	whd_interface_t ap_if = data->is_ap_up ? airoc_active_ap_if :
+				 (airoc_ap_on_primary ? airoc_sta_if : airoc_ap_if);
 
 	if (k_sem_take(&data->sema_common, K_MSEC(AIROC_WIFI_WAIT_SEMA_MS)) != 0) {
 		return -EAGAIN;
 	}
 
-	if (whd_wifi_deregister_event_handler(airoc_ap_if, ap_event_handler_index)) {
-		LOG_ERR("Can't whd_wifi_deregister_event_handler");
+	if (ap_event_handler_index != 0xFF) {
+		(void)whd_wifi_deregister_event_handler(ap_if, ap_event_handler_index);
+		ap_event_handler_index = 0xFF;
+	}
+	if (ap_event_handler_index_prim != 0xFF) {
+		(void)whd_wifi_deregister_event_handler(airoc_sta_if,
+							ap_event_handler_index_prim);
+		ap_event_handler_index_prim = 0xFF;
 	}
 
-	whd_ret = whd_wifi_stop_ap(airoc_ap_if);
+	whd_ret = whd_wifi_stop_ap(ap_if);
 	if (whd_ret == CY_RSLT_SUCCESS) {
 		data->is_ap_up = false;
+		airoc_active_ap_if = NULL;
+		airoc_ap_on_primary = false;
 		airoc_if = airoc_sta_if;
 		net_if_dormant_on(data->iface);
 	} else {
@@ -859,6 +1040,225 @@ static int airoc_mgmt_ap_disable(const struct device *dev)
 
 	return 0;
 }
+
+#if defined(CONFIG_AIROC_WIFI_P2P)
+static whd_interface_t airoc_go_if;
+static bool airoc_go_on_primary; /* true when GO uses primary SoftAP path */
+#if !defined(CONFIG_AIROC_WIFI6)
+static bool airoc_go_tertiary_init; /* SoftAP on bsscfg2 / ifidx1 */
+#endif
+
+int airoc_wifi_go_softap_start(const char *ssid_str, size_t ssid_len,
+			       const char *psk, size_t psk_len,
+			       uint8_t channel, const whd_mac_t *p2p_if_mac,
+			       whd_interface_t *out_if)
+{
+	struct airoc_wifi_data *data = &airoc_wifi_data;
+	whd_ssid_t ssid;
+	whd_security_t security;
+	whd_interface_t ap_if;
+	uint16_t chanspec;
+	int ret = 0;
+	const char *if_label;
+
+	if ((ssid_str == NULL) || (ssid_len == 0) || (ssid_len > sizeof(ssid.value))) {
+		return -EINVAL;
+	}
+
+	/* psk_len == 0 → open network */
+	if ((psk_len > 0) && (psk == NULL)) {
+		return -EINVAL;
+	}
+
+	if (k_sem_take(&data->sema_common, K_MSEC(AIROC_WIFI_WAIT_SEMA_MS)) != 0) {
+		return -EAGAIN;
+	}
+
+	if (data->is_sta_connected) {
+		LOG_ERR("Network interface is busy in STA mode. Please first disconnect STA.");
+		ret = -EBUSY;
+		goto error;
+	}
+
+	if (data->is_ap_up) {
+		LOG_ERR("Already AP is on - first disable");
+		ret = -EALREADY;
+		goto error;
+	}
+
+	/*
+	 * WIFI6: primary SoftAP.
+	 * WIFI5 + p2p_ifadd: tertiary bsscfg2 (p2p_disc keeps bsscfg1).
+	 * WIFI5 without p2p_ifadd: secondary SoftAP (known-good).
+	 */
+#if defined(CONFIG_AIROC_WIFI6)
+	ARG_UNUSED(p2p_if_mac);
+	ap_if = airoc_sta_if;
+	airoc_go_on_primary = true;
+	airoc_go_if = ap_if;
+	if_label = "primary";
+#else
+	if (p2p_if_mac != NULL) {
+		whd_mac_t go_mac = *p2p_if_mac;
+
+		/*
+		 * Host IF lives in WHD iflist[2]. Re-bind every start:
+		 * add is idempotent and returns the existing entry.
+		 */
+		if (whd_add_interface(data->whd_drv, AIROC_P2P_BSSCFG_GO,
+				      AIROC_P2P_IFIDX_GO, AIROC_P2P_GO_IFNAME,
+				      &go_mac,
+				      &airoc_go_if) != WHD_SUCCESS ||
+		    airoc_go_if == NULL) {
+			LOG_ERR("Unable to bring up tertiary IF for P2P GO");
+			ret = -EAGAIN;
+			goto error;
+		}
+		airoc_go_tertiary_init = true;
+		ap_if = airoc_go_if;
+		airoc_go_on_primary = false;
+		if_label = "tertiary(bsscfg2/ifidx1)";
+	} else {
+		if (!data->second_interface_init) {
+			if (whd_add_secondary_interface(data->whd_drv, NULL,
+						       &airoc_ap_if) !=
+			    WHD_SUCCESS) {
+				LOG_ERR("Unable to bring up secondary IF for P2P GO");
+				ret = -EAGAIN;
+				goto error;
+			}
+			data->second_interface_init = true;
+		}
+		ap_if = airoc_ap_if;
+		airoc_go_if = ap_if;
+		airoc_go_on_primary = false;
+		if_label = "secondary(bsscfg1)";
+	}
+#endif
+
+	if (ap_if == NULL) {
+		LOG_ERR("P2P GO SoftAP IF is NULL");
+		ret = -ENODEV;
+		goto error;
+	}
+
+	(void)whd_wifi_set_iovar_value(ap_if, IOVAR_STR_MPC, 0);
+
+	memset(&ssid, 0, sizeof(ssid));
+	ssid.length = ssid_len;
+	memcpy(ssid.value, ssid_str, ssid.length);
+
+	/* Same WIFI5 vs WIFI6 chanspec rule as airoc_mgmt_ap_enable. */
+	if ((channel > 0) && (channel < 12)) {
+		chanspec = channel;
+	} else {
+		chanspec = 6;
+		LOG_WRN("Unsupported GO channel %u — using 6", channel);
+	}
+#if defined(CONFIG_AIROC_WIFI6)
+	chanspec |= GET_C_VAR(ap_if->whd_driver, CHANSPEC_BAND_2G) |
+		    GET_C_VAR(ap_if->whd_driver, CHANSPEC_BW_20);
+#endif
+
+	security = (psk_len == 0) ? WHD_SECURITY_OPEN : WHD_SECURITY_WPA2_AES_PSK;
+
+	if (whd_wifi_init_ap(ap_if, &ssid, security,
+			     (const uint8_t *)psk, psk_len, chanspec) != 0) {
+		LOG_ERR("Failed to init whd ap interface for P2P GO");
+		ret = -EAGAIN;
+		goto error;
+	}
+
+	/* Must be set before start_ap to take effect */
+	(void)whd_wifi_ap_set_beacon_interval(ap_if, 100);
+#if defined(CONFIG_AIROC_WIFI6)
+	(void)whd_wifi_ap_set_max_assoc(ap_if, 8);
+#endif
+	(void)whd_wifi_disable_powersave(ap_if);
+	(void)whd_wifi_set_ioctl_value(ap_if, WLC_SET_PM, 0);
+
+	if (whd_wifi_start_ap(ap_if) != 0) {
+		LOG_ERR("Failed to start whd ap interface for P2P GO");
+		ret = -EAGAIN;
+		goto error;
+	}
+
+	/* FW may re-enable mpc/PM during start_ap — keep SoftAP awake for Auth */
+	(void)whd_wifi_set_iovar_value(ap_if, IOVAR_STR_MPC, 0);
+	(void)whd_wifi_disable_powersave(ap_if);
+	(void)whd_wifi_set_ioctl_value(ap_if, WLC_SET_PM, 0);
+
+	if (whd_management_set_event_handler(ap_if, ap_link_events,
+					     airoc_wifi_ap_link_events_handler, NULL,
+					     &ap_event_handler_index) != 0) {
+		whd_wifi_stop_ap(ap_if);
+		ret = -EAGAIN;
+		goto error;
+	}
+	ap_event_handler_index_prim = 0xFF;
+
+	data->is_ap_up = true;
+	airoc_if = ap_if;
+	net_if_dormant_off(data->iface);
+	(void)net_if_up(data->iface);
+
+	if (out_if != NULL) {
+		*out_if = ap_if;
+	}
+
+	LOG_INF("P2P GO SoftAP up (%s)", if_label);
+error:
+	k_sem_give(&data->sema_common);
+	return ret;
+}
+
+int airoc_wifi_go_softap_stop(void)
+{
+	cy_rslt_t whd_ret;
+	struct airoc_wifi_data *data = &airoc_wifi_data;
+	whd_interface_t ap_if = airoc_go_if ? airoc_go_if : airoc_sta_if;
+
+	if (k_sem_take(&data->sema_common, K_MSEC(AIROC_WIFI_WAIT_SEMA_MS)) != 0) {
+		return -EAGAIN;
+	}
+
+	if (!data->is_ap_up) {
+		k_sem_give(&data->sema_common);
+		return -ENOENT;
+	}
+
+	if (ap_event_handler_index != 0xFF) {
+		(void)whd_wifi_deregister_event_handler(ap_if, ap_event_handler_index);
+		ap_event_handler_index = 0xFF;
+	}
+	if (ap_event_handler_index_prim != 0xFF) {
+		(void)whd_wifi_deregister_event_handler(airoc_sta_if,
+							ap_event_handler_index_prim);
+		ap_event_handler_index_prim = 0xFF;
+	}
+
+	whd_ret = whd_wifi_stop_ap(ap_if);
+	/*
+	 * Always clear host AP state. P2P GO BSS_DOWN/ifdel often fails in
+	 * firmware; leaving is_ap_up set blocks the next group add.
+	 */
+	data->is_ap_up = false;
+	airoc_if = airoc_sta_if;
+	airoc_go_on_primary = false;
+	if (whd_ret != CY_RSLT_SUCCESS) {
+		LOG_WRN("P2P GO softAP stop returned %u — host state cleared",
+			(unsigned int)whd_ret);
+	}
+	/*
+	 * Do not net_if_dormant_on(): this iface is also STA/offload. Flapping
+	 * it DOWN drops IPv4 mcast membership and races DHCPv4 server restart.
+	 */
+
+	k_sem_give(&data->sema_common);
+
+	return 0;
+}
+#endif /* CONFIG_AIROC_WIFI_P2P */
 
 static int airoc_iface_status(const struct device *dev, struct wifi_iface_status *status)
 {
@@ -978,6 +1378,15 @@ static int airoc_init(const struct device *dev)
 		return ret;
 	}
 
+#if defined(CONFIG_AIROC_WIFI_P2P)
+	ret = airoc_p2p_init(data->whd_drv, airoc_sta_if);
+	if (ret == 0) {
+		data->p2p_initialized = true;
+	} else {
+		LOG_WRN("P2P init failed: %d (continuing without P2P)", ret);
+	}
+#endif
+
 	return 0;
 }
 
@@ -990,6 +1399,9 @@ static const struct wifi_mgmt_ops airoc_wifi_mgmt = {
 	.iface_status = airoc_iface_status,
 #if defined(CONFIG_NET_STATISTICS_WIFI)
 	.get_stats = airoc_mgmt_wifi_stats,
+#endif
+#if defined(CONFIG_AIROC_WIFI_P2P)
+	.p2p_oper = airoc_p2p_oper,
 #endif
 };
 

@@ -17,6 +17,20 @@ Building and Running
 
 Verify the board and chip you are targeting provide Wi-Fi support.
 
+Alif E8 DK + Murata 1YN P2P GO (optional overlay; default board conf stays
+STA/AP-shaped):
+
+.. code-block:: console
+
+   west build -b alif_e8_dk/ae822fa0e5597xx0/rtss/hp samples/net/wifi/shell \
+     -- -DEXTRA_CONF_FILE=overlay-p2p.conf
+
+Then ``wifi p2p group add``. SSID/PSK come from ``CONFIG_AIROC_WIFI_P2P_GO_*``.
+
+Limitation: ``wifi p2p group remove`` followed by another ``wifi p2p group add``
+does not restore a working GO data path (clients associate, but DHCP/ICMP fail).
+Reboot the board before starting a new group.
+
 For instance you can use Nordic's nrf7002dk by selecting the nrf7002dk/nrf5340/cpuapp board.
 
 .. zephyr-app-commands::

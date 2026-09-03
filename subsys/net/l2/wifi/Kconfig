@@ -125,3 +125,22 @@ config WIFI_ENT_IDENTITY_MAX_USERS
 	default 8
 	help
 	  This option defines the maximum number of identity users allowed connection.
+
+config WIFI_MGMT_P2P
+	bool "Wi-Fi Direct (P2P) management API"
+	help
+	  Enable the Wi-Fi Direct (P2P) management request/event API and
+	  corresponding wifi shell commands (wifi p2p ...). Drivers that
+	  implement wifi_mgmt_ops.p2p_oper should select this option.
+
+if WIFI_MGMT_P2P
+
+config WIFI_P2P_MAX_PEERS
+	int "Maximum number of P2P peers returned by a peer query"
+	default 16
+	range 1 64
+	help
+	  Maximum number of P2P peers that can be returned in a single
+	  WIFI_P2P_PEER query.
+
+endif # WIFI_MGMT_P2P
