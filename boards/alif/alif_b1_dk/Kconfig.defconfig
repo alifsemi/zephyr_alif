@@ -23,3 +23,21 @@ config UART_DMA_ENABLE
 	select DMA
 	select UART_ASYNC_API
 	select RING_BUFFER
+
+config ALIF_CERT_BRAND_NAME
+	default "Balletto DevKit"
+
+config ALIF_CERT_MODEL_NAME
+	default "DK-B1"
+
+config ALIF_CERT_FCC_ID
+	default "2A58G-DKB1"
+
+config ALIF_CERT_ISED_ID
+	default ""
+
+config ALIF_CERT_NCC_ID
+	default ""
+
+config ALIF_CERT_JP_ID
+	default ""
