@@ -1078,14 +1078,16 @@ int video_isp_init(const struct device *dev)
 		     IS_ENABLED(CONFIG_ISP_LIB_BINNING_MODULE),                               \
 		     "CONFIG_ISP_LIB_BINNING_MODULE required by binning-en on "               \
 		     DT_NODE_FULL_NAME(DT_DRV_INST(i)));                                      \
-	BUILD_ASSERT(!DT_INST_PROP(i, binning_en) ||                                          \
-		     IN_RANGE(DT_INST_PROP(i, binning_hstep), 1, UINT8_MAX),                  \
-		     "binning-hstep must fit in uint8_t (1-255) on "                          \
-		     DT_NODE_FULL_NAME(DT_DRV_INST(i)));                                      \
-	BUILD_ASSERT(!DT_INST_PROP(i, binning_en) ||                                          \
-		     IN_RANGE(DT_INST_PROP(i, binning_vstep), 1, UINT8_MAX),                  \
-		     "binning-vstep must fit in uint8_t (1-255) on "                          \
-		     DT_NODE_FULL_NAME(DT_DRV_INST(i)));
+	COND_CODE_1(DT_INST_PROP(i, binning_en),                                              \
+		    (BUILD_ASSERT(!DT_INST_PROP(i, binning_en) ||                             \
+				  IN_RANGE(DT_INST_PROP(i, binning_hstep), 1, UINT8_MAX),     \
+				  "binning-hstep must fit in uint8_t (1-255) on "             \
+				  DT_NODE_FULL_NAME(DT_DRV_INST(i)));                         \
+		     BUILD_ASSERT(!DT_INST_PROP(i, binning_en) ||                             \
+				  IN_RANGE(DT_INST_PROP(i, binning_vstep), 1, UINT8_MAX),     \
+				  "binning-vstep must fit in uint8_t (1-255) on "             \
+				  DT_NODE_FULL_NAME(DT_DRV_INST(i)));),                       \
+		    ())
 
 #define ISP_DEFINE(i)                                                                         \
 	ISP_BINNING_ASSERT(i)                                                                 \
