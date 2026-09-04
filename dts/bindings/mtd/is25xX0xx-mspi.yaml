@@ -8,6 +8,11 @@ compatible: "is25xX0xx"
 include: [mspi-device.yaml, "jedec,jesd216.yaml"]
 
 properties:
+  write-block-size:
+    type: int
+    description: |
+      Minimal write size supported by the flash device
+
   reset-gpios:
     type: phandle-array
     description: |
