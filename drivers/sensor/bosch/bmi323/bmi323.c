@@ -1181,6 +1181,24 @@ static int bosch_bmi323_pm_resume(const struct device *dev)
 	const struct bosch_bmi323_config *config = (const struct bosch_bmi323_config *)dev->config;
 	int ret;
 
+#ifdef CONFIG_BMI323_BUS_I3C
+	struct bosch_bmi323_data *data = (struct bosch_bmi323_data *)dev->data;
+
+	/*
+	 * System PM resume runs on the idle thread. I3C transfers use
+	 * k_sem_take() and must not run there — the controller clock may
+	 * also still be gated if this callback races I3C resume. Skip bus
+	 * I/O; the application re-inits the chip from a sleeping thread.
+	 */
+	if (!k_can_yield()) {
+		if (data->trigger_handler != NULL) {
+			return gpio_pin_interrupt_configure_dt(&config->int_gpio,
+							       GPIO_INT_EDGE_TO_ACTIVE);
+		}
+		return 0;
+	}
+#endif
+
 	ret = bosch_bmi323_bus_init(dev);
 
 	if (ret < 0) {
@@ -1261,7 +1279,17 @@ static int bosch_bmi323_pm_action(const struct device *dev, enum pm_device_actio
 	struct bosch_bmi323_data *data = (struct bosch_bmi323_data *)dev->data;
 	int ret;
 
-	k_mutex_lock(&data->lock, K_FOREVER);
+	/*
+	 * Idle/system-PM must not block on the driver mutex. If the IRQ
+	 * work item holds it, return -EBUSY so the PM core can abort.
+	 */
+	if (!k_can_yield()) {
+		if (k_mutex_lock(&data->lock, K_NO_WAIT) != 0) {
+			return -EBUSY;
+		}
+	} else {
+		k_mutex_lock(&data->lock, K_FOREVER);
+	}
 
 	switch (action) {
 	case PM_DEVICE_ACTION_RESUME:

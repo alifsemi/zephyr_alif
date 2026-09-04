@@ -230,7 +230,7 @@
 		interrupts      = <50 3>;
 		clocks          = <&clockctrl ALIF_LPI3C_CLK>;
 		pinctrl-0       = <&pinctrl_lpi3c0>;
-		pinctrl-1       = <&pinctrl_lpi3c0>;
+		pinctrl-1       = <&pinctrl_lpi3c0_sleep>;
 		pinctrl-2       = <&pinctrl_lpi3c0_recovery>;
 		pinctrl-names   = "default", "sleep", "recovery";
 		od-thigh-min-ns = <41>;
