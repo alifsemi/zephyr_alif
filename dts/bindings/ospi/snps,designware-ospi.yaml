@@ -50,6 +50,11 @@ properties:
     description: receive datastrobe delay
     default: 16
 
+  baud2-signal-delay:
+    type: int
+    description: TX/RX signal delay for higher frequency
+    default: 22
+
   tx-fifo-threshold:
     type: int
     description: transmit fifo threshold
