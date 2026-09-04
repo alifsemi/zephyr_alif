@@ -626,6 +626,39 @@
 		};
 	};
 
+	pinctrl_s80k2564:pinctrl_s80k2564 {
+		group0 {
+			pinmux = <PIN_P9_5__OSPI1_D0_C>,
+				 <PIN_P9_6__OSPI1_D1_C>,
+				 <PIN_P9_7__OSPI1_D2_C>,
+				 <PIN_P10_0__OSPI1_D3_C>,
+				 <PIN_P10_1__OSPI1_D4_C>,
+				 <PIN_P10_2__OSPI1_D5_C>,
+				 <PIN_P10_3__OSPI1_D6_C>,
+				 <PIN_P10_4__OSPI1_D7_C>,
+				 <PIN_P17_0__OSPI1_D8_C>,
+				 <PIN_P17_1__OSPI1_D9_C>,
+				 <PIN_P17_2__OSPI1_D10_C>,
+				 <PIN_P17_3__OSPI1_D11_C>,
+				 <PIN_P17_4__OSPI1_D12_C>,
+				 <PIN_P17_5__OSPI1_D13_C>,
+				 <PIN_P17_6__OSPI1_D14_C>,
+				 <PIN_P17_7__OSPI1_D15_C>,
+				 <PIN_P10_7__OSPI1_RXDS0_C>,
+				 <PIN_P9_0__OSPI1_RXDS1_C>;
+			read-enable = <1>;
+			drive-strength = <12>;
+			slew-rate = <1>;
+		};
+		group1 {
+			pinmux = <PIN_P5_5__OSPI1_SCLK_C>,
+				 <PIN_P5_7__OSPI1_SS0_C>,
+				 <PIN_P15_7__LPGPIO>;
+			read-enable = <0>;
+			drive-strength = <12>;
+		};
+	};
+
 	pinctrl_gpio0:pinctrl_gpio0 {
 		group0 {
 			/*comment out based on requirement  */

@@ -18,4 +18,11 @@ config MEMC_ALIF_OSPI_APS512XXN
 	help
 	  Enable support for the AP-Memory APS512XXN PSRAM device on Alif platforms.
 
+config MEMC_ALIF_HSPI_S80KS2564
+	bool "ALIF Hex-SPI Infineon HyperRAM driver"
+	default y
+	depends on DT_HAS_ALIF_INFINEON_S80KS2564_ENABLED
+	help
+	  Enable support for the Infineon S80K2564 hyperRAM device on Alif platforms.
+
 endif
