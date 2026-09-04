@@ -176,6 +176,35 @@ DEFINE_MM_REG_WR(xip_write_ctrl,	0x148)
 
 #include "mspi_dw_vendor_specific.h"
 
+static void apply_timing_config(const struct device *dev)
+{
+	const struct mspi_dw_data *dev_data = dev->data;
+
+	write_rx_sample_dly(dev, (dev_data->spi_ctrlr0 & SPI_CTRLR0_SPI_RXDS_EN_BIT) ?
+				 0U : dev_data->rx_sample_dly);
+
+	vendor_specific_apply_timing_config(dev);
+
+#if defined(CONFIG_MSPI_DW_DDR)
+	uint8_t drive_edge = vendor_specific_ddr_drive_edge(dev);
+
+	if (drive_edge != 0U) {
+		write_txd_drive_edge(dev, drive_edge);
+		return;
+	}
+
+	if (dev_data->spi_ctrlr0 & (SPI_CTRLR0_SPI_DDR_EN_BIT |
+				    SPI_CTRLR0_INST_DDR_EN_BIT)) {
+		uint32_t txd = (CONFIG_MSPI_DW_TXD_MUL * dev_data->baudr) /
+			       CONFIG_MSPI_DW_TXD_DIV;
+
+		write_txd_drive_edge(dev, txd);
+	} else {
+		write_txd_drive_edge(dev, 0);
+	}
+#endif
+}
+
 static int start_next_packet(const struct device *dev);
 static int finalize_packet(const struct device *dev, int rc);
 static int finalize_transceive(const struct device *dev, int rc);
@@ -1125,7 +1154,7 @@ static int start_next_packet(const struct device *dev)
 	uint32_t data_frames;
 	uint32_t imr = 0;
 	int rc = 0;
-
+	bool ser_selected = false;
 
 	if (data_only_packet && packet->num_bytes == 0) {
 		return 0;
@@ -1281,18 +1310,9 @@ static int start_next_packet(const struct device *dev)
 		: 0);
 	write_spi_ctrlr0(dev, dev_data->spi_ctrlr0);
 	write_baudr(dev, dev_data->baudr);
-	write_rx_sample_dly(dev, dev_data->rx_sample_dly);
-#if defined(CONFIG_MSPI_DW_DDR)
-	if (dev_data->spi_ctrlr0 & (SPI_CTRLR0_SPI_DDR_EN_BIT |
-				    SPI_CTRLR0_INST_DDR_EN_BIT)) {
-		int txd = (CONFIG_MSPI_DW_TXD_MUL * dev_data->baudr) /
-			CONFIG_MSPI_DW_TXD_DIV;
+	apply_timing_config(dev);
 
-		write_txd_drive_edge(dev, txd);
-	} else {
-		write_txd_drive_edge(dev, 0);
-	}
-#endif
+	ser_selected = vendor_specific_device_select(dev);
 
 	if (xip_enabled) {
 		write_ssienr(dev, SSIENR_SSIC_EN_BIT);
@@ -1439,7 +1459,9 @@ static int start_next_packet(const struct device *dev)
 #endif
 
 	/* Write SER to start transfer */
-	write_ser(dev, BIT(dev_data->dev_id->dev_idx));
+	if (!ser_selected) {
+		write_ser(dev, BIT(dev_data->dev_id->dev_idx));
+	}
 
 #if defined(CONFIG_MULTITHREADING)
 	/* For async transfer, exit after starting the timeout timer. */
@@ -1901,12 +1923,15 @@ static int _api_xip_config(const struct device *dev,
 		ctrl.write |= FIELD_PREP(XIP_WRITE_CTRL_WAIT_CYCLES_MASK,
 					 params->tx_dummy);
 
+		vendor_specific_xip_update_ctrl(dev, &ctrl, cfg);
+
 		/* Make sure the baud rate and serial clock phase/polarity
 		 * registers are configured properly. They may not be if
 		 * non-XIP transfers have not been performed yet.
 		 */
 		write_ctrlr0(dev, dev_data->ctrlr0);
 		write_baudr(dev, dev_data->baudr);
+		apply_timing_config(dev);
 
 		write_xip_incr_inst(dev, params->read_cmd);
 		write_xip_wrap_inst(dev, params->read_cmd);
