@@ -71,6 +71,12 @@ static const char server_key_test[] = {
 
 #define WIFI_SHELL_MODULE "wifi"
 
+#if defined(CONFIG_WIFI_MGMT_P2P)
+#define WIFI_SHELL_P2P_EVENTS NET_EVENT_WIFI_P2P_DEVICE_FOUND
+#else
+#define WIFI_SHELL_P2P_EVENTS 0
+#endif
+
 #define WIFI_SHELL_MGMT_EVENTS (            \
 				NET_EVENT_WIFI_CONNECT_RESULT     |\
 				NET_EVENT_WIFI_DISCONNECT_RESULT  |\
@@ -78,7 +84,8 @@ static const char server_key_test[] = {
 				NET_EVENT_WIFI_AP_ENABLE_RESULT   |\
 				NET_EVENT_WIFI_AP_DISABLE_RESULT  |\
 				NET_EVENT_WIFI_AP_STA_CONNECTED   |\
-				NET_EVENT_WIFI_AP_STA_DISCONNECTED)
+				NET_EVENT_WIFI_AP_STA_DISCONNECTED|\
+				WIFI_SHELL_P2P_EVENTS)
 
 #ifdef CONFIG_WIFI_MGMT_RAW_SCAN_RESULTS_ONLY
 #define WIFI_SHELL_SCAN_EVENTS (                   \
@@ -487,6 +494,24 @@ static void handle_wifi_ap_sta_disconnected(struct net_mgmt_event_callback *cb)
 	k_mutex_unlock(&wifi_ap_sta_list_lock);
 }
 
+#if defined(CONFIG_WIFI_MGMT_P2P)
+static void handle_wifi_p2p_device_found(struct net_mgmt_event_callback *cb)
+{
+	const struct wifi_p2p_device_info *peer_info =
+		(const struct wifi_p2p_device_info *)cb->info;
+	const struct shell *sh = context.sh;
+	uint8_t mac_string_buf[sizeof("xx:xx:xx:xx:xx:xx")];
+	const char *name = (peer_info->device_name[0] != '\0') ?
+			   peer_info->device_name : "-";
+
+	PR("P2P device found: %s  %s  RSSI %d\n",
+	   name,
+	   net_sprint_ll_addr_buf(peer_info->mac, WIFI_MAC_ADDR_LEN,
+				  mac_string_buf, sizeof(mac_string_buf)),
+	   peer_info->rssi);
+}
+#endif /* CONFIG_WIFI_MGMT_P2P */
+
 #ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_ROAMING
 static void handle_wifi_signal_change(struct net_mgmt_event_callback *cb)
 {
@@ -544,6 +569,11 @@ static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
 	case NET_EVENT_WIFI_AP_STA_DISCONNECTED:
 		handle_wifi_ap_sta_disconnected(cb);
 		break;
+#if defined(CONFIG_WIFI_MGMT_P2P)
+	case NET_EVENT_WIFI_P2P_DEVICE_FOUND:
+		handle_wifi_p2p_device_found(cb);
+		break;
+#endif
 #ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_ROAMING
 	case NET_EVENT_WIFI_SIGNAL_CHANGE:
 		handle_wifi_signal_change(cb);
@@ -3427,6 +3457,337 @@ static int cmd_wifi_pmksa_flush(const struct shell *sh, size_t argc, char *argv[
 
 	return 0;
 }
+
+#if defined(CONFIG_WIFI_MGMT_P2P)
+static void print_p2p_peer_info(const struct shell *sh, int index,
+				const struct wifi_p2p_device_info *peer)
+{
+	uint8_t mac_string_buf[sizeof("xx:xx:xx:xx:xx:xx")];
+	const char *device_name = (peer->device_name[0] != '\0') ?
+				  peer->device_name : "-";
+	const char *device_type = (peer->pri_dev_type_str[0] != '\0') ?
+				  peer->pri_dev_type_str : "-";
+	const char *config_methods = (peer->config_methods_str[0] != '\0') ?
+				     peer->config_methods_str : "-";
+
+	PR("%-4d | %-32s | %-17s | %-4d | %-20s | %s\n",
+	   index,
+	   device_name,
+	   net_sprint_ll_addr_buf(peer->mac, WIFI_MAC_ADDR_LEN,
+				  mac_string_buf, sizeof(mac_string_buf)),
+	   peer->rssi,
+	   device_type,
+	   config_methods);
+}
+
+static int cmd_wifi_p2p_peer(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = net_if_get_wifi_sta();
+	struct wifi_p2p_params params = {0};
+	static struct wifi_p2p_device_info peers[WIFI_P2P_MAX_PEERS];
+	int ret;
+
+	context.sh = sh;
+	memset(peers, 0, sizeof(peers));
+
+	params.peers = peers;
+	params.oper = WIFI_P2P_PEER;
+	params.peer_count = WIFI_P2P_MAX_PEERS;
+	memset(params.peer_addr, 0xFF, WIFI_MAC_ADDR_LEN);
+
+	if (argc >= 2) {
+		uint8_t mac_addr[WIFI_MAC_ADDR_LEN];
+
+		if (net_bytes_from_str(mac_addr, sizeof(mac_addr), argv[1]) < 0) {
+			PR_ERROR("Invalid MAC address format. Use: XX:XX:XX:XX:XX:XX\n");
+			return -EINVAL;
+		}
+		memcpy(params.peer_addr, mac_addr, WIFI_MAC_ADDR_LEN);
+		params.peer_count = 1;
+	}
+
+	ret = net_mgmt(NET_REQUEST_WIFI_P2P_OPER, iface, &params, sizeof(params));
+	if (ret) {
+		PR_WARNING("P2P peer info request failed: %d\n", ret);
+		return -ENOEXEC;
+	}
+
+	if (params.peer_count > 0) {
+		PR("\n%-4s | %-32s | %-17s | %-4s | %-20s | %s\n",
+		   "Num", "Device Name", "MAC Address", "RSSI",
+		   "Device Type", "Config Methods");
+		for (int i = 0; i < params.peer_count; i++) {
+			print_p2p_peer_info(sh, i + 1, &peers[i]);
+		}
+	} else if (argc >= 2) {
+		shell_print(sh, "No information available for peer %s", argv[1]);
+	} else {
+		shell_print(sh, "No P2P peers found");
+	}
+
+	return 0;
+}
+
+static int cmd_wifi_p2p_find(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = net_if_get_wifi_sta();
+	struct wifi_p2p_params params = {0};
+	int opt;
+	int opt_index = 0;
+	struct getopt_state *state;
+	static const struct option long_options[] = {
+		{"timeout", required_argument, 0, 't'},
+		{"type", required_argument, 0, 'T'},
+		{"help", no_argument, 0, 'h'},
+		{0, 0, 0, 0}
+	};
+	long val;
+
+	context.sh = sh;
+	params.oper = WIFI_P2P_FIND;
+	params.discovery_type = WIFI_P2P_FIND_START_WITH_FULL;
+	params.timeout = 30;
+
+	while ((opt = getopt_long(argc, argv, "t:T:h",
+				  long_options, &opt_index)) != -1) {
+		state = getopt_state_get();
+		switch (opt) {
+		case 't':
+			if (!parse_number(sh, &val, state->optarg, "timeout",
+					  0, 65535)) {
+				return -EINVAL;
+			}
+			params.timeout = (uint16_t)val;
+			break;
+		case 'T':
+			if (!parse_number(sh, &val, state->optarg, "type", 0, 2)) {
+				return -EINVAL;
+			}
+			switch (val) {
+			case 0:
+				params.discovery_type = WIFI_P2P_FIND_ONLY_SOCIAL;
+				break;
+			case 1:
+				params.discovery_type = WIFI_P2P_FIND_PROGRESSIVE;
+				break;
+			case 2:
+				params.discovery_type = WIFI_P2P_FIND_START_WITH_FULL;
+				break;
+			default:
+				return -EINVAL;
+			}
+			break;
+		case 'h':
+			shell_help(sh);
+			return -ENOEXEC;
+		default:
+			PR_ERROR("Invalid option %c\n", state->optopt);
+			return -EINVAL;
+		}
+	}
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P_OPER, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P find request failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P find started — open phone Wi-Fi Direct and search peers\n"
+	   "Watch for 'P2P peer:' lines, then run: wifi p2p peer\n");
+	return 0;
+}
+
+static int cmd_wifi_p2p_stop_find(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = net_if_get_wifi_sta();
+	struct wifi_p2p_params params = {0};
+
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	context.sh = sh;
+	params.oper = WIFI_P2P_STOP_FIND;
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P_OPER, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P stop find request failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P find stopped\n");
+	return 0;
+}
+
+static int cmd_wifi_p2p_group_add(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = net_if_get_wifi_sta();
+	struct wifi_p2p_params params = {0};
+	int opt;
+	int opt_index = 0;
+	struct getopt_state *state;
+	static const struct option long_options[] = {
+		{"freq", required_argument, 0, 'f'},
+		{"help", no_argument, 0, 'h'},
+		{0, 0, 0, 0}
+	};
+	long val;
+
+	context.sh = sh;
+	params.oper = WIFI_P2P_GROUP_ADD;
+	params.group_add.freq = 0;
+	params.group_add.persistent = -1;
+
+	while ((opt = getopt_long(argc, argv, "f:h",
+				  long_options, &opt_index)) != -1) {
+		state = getopt_state_get();
+		switch (opt) {
+		case 'f':
+			if (!parse_number(sh, &val, state->optarg, "freq",
+					  0, 6000)) {
+				return -EINVAL;
+			}
+			params.group_add.freq = (int)val;
+			break;
+		case 'h':
+			shell_help(sh);
+			return -ENOEXEC;
+		default:
+			PR_ERROR("Invalid option %c\n", state->optopt);
+			return -EINVAL;
+		}
+	}
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P_OPER, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P group add request failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P autonomous GO started\n");
+#if defined(CONFIG_AIROC_WIFI_P2P_GO_SSID)
+	PR("  SSID=%s (PSK from CONFIG_AIROC_WIFI_P2P_GO_PSK)\n"
+	   "  Direct: phone lists %s; disc answers ProbeReq SSID=DIRECT-\n",
+	   CONFIG_AIROC_WIFI_P2P_GO_SSID, CONFIG_AIROC_WIFI_P2P_DEVICE_NAME);
+#endif
+	PR("  Manual join: same SSID from the Wi-Fi list\n"
+	   "  Expect client poll lines every 2s; auth/assoc on connect\n"
+	   "Limitation: reboot before starting another GO "
+	   "(remove then add does not restore DHCP)\n");
+	return 0;
+}
+
+static int cmd_wifi_p2p_group_remove(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = net_if_get_wifi_sta();
+	struct wifi_p2p_params params = {0};
+
+	context.sh = sh;
+	params.oper = WIFI_P2P_GROUP_REMOVE;
+
+	if (argc >= 2) {
+		strncpy(params.group_remove.ifname, argv[1],
+			sizeof(params.group_remove.ifname) - 1);
+	}
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P_OPER, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P group remove request failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P group remove initiated\n");
+	return 0;
+}
+
+static int cmd_wifi_p2p_power_save(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct net_if *iface = net_if_get_wifi_sta();
+	struct wifi_p2p_params params = {0};
+	bool enable;
+
+	context.sh = sh;
+
+	if (argc < 2) {
+		PR_ERROR("Usage: wifi p2p power_save <on|off>\n");
+		return -EINVAL;
+	}
+
+	if (strcasecmp(argv[1], "on") == 0) {
+		enable = true;
+	} else if (strcasecmp(argv[1], "off") == 0) {
+		enable = false;
+	} else {
+		PR_ERROR("Usage: wifi p2p power_save <on|off>\n");
+		return -EINVAL;
+	}
+
+	params.oper = WIFI_P2P_POWER_SAVE;
+	params.power_save = enable;
+
+	if (net_mgmt(NET_REQUEST_WIFI_P2P_OPER, iface, &params, sizeof(params))) {
+		PR_WARNING("P2P power save request failed\n");
+		return -ENOEXEC;
+	}
+
+	PR("P2P power save %s\n", enable ? "enabled" : "disabled");
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	wifi_cmd_p2p_group,
+	SHELL_CMD_ARG(add, NULL,
+		      "Add a P2P group (start as autonomous GO)\n"
+		      "[-f, --freq=<MHz|channel>]: Operating frequency or channel\n"
+		      "  Examples: -f 2437 or -f 6\n"
+		      "Phase-1 defaults: SSID=DIRECT-Al security=WPA2-PSK\n",
+		      cmd_wifi_p2p_group_add, 1, 2),
+	SHELL_CMD_ARG(remove, NULL,
+		      "Remove the current P2P group\n"
+		      "[ifname]: Optional interface name (ignored in phase-1)\n",
+		      cmd_wifi_p2p_group_remove, 1, 1),
+	SHELL_SUBCMD_SET_END
+);
+
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	wifi_cmd_p2p,
+	SHELL_CMD_ARG(find, NULL,
+		      "Start P2P device discovery (search+listen loop)\n"
+		      "Put the phone in Wi-Fi Direct / search for peers.\n"
+		      "Do NOT run while SoftAP/GO is up — remove group first.\n"
+		      "Then: wifi p2p peer\n"
+		      "[-t, --timeout=<sec>]: Discovery timeout (default 30)\n"
+		      "[-T, --type=<0|1|2>]: Discovery type (phase-1: social)\n"
+		      "  0: Social channels only (1, 6, 11)\n"
+		      "  1: Progressive scan\n"
+		      "  2: Full scan first, then social (default)\n",
+		      cmd_wifi_p2p_find, 1, 4),
+	SHELL_CMD_ARG(stop_find, NULL,
+		      "Stop P2P device discovery\n",
+		      cmd_wifi_p2p_stop_find, 1, 0),
+	SHELL_CMD_ARG(peer, NULL,
+		      "Show information about P2P peers\n"
+		      "[mac]: Optional peer MAC XX:XX:XX:XX:XX:XX\n",
+		      cmd_wifi_p2p_peer, 1, 1),
+	SHELL_CMD(group, &wifi_cmd_p2p_group,
+		 "P2P group management (add/remove autonomous GO).",
+		 NULL),
+	/* Underscore aliases kept for compatibility */
+	SHELL_CMD_ARG(group_add, NULL,
+		      "Alias for: wifi p2p group add\n"
+		      "[-f, --freq=<MHz|channel>]\n",
+		      cmd_wifi_p2p_group_add, 1, 2),
+	SHELL_CMD_ARG(group_remove, NULL,
+		      "Alias for: wifi p2p group remove\n"
+		      "[ifname]\n",
+		      cmd_wifi_p2p_group_remove, 1, 1),
+	SHELL_CMD_ARG(power_save, NULL,
+		      "Set P2P GO power save\n"
+		      "<on|off>\n",
+		      cmd_wifi_p2p_power_save, 2, 0),
+	SHELL_SUBCMD_SET_END
+);
+
+SHELL_SUBCMD_ADD((wifi), p2p, &wifi_cmd_p2p,
+		 "Wi-Fi Direct (P2P) commands (phase-1: find / GO).",
+		 NULL,
+		 0, 0);
+#endif /* CONFIG_WIFI_MGMT_P2P */
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	wifi_cmd_ap,

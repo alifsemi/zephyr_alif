@@ -255,4 +255,52 @@ config CYW55513IUBG_SM
 	  Infineon CYW55513IUBG (SM) module
 endchoice
 
+config AIROC_WIFI_P2P
+	bool "P2P (Wi-Fi Direct) autonomous Group Owner"
+	depends on WIFI_AIROC
+	select WIFI_MGMT_P2P
+	default n
+	help
+	  Enable Wi-Fi Direct (P2P) autonomous Group Owner support for the
+	  Infineon AIROC Wi-Fi driver. Discovery, GO bring-up, and WPS-PBC
+	  provisioning are driven via WHD IOVARs without wpa_supplicant.
+	  P2P client (enrollee/GO-neg) is not implemented. Selects the
+	  wifi_mgmt / shell P2P API (e.g. samples/net/wifi/shell).
+
+if AIROC_WIFI_P2P
+
+config AIROC_WIFI_P2P_DEVICE_NAME
+	string "P2P device name (Wi-Fi Direct friendly name)"
+	default "AIROC-P2P"
+	help
+	  Advertised WPS/P2P Device Name (e.g. Android Wi-Fi Direct list).
+
+config AIROC_WIFI_P2P_GO_SSID
+	string "Autonomous GO SSID"
+	default "DIRECT-Al"
+	help
+	  Group BSS SSID. Wi-Fi Direct requires a DIRECT- prefix and length >= 9.
+
+config AIROC_WIFI_P2P_GO_PSK
+	string "Autonomous GO WPA2-PSK"
+	default "12345678"
+	help
+	  Pre-shared key handed out by the in-driver WPS registrar and used
+	  for the GO SoftAP. Override in the application conf; do not commit
+	  production secrets.
+
+config AIROC_WIFI_P2P_GO_IP_ADDR
+	string "GO IPv4 address"
+	default "192.168.50.1"
+
+config AIROC_WIFI_P2P_GO_NETMASK
+	string "GO IPv4 netmask"
+	default "255.255.255.0"
+
+config AIROC_WIFI_P2P_GO_DHCP_POOL_BASE
+	string "GO DHCPv4 pool start address"
+	default "192.168.50.10"
+
+endif # AIROC_WIFI_P2P
+
 endif # AIROC_WIFI
