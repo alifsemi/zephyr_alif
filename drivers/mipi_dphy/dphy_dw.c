@@ -10,6 +10,7 @@
 #include <zephyr/sys/device_mmio.h>
 #include <stdlib.h>
 #include <zephyr/kernel.h>
+#include <zephyr/pm/device.h>
 
 #include <zephyr/drivers/mipi_dphy/dphy_dw.h>
 #include "dphy_dw.h"
@@ -782,6 +783,52 @@ static int dphy_dw_init(const struct device *dev)
 	return 0;
 }
 
+#ifdef CONFIG_PM_DEVICE
+static int dphy_dw_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	const struct dphy_dw_config *config = dev->config;
+	int ret;
+
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		ret = dphy_dw_enable_clocks(dev);
+		if (ret) {
+			LOG_ERR("DPHY clock re-enable failed (%d)", ret);
+			return ret;
+		}
+
+		LOG_DBG("PM: Resumed %s", dev->name);
+		return 0;
+
+	case PM_DEVICE_ACTION_SUSPEND:
+		/*
+		 * Turn off clocks so clock gate registers reflect "off".
+		 * After S2RAM, clock_control_on() then performs a real
+		 * 0->1 transition to restart the hardware clock.
+		 */
+		if (config->txdphy_cid) {
+			ret = clock_control_off(config->clk_dev, config->txdphy_cid);
+			if (ret) {
+				LOG_ERR("Failed to disable TX DPHY clock");
+				return ret;
+			}
+		}
+
+		ret = clock_control_off(config->clk_dev, config->pllref_cid);
+		if (ret) {
+			LOG_ERR("Failed to disable PLL reference clock");
+			return ret;
+		}
+
+		LOG_DBG("PM: Suspended %s", dev->name);
+		return 0;
+
+	default:
+		return -ENOTSUP;
+	}
+}
+#endif
+
 #define MIPI_DPHY_GET_CLK(i)                                                                       \
 	IF_ENABLED(DT_INST_NODE_HAS_PROP(i, clocks),                                               \
 		(.clk_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(i)),                                 \
@@ -811,7 +858,8 @@ static int dphy_dw_init(const struct device *dev)
                                                                                                    \
 	static struct dphy_dw_data data_##i;                                                       \
                                                                                                    \
-	DEVICE_DT_INST_DEFINE(i, &dphy_dw_init, NULL, &data_##i, &config_##i, POST_KERNEL,         \
-			      CONFIG_MIPI_DPHY_INIT_PRIORITY, NULL);
+	IF_ENABLED(CONFIG_PM_DEVICE, (PM_DEVICE_DT_INST_DEFINE(i, dphy_dw_pm_action);))            \
+	DEVICE_DT_INST_DEFINE(i, &dphy_dw_init, PM_DEVICE_DT_INST_GET(i), &data_##i, &config_##i,  \
+			POST_KERNEL, CONFIG_MIPI_DPHY_INIT_PRIORITY, NULL);
 
 DT_INST_FOREACH_STATUS_OKAY(ALIF_MIPI_DPHY_DEVICE)
