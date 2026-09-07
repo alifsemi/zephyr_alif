@@ -21,7 +21,8 @@
 
 	pwm5: pwm5 {
 		pinctrl-0 = <&pinctrl_ut5>;
-		pinctrl-names = "default";
+		pinctrl-1 = <&pinctrl_ut5_sleep>;
+		pinctrl-names = "default", "sleep";
 		status = "okay";
 	};
 };

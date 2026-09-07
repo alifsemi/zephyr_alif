@@ -30,7 +30,8 @@
 
 	qdec: qdec {
 		pinctrl-0 = <&pinctrl_ut1>;
-		pinctrl-names = "default";
+		pinctrl-1 = <&pinctrl_ut1_sleep>;
+		pinctrl-names = "default", "sleep";
 		status = "okay";
 	};
 };

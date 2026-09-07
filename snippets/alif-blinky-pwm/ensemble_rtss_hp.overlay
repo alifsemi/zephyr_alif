@@ -23,7 +23,8 @@
 
 	pwm10: pwm10 {
 		pinctrl-0 = <&pinctrl_ut10>;
-		pinctrl-names = "default";
+		pinctrl-1 = <&pinctrl_ut10_sleep>;
+		pinctrl-names = "default", "sleep";
 		status = "okay";
 	};
 };

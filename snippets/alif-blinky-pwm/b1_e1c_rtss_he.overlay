@@ -22,7 +22,8 @@
 
 	pwm2: pwm2 {
 		pinctrl-0 = <&pinctrl_ut2>;
-		pinctrl-names = "default";
+		pinctrl-1 = <&pinctrl_ut2_sleep>;
+		pinctrl-names = "default", "sleep";
 		status = "okay";
 	};
 };
