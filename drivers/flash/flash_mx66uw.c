@@ -838,6 +838,12 @@ static int flash_mx66uw_ospi_init(const struct device *dev)
 	init_config.xip_rxds_vl_en = DT_PROP(OSPI_CTRL_NODE, xip_rxds_vl_en);
 	init_config.xip_wait_cycles = DT_PROP(OSPI_CTRL_NODE, xip_wait_cycles);
 
+	/* MX66 octal DTR read (8DTRD) uses a 16-bit DDR instruction (0xEE11) */
+	init_config.xip_incr_cmd = MX_OSPI_READ_DATA_CMD;
+	init_config.xip_wrap_cmd = MX_OSPI_READ_DATA_CMD;
+	init_config.xip_inst_len = XIP_CTRL_INST_LEN_16_BIT;
+	init_config.xip_inst_ddr_en = 1;
+
 	memset(&dev_data->trans_conf, 0, sizeof(struct ospi_trans_config));
 
 	/**Initial configurations */
@@ -912,6 +918,16 @@ static int flash_mx66uw_ospi_init(const struct device *dev)
 
 	/* Read status with timeout */
 	ret = poll_read_status_reg(dev_data, MX_REG_READ_POLL_TIMEOUT_100_MS);
+	if (ret != 0) {
+		return ret;
+	}
+
+	if (IS_ENABLED(CONFIG_ALIF_OSPI_FLASH_XIP)) {
+		ret = alif_hal_ospi_xip_enable(dev_data->ospi_handle);
+		if (ret != 0) {
+			ret = err_map_alif_hal_to_zephyr(ret);
+		}
+	}
 
 	return ret;
 }
