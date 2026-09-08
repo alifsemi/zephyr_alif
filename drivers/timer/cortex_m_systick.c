@@ -106,13 +106,20 @@ static cycle_t systick_rescale_cycles(cycle_t cycles, uint32_t to_hz,
 
 void z_sys_clock_hw_cycles_per_sec_update(uint32_t new_hz)
 {
-	uint32_t old_hz = (uint32_t)z_clock_hw_cycles_per_sec;
+	uint32_t old_hz;
+	k_spinlock_key_t key;
 
-	if ((old_hz == 0U) || (new_hz == 0U) || (old_hz == new_hz)) {
+	if (new_hz == 0U) {
 		return;
 	}
 
-	k_spinlock_key_t key = k_spin_lock(&lock);
+	key = k_spin_lock(&lock);
+
+	old_hz = (uint32_t)z_clock_hw_cycles_per_sec;
+	if ((old_hz == 0U) || (old_hz == new_hz)) {
+		k_spin_unlock(&lock, key);
+		return;
+	}
 
 	/* Publish the new frequency. */
 	z_clock_hw_cycles_per_sec = new_hz;
