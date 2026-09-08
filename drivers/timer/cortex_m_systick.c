@@ -94,6 +94,16 @@ static volatile uint32_t overflow_cyc;
 static uint32_t elapsed(void);
 
 #if defined(CONFIG_SYSTEM_CLOCK_HW_CYCLES_PER_SEC_RUNTIME_UPDATE)
+/* cycles * to_hz overflows uint64_t when cycle_t is 64-bit. Split first. */
+static cycle_t systick_rescale_cycles(cycle_t cycles, uint32_t to_hz,
+				      uint32_t from_hz)
+{
+	uint64_t q = (uint64_t)cycles / from_hz;
+	uint64_t r = (uint64_t)cycles % from_hz;
+
+	return (cycle_t)(q * to_hz + (r * to_hz) / from_hz);
+}
+
 void z_sys_clock_hw_cycles_per_sec_update(uint32_t new_hz)
 {
 	uint32_t old_hz = (uint32_t)z_clock_hw_cycles_per_sec;
@@ -114,9 +124,9 @@ void z_sys_clock_hw_cycles_per_sec_update(uint32_t new_hz)
 	}
 
 	/* Rescale internal counters from old cycles to new cycles. */
-	cycle_count = (cycle_t)(((uint64_t)cycle_count * (uint64_t)new_hz) / (uint64_t)old_hz);
-	announced_cycles = (cycle_t)(((uint64_t)announced_cycles * (uint64_t)new_hz) /
-				     (uint64_t)old_hz);
+	cycle_count = systick_rescale_cycles(cycle_count, new_hz, old_hz);
+	announced_cycles = systick_rescale_cycles(announced_cycles, new_hz,
+						  old_hz);
 
 	if (load_old != TIMER_STOPPED) {
 		uint32_t new_load;
