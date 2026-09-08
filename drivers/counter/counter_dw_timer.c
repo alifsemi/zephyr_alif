@@ -62,6 +62,10 @@ struct counter_dw_timer_config {
 
 	/* interrupt config function ptr */
 	void (*irq_config)(void);
+#ifdef CONFIG_COUNTER_DW_DMA
+	/* DT dma-trig: skip NVIC, no EOI in ISR; INTMASK cleared in set_top_value */
+	bool dma_trig;
+#endif
 };
 
 /* Driver data */
@@ -89,6 +93,13 @@ static void counter_dw_timer_irq_handler(const struct device *timer_dev)
 	struct counter_dw_timer_drv_data *const data = DEV_DATA(timer_dev);
 	k_spinlock_key_t key;
 	counter_alarm_callback_t alarm_cb = data->alarm_cb;
+
+#ifdef CONFIG_COUNTER_DW_DMA
+	/* NVIC off; do not EOI (would drop LPTIMERn_DMA_REQ). Caller EOI. */
+	if (DEV_CFG(timer_dev)->dma_trig) {
+		return;
+	}
+#endif
 
 	/* read EOI register to clear interrupt flag */
 	sys_read32(reg_base + EOI_OFST);
@@ -187,7 +198,12 @@ static int counter_dw_timer_set_top_value(const struct device *timer_dev,
 		return -EBUSY;
 	}
 
-	if (!top_cfg->callback) {
+#ifdef CONFIG_COUNTER_DW_DMA
+	if (DEV_CFG(timer_dev)->dma_trig) {
+		/* Unmask timeout; that output is LPTIMERn_DMA_REQ. Caller EOI. */
+		sys_clear_bit(reg_base + CONTROLREG_OFST, TIMER_INTR_MASK_BIT);
+	} else if (!top_cfg->callback) {
+#endif
 		/* mask an interrupt if callback is not passed */
 		sys_set_bit(reg_base + CONTROLREG_OFST, TIMER_INTR_MASK_BIT);
 	} else {
@@ -392,6 +408,8 @@ static int counter_dw_timer_init(const struct device *timer_dev)
 		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, resets),			\
 			(DW_SNPS_TIMER_SNPS_RESET_SPEC_INIT(inst)))		\
 		.irq_config = counter_dw_timer_irq_config_##inst,		\
+		IF_ENABLED(CONFIG_COUNTER_DW_DMA,				\
+			(.dma_trig = DT_INST_PROP_OR(inst, dma_trig, 0),))	\
 	};									\
 	DEVICE_DT_INST_DEFINE(inst,						\
 			counter_dw_timer_init,					\
@@ -401,6 +419,11 @@ static int counter_dw_timer_init(const struct device *timer_dev)
 			&dw_timer_driver_api);					\
 	static void counter_dw_timer_irq_config_##inst(void)			\
 	{									\
+		IF_ENABLED(CONFIG_COUNTER_DW_DMA, (				\
+			if (timer_config_##inst.dma_trig) {			\
+				return;						\
+			}							\
+		))								\
 		IRQ_CONNECT(DT_INST_IRQN(inst),					\
 				DT_INST_IRQ(inst, priority),			\
 				counter_dw_timer_irq_handler,			\
