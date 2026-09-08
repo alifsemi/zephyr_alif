@@ -15,3 +15,27 @@ properties:
   clock-frequency:
     type: int
     description: clock frequency information for Timer
+
+  dma-trig:
+    type: boolean
+    description: |
+      Use this timer as a DMA request source (LPTIMERn_DMA_REQ).
+      Unmasks the timeout so the pending output can raise the request.
+      CPU IRQ is not enabled. The ISR does not EOI; the caller must
+      EOI and re-arm (counter_set_top_value() with no callback).
+      Omit this property for the CPU alarm IRQ path.
+      Requires CONFIG_COUNTER_DW_DMA in Zephyr Kconfig.
+
+  dmas:
+    type: phandle-array
+    description: |
+      Optional Alif overlay: EVTRTR / PL330 mux metadata for applications.
+      Not read by counter_dw_timer.c (this driver does not call dma_config
+      or program the event router). Applications use DT_DMAS_CTLR() and
+      DT_DMAS_CELL_*() with the DMA subsystem (e.g. sdk-alif counter_dma-trig).
+      Example: dmas = <&evtrtrN ALIF_DMA_ENCODE(channel, group, handshake) periph>;
+
+  dma-names:
+    type: string-array
+    description: |
+      Optional labels for dmas entries (application use only).
