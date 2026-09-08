@@ -25,11 +25,38 @@ represents the fastest cycle counter that the operating system is able
 to present to the user (for example, a CPU cycle counter) and that the
 read operation is very fast.  The expectation is that very sensitive
 application code might use this in a polling manner to achieve maximal
-precision.  The frequency of this counter is required to be steady
-over time, and is available from
-:c:func:`sys_clock_hw_cycles_per_sec` (which on almost all
-platforms is a runtime constant that evaluates to
-CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC).
+precision.  The frequency of this counter is available from
+:c:func:`sys_clock_hw_cycles_per_sec`. On most platforms this is a
+runtime constant that evaluates to
+:kconfig:option:`CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC` and is fixed for
+the lifetime of the system. On platforms where the system timer
+frequency can change after boot,
+:c:func:`sys_clock_hw_cycles_per_sec` returns the current rate and
+application code must not assume a single immutable frequency.
+
+Runtime System Timer Frequency
+------------------------------
+
+Platforms that change the active system timer frequency at runtime must
+enable :kconfig:option:`CONFIG_SYSTEM_CLOCK_HW_CYCLES_PER_SEC_RUNTIME_UPDATE`
+and:
+
+* Call :c:func:`z_sys_clock_hw_cycles_per_sec_update` after applying the
+  clock change.
+* If the system timer driver caches derived constants (for example
+  cycles-per-tick) or needs to reprogram hardware when the clock
+  changes, provide a timer-driver override of
+  :c:func:`z_sys_clock_hw_cycles_per_sec_update`.
+
+The default implementation of :c:func:`z_sys_clock_hw_cycles_per_sec_update`
+only updates the stored frequency value.
+
+.. note::
+
+   :kconfig:option:`CONFIG_SYSTEM_CLOCK_HW_CYCLES_PER_SEC_RUNTIME_UPDATE`
+   tracks the system timer frequency as a single **global** value.
+   When enabled, :c:func:`sys_clock_hw_cycles_per_sec` and time unit
+   conversions follow the current runtime value.
 
 For asynchronous timekeeping, the kernel defines a "ticks" concept.  A
 "tick" is the internal count in which the kernel does all its internal
