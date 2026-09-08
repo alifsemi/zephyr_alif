@@ -58,8 +58,13 @@ Usage considerations
 The CPU Frequency Scaling subsystem assumes that each CPU is clocked independently and that a
 p-state transition does not impact an unrelated CPU of the SoC.
 
-The SoC supporting CPU Freq must uphold Zephyr's requirement that the system timer remains constant
-over the lifetime of the program. See :ref:`Kernel Timing <kernel_timing>` for more information.
+The default assumption is that the system timer frequency is fixed for the life of
+the program. If a P-state change also changes the clock that drives the system
+timer, the SoC must enable
+:kconfig:option:`CONFIG_SYSTEM_CLOCK_HW_CYCLES_PER_SEC_RUNTIME_UPDATE` and call
+:c:func:`z_sys_clock_hw_cycles_per_sec_update` from
+:c:func:`cpu_freq_pstate_set` after the new rate is applied. See
+:ref:`Kernel Timing <kernel_timing>` for more information.
 
 The CPU Frequency Scaling subsystem runs as a handler function to a ``k_timer``, which means it runs
 in interrupt context (IRQ). The SoC p-state driver must ensure that its implementation of
