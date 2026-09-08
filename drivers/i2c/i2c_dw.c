@@ -1274,6 +1274,46 @@ static int i2c_dw_initialize(const struct device *dev)
 
 #if defined(CONFIG_PM_DEVICE)
 
+static void i2c_dw_save_ctx(const struct device *dev)
+{
+	struct i2c_dw_dev_config *const dw = dev->data;
+	struct i2c_dw_pm_ctx *ctx = &dw->pm_ctx;
+	uint32_t reg_base = get_regs(dev);
+
+	ctx->con = read_con(reg_base);
+	ctx->tar = read_tar(reg_base);
+	ctx->sar = read_sar(reg_base);
+	ctx->ss_scl_hcnt = read_ss_scl_hcnt(reg_base);
+	ctx->ss_scl_lcnt = read_ss_scl_lcnt(reg_base);
+	ctx->fs_scl_hcnt = read_fs_scl_hcnt(reg_base);
+	ctx->fs_scl_lcnt = read_fs_scl_lcnt(reg_base);
+	ctx->hs_scl_hcnt = read_hs_scl_hcnt(reg_base);
+	ctx->hs_scl_lcnt = read_hs_scl_lcnt(reg_base);
+	ctx->intr_mask = read_intr_mask(reg_base);
+	ctx->fs_spklen = read_fs_spklen(reg_base);
+	ctx->hs_spklen = read_hs_spklen(reg_base);
+}
+
+static void i2c_dw_restore_ctx(const struct device *dev)
+{
+	struct i2c_dw_dev_config *const dw = dev->data;
+	const struct i2c_dw_pm_ctx *ctx = &dw->pm_ctx;
+	uint32_t reg_base = get_regs(dev);
+
+	write_con(ctx->con, reg_base);
+	write_tar(ctx->tar, reg_base);
+	write_sar(ctx->sar, reg_base);
+	write_ss_scl_hcnt(ctx->ss_scl_hcnt, reg_base);
+	write_ss_scl_lcnt(ctx->ss_scl_lcnt, reg_base);
+	write_fs_scl_hcnt(ctx->fs_scl_hcnt, reg_base);
+	write_fs_scl_lcnt(ctx->fs_scl_lcnt, reg_base);
+	write_hs_scl_hcnt(ctx->hs_scl_hcnt, reg_base);
+	write_hs_scl_lcnt(ctx->hs_scl_lcnt, reg_base);
+	write_intr_mask(ctx->intr_mask, reg_base);
+	write_fs_spklen(ctx->fs_spklen, reg_base);
+	write_hs_spklen(ctx->hs_spklen, reg_base);
+}
+
 static int i2c_dw_suspend(const struct device *dev)
 {
 	const struct i2c_dw_rom_config *const dev_cfg = dev->config;
@@ -1285,6 +1325,10 @@ static int i2c_dw_suspend(const struct device *dev)
 	if (test_bit_status_activity(reg_base) || (dw->state & I2C_DW_BUSY)) {
 		return -EBUSY;
 	}
+
+	i2c_dw_save_ctx(dev);
+	write_intr_mask(0U, reg_base);
+	read_clr_intr(reg_base);
 
 	/* disable the controller */
 	clear_bit_enable_en(reg_base);
@@ -1337,13 +1381,10 @@ static int i2c_dw_resume(const struct device *dev)
 	}
 #endif
 
-	/* Set spike length */
-	write_fs_spklen(dev_cfg->fs_spk_len, reg_base);
-	write_hs_spklen(dev_cfg->hs_spk_len, reg_base);
-
-	/* Enable the controller */
+	i2c_dw_restore_ctx(dev);
+	write_rx_tl(dev_cfg->rx_tl, reg_base);
+	write_tx_tl(dev_cfg->tx_tl, reg_base);
 	set_bit_enable_en(reg_base);
-
 	return 0;
 }
 
