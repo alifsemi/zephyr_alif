@@ -862,7 +862,7 @@ static int uvc_control_to_dev(struct usbd_class_data *const c_data,
 
 	if (setup->bRequest != UVC_SET_CUR) {
 		LOG_WRN("Host issued a control write message but the bRequest is not SET_CUR");
-		errno = ENOMEM;
+		errno = ENOTSUP;
 		goto end;
 	}
 
@@ -1122,19 +1122,34 @@ static int uvc_add_vs_frame_desc(const struct device *dev,
 
 	/* Add the adwFrameInterval fields at the end of this descriptor */
 	while (video_enum_frmival(data->video_dev, VIDEO_EP_OUT, &fie) == 0) {
+		int ret;
+
 		switch (fie.type) {
 		case VIDEO_FRMIVAL_TYPE_DISCRETE:
 			LOG_DBG("Adding discrete frame interval %u", fie.index);
-			uvc_add_vs_frame_interval(desc, &fie.discrete, &fmt);
+			ret = uvc_add_vs_frame_interval(desc, &fie.discrete, &fmt);
 			break;
 		case VIDEO_FRMIVAL_TYPE_STEPWISE:
 			LOG_DBG("Adding stepwise frame interval %u", fie.index);
-			uvc_add_vs_frame_interval(desc, &fie.stepwise.min, &fmt);
-			uvc_add_vs_frame_interval(desc, &fie.stepwise.max, &fmt);
+			ret = uvc_add_vs_frame_interval(desc, &fie.stepwise.min, &fmt);
+			if (ret == 0) {
+				ret = uvc_add_vs_frame_interval(desc, &fie.stepwise.max, &fmt);
+			}
 			break;
 		default:
 			CODE_UNREACHABLE;
 		}
+
+		if (ret == -ENOSPC) {
+			LOG_WRN("Truncating frame interval list at %u entries "
+				"(CONFIG_USBD_VIDEO_MAX_FRMIVAL=%u)",
+				desc->bFrameIntervalType, CONFIG_USBD_VIDEO_MAX_FRMIVAL);
+			break;
+		}
+		if (ret != 0) {
+			return ret;
+		}
+
 		fie.index++;
 	}
 
@@ -1655,18 +1670,22 @@ static int uvc_get_caps(const struct device *dev, enum video_endpoint_id ep,
 }
 
 /*
- * Abort the current stream and return ownership of every queued buffer to the
- * application. Used when the application tears a streaming session down (for
- * example after the host stops pulling frames) so it can safely reuse or
- * re-enqueue the buffers it handed to this device with video_enqueue().
+ * Move every queued buffer from the input queue to the output queue, honouring
+ * the video_flush() cancel argument.
  *
- * A video buffer handed to the class is either still waiting in fifo_in (a
- * frame only partially pumped to the controller, whose outstanding USB buffers
- * do not reference it) or already removed from fifo_in with its final USB
- * buffer in flight (which does reference it). Cancelling the bulk IN endpoint
- * returns the latter through the request callback with -ECONNABORTED; draining
- * fifo_in here returns the former. The two cases are mutually exclusive per
- * buffer, so no buffer is returned twice.
+ * cancel == false (drain): wait for the queued buffers to finish streaming to
+ * the host before returning them. The bulk IN endpoint is host-paced, so a
+ * drain only makes progress while the host keeps pulling frames; when the class
+ * is not actively streaming to a host (disabled or no committed format) there
+ * is nothing to wait for, so the buffers are returned immediately as in the
+ * cancel path rather than blocking forever.
+ *
+ * cancel == true (abort): stop the pump, cancel any in-flight bulk IN transfer
+ * and return every buffer immediately. A buffer is either still in fifo_in (its
+ * outstanding USB buffers do not reference it) or already removed from fifo_in
+ * with its final USB buffer in flight (which does reference it); cancelling the
+ * endpoint returns the latter via the request callback with -ECONNABORTED and
+ * draining fifo_in returns the former, so no buffer is returned twice.
  */
 static int uvc_flush(const struct device *dev, enum video_endpoint_id ep, bool cancel)
 {
@@ -1675,7 +1694,19 @@ static int uvc_flush(const struct device *dev, enum video_endpoint_id ep, bool c
 	struct video_buffer *vbuf;
 
 	ARG_UNUSED(ep);
-	ARG_UNUSED(cancel);
+
+	if (!cancel && atomic_test_bit(&data->state, UVC_STATE_ENABLED) &&
+	    atomic_test_bit(&data->state, UVC_STATE_STREAM_READY)) {
+		/* Drain: let the host pull every queued buffer to completion. */
+		atomic_clear_bit(&data->state, UVC_STATE_PAUSED);
+		uvc_flush_queue(dev);
+
+		while (k_fifo_peek_head(&data->fifo_in) != NULL || data->vbuf_offset != 0) {
+			k_sleep(K_MSEC(1));
+		}
+
+		return 0;
+	}
 
 	/* Stop the pump so no new payloads are started while we tear down. */
 	atomic_set_bit(&data->state, UVC_STATE_PAUSED);
@@ -1750,6 +1781,8 @@ static int uvc_preinit(const struct device *dev)
 	__ASSERT_NO_MSG(dev->config != NULL);
 
 	data->payload_header.bHeaderLength = 2;
+	/* Single header group per payload, so it is always the last one */
+	data->payload_header.bmHeaderInfo = UVC_BMHEADERINFO_END_OF_HEADER;
 	data->format_id = 1;
 	data->frame_id = 1;
 
