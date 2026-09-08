@@ -1,10 +1,12 @@
 # Copyright (c) 2025 tinyVision.ai Inc.
+# Copyright (C) 2026 Alif Semiconductor.
 #
 # SPDX-License-Identifier: Apache-2.0
 
 config USBD_VIDEO_CLASS
 	bool "USB Video Class implementation [EXPERIMENTAL]"
 	depends on DT_HAS_ZEPHYR_UVC_DEVICE_ENABLED
+	depends on VIDEO
 	select EXPERIMENTAL
 	help
 	  USB Device Video Class (UVC) implementation.
