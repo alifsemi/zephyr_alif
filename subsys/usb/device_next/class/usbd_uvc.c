@@ -1,12 +1,29 @@
 /*
  * Copyright (c) 2025 tinyVision.ai Inc.
+ * Copyright (C) 2026 Alif Semiconductor.
  *
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * USB Video Class (UVC) device, adapted from the upstream Zephyr v4.2
+ * implementation for a Zephyr revision whose video subsystem still uses the
+ * endpoint-based (enum video_endpoint_id) API and the classic
+ * video_get_ctrl()/video_set_ctrl() control accessors.
+ *
+ * Two intentional deltas from upstream, marked "Adaptation:" throughout:
+ *   - The video device API is endpoint based (VIDEO_EP_IN/OUT) rather than
+ *     buffer-type based; the UVC class streams from the connected device's
+ *     VIDEO_EP_OUT.
+ *   - Camera/Processing/Extension unit controls are advertised empty
+ *     (bmControls = 0). The upstream runtime control framework
+ *     (drivers/video/video_ctrls.h, video_query_ctrl()) is not present in this
+ *     revision, so per-control forwarding is omitted. Probe/Commit format and
+ *     frame-rate negotiation is fully supported.
  */
 
 #define DT_DRV_COMPAT zephyr_uvc_device
 
 #include <stdlib.h>
+#include <errno.h>
 
 #include <zephyr/init.h>
 #include <zephyr/devicetree.h>
@@ -16,6 +33,7 @@
 #include <zephyr/usb/usbd.h>
 #include <zephyr/usb/usb_ch9.h>
 #include <zephyr/drivers/usb/udc.h>
+#include <zephyr/drivers/usb/udc_buf.h>
 #include <zephyr/drivers/video.h>
 #include <zephyr/drivers/video-controls.h>
 #include <zephyr/logging/log.h>
@@ -26,10 +44,22 @@
 #include <zephyr/usb/class/usbd_uvc.h>
 
 #include "usbd_uvc.h"
-#include "../../../drivers/video/video_ctrls.h"
-#include "../../../drivers/video/video_device.h"
 
 LOG_MODULE_REGISTER(usbd_uvc, CONFIG_USBD_VIDEO_LOG_LEVEL);
+
+/*
+ * Adaptation: these helpers exist in the upstream USB device stack but not in
+ * this revision. High-Speed is always built (the bulk endpoint advertises both
+ * speeds) and the bulk max packet size is 512 (HS) / 64 (FS); the pool is
+ * sized on the larger value.
+ */
+#ifndef USBD_SUPPORTS_HIGH_SPEED
+#define USBD_SUPPORTS_HIGH_SPEED 1
+#endif
+#ifndef USBD_MAX_BULK_MPS
+#define USBD_MAX_BULK_MPS 512
+#endif
+
 
 #define UVC_VBUF_DONE 1
 #define UVC_MAX_FS_DESC (CONFIG_USBD_VIDEO_MAX_FORMATS + 13)
@@ -109,7 +139,7 @@ struct uvc_data {
 	struct video_format video_fmt;
 	/* Current frame interval selected by the host */
 	struct video_frmival video_frmival;
-	/* Signal to alert video devices of buffer-related evenets */
+	/* Signal to alert video devices of buffer-related events */
 	struct k_poll_signal *video_sig;
 	/* Makes sure flushing the stream only happens in one context at a time */
 	struct k_mutex mutex;
@@ -148,20 +178,6 @@ struct uvc_buf_info {
 	/* Extra field at the end */
 	struct video_buffer *vbuf;
 } __packed;
-
-/* Mapping between UVC controls and Video controls */
-struct uvc_control_map {
-	/* Video CID to use for this control */
-	uint32_t cid;
-	/* Size to write out */
-	uint8_t size;
-	/* Bit position in the UVC control */
-	uint8_t bit;
-	/* UVC selector identifying this control */
-	uint8_t selector;
-	/* Whether the UVC value is signed, always false for bitmaps and boolean */
-	enum uvc_control_type type;
-};
 
 struct uvc_guid_quirk {
 	/* A Video API format identifier, for which the UVC format GUID is not standard. */
@@ -239,152 +255,14 @@ static uint32_t uvc_guid_to_fourcc(const uint8_t guid[16])
 	return fourcc;
 }
 
-/* UVC control handling */
-
-static const struct uvc_control_map uvc_control_map_ct[] = {
-	{
-		.size = 1,
-		.bit = 1,
-		.selector = UVC_CT_AE_MODE_CONTROL,
-		.cid = VIDEO_CID_EXPOSURE_AUTO,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-	{
-		.size = 1,
-		.bit = 2,
-		.selector = UVC_CT_AE_PRIORITY_CONTROL,
-		.cid = VIDEO_CID_EXPOSURE_AUTO_PRIORITY,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-	{
-		.size = 4,
-		.bit = 3,
-		.selector = UVC_CT_EXPOSURE_TIME_ABS_CONTROL,
-		.cid = VIDEO_CID_EXPOSURE,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-	{
-		.size = 2,
-		.bit = 5,
-		.selector = UVC_CT_FOCUS_ABS_CONTROL,
-		.cid = VIDEO_CID_FOCUS_ABSOLUTE,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-	{
-		.size = 2,
-		.bit = 6,
-		.selector = UVC_CT_FOCUS_REL_CONTROL,
-		.cid = VIDEO_CID_FOCUS_RELATIVE,
-		.type = UVC_CONTROL_SIGNED,
-	},
-	{
-		.size = 2,
-		.bit = 7,
-		.selector = UVC_CT_IRIS_ABS_CONTROL,
-		.cid = VIDEO_CID_IRIS_ABSOLUTE,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-	{
-		.size = 1,
-		.bit = 8,
-		.selector = UVC_CT_IRIS_REL_CONTROL,
-		.cid = VIDEO_CID_IRIS_RELATIVE,
-		.type = UVC_CONTROL_SIGNED,
-	},
-	{
-		.size = 2,
-		.bit = 9,
-		.selector = UVC_CT_ZOOM_ABS_CONTROL,
-		.cid = VIDEO_CID_ZOOM_ABSOLUTE,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-	{
-		.size = 3,
-		.bit = 10,
-		.selector = UVC_CT_ZOOM_REL_CONTROL,
-		.cid = VIDEO_CID_ZOOM_RELATIVE,
-		.type = UVC_CONTROL_SIGNED,
-	},
-};
-
-static const struct uvc_control_map uvc_control_map_pu[] = {
-	{
-		.size = 2,
-		.bit = 0,
-		.selector = UVC_PU_BRIGHTNESS_CONTROL,
-		.cid = VIDEO_CID_BRIGHTNESS,
-		.type = UVC_CONTROL_SIGNED,
-	},
-	{
-		.size = 1,
-		.bit = 1,
-		.selector = UVC_PU_CONTRAST_CONTROL,
-		.cid = VIDEO_CID_CONTRAST,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-	{
-		.size = 2,
-		.bit = 9,
-		.selector = UVC_PU_GAIN_CONTROL,
-		.cid = VIDEO_CID_GAIN,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-	{
-		.size = 2,
-		.bit = 3,
-		.selector = UVC_PU_SATURATION_CONTROL,
-		.cid = VIDEO_CID_SATURATION,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-	{
-		.size = 2,
-		.bit = 6,
-		.selector = UVC_PU_WHITE_BALANCE_TEMP_CONTROL,
-		.cid = VIDEO_CID_WHITE_BALANCE_TEMPERATURE,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-};
-
-static const struct uvc_control_map uvc_control_map_su[] = {
-	{
-		.size = 1,
-		.bit = 0,
-		.selector = UVC_SU_INPUT_SELECT_CONTROL,
-		.cid = VIDEO_CID_TEST_PATTERN,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-};
-
-static const struct uvc_control_map uvc_control_map_xu[] = {
-	{
-		.size = 4,
-		.bit = 0,
-		.selector = UVC_XU_BASE_CONTROL + 0,
-		.cid = VIDEO_CID_PRIVATE_BASE + 0,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-	{
-		.size = 4,
-		.bit = 1,
-		.selector = UVC_XU_BASE_CONTROL + 1,
-		.cid = VIDEO_CID_PRIVATE_BASE + 1,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-	{
-		.size = 4,
-		.bit = 2,
-		.selector = UVC_XU_BASE_CONTROL + 2,
-		.cid = VIDEO_CID_PRIVATE_BASE + 2,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-	{
-		.size = 4,
-		.bit = 3,
-		.selector = UVC_XU_BASE_CONTROL + 3,
-		.cid = VIDEO_CID_PRIVATE_BASE + 3,
-		.type = UVC_CONTROL_UNSIGNED,
-	},
-};
+/*
+ * Adaptation: the upstream class walks the connected video device's runtime
+ * control list to advertise Camera/Processing/Extension unit controls and
+ * forward GET/SET to it. That framework (video_query_ctrl(), struct
+ * video_control) is not present in this revision, so no per-control mapping
+ * tables are defined; the unit descriptors advertise no controls
+ * (bmControls = 0) and only Probe/Commit negotiation is handled.
+ */
 
 /* Get the format and frame descriptors selected for the given VideoStreaming interface. */
 static void uvc_get_vs_fmtfrm_desc(const struct device *dev,
@@ -553,11 +431,12 @@ static int uvc_get_vs_probe_frame_interval(const struct device *dev, struct uvc_
 
 	switch (request) {
 	case UVC_GET_MIN:
-		probe->dwFrameInterval = sys_cpu_to_le32(frame_desc->dwFrameInterval[0]);
+		/* The descriptor fields are already little-endian */
+		probe->dwFrameInterval = frame_desc->dwFrameInterval[0];
 		break;
 	case UVC_GET_MAX:
 		max = frame_desc->bFrameIntervalType - 1;
-		probe->dwFrameInterval = sys_cpu_to_le32(frame_desc->dwFrameInterval[max]);
+		probe->dwFrameInterval = frame_desc->dwFrameInterval[max];
 		break;
 	case UVC_GET_RES:
 		probe->dwFrameInterval = sys_cpu_to_le32(1);
@@ -631,8 +510,8 @@ static int uvc_get_vs_format_from_desc(const struct device *dev, struct video_fo
 	}
 
 	/* Fill the format according to what the host selected */
-	fmt->width = frame_desc->wWidth;
-	fmt->height = frame_desc->wHeight;
+	fmt->width = sys_le16_to_cpu(frame_desc->wWidth);
+	fmt->height = sys_le16_to_cpu(frame_desc->wHeight);
 	fmt->pitch = fmt->width * video_bits_per_pixel(fmt->pixelformat) / BITS_PER_BYTE;
 
 	return 0;
@@ -771,8 +650,9 @@ static int uvc_set_vs_probe(const struct device *dev, const struct net_buf *cons
 	}
 
 	if (probe->dwFrameInterval != 0) {
+		/* dwFrameInterval is in 100 ns units: 10^7 of them per second */
 		data->video_frmival.numerator = sys_le32_to_cpu(probe->dwFrameInterval);
-		data->video_frmival.denominator = USEC_PER_SEC * 100;
+		data->video_frmival.denominator = NSEC_PER_SEC / 100;
 	}
 
 	if (probe->bFrameIndex != 0) {
@@ -800,8 +680,7 @@ static int uvc_get_vs_commit(const struct device *dev, struct net_buf *const buf
 static int uvc_set_vs_commit(const struct device *dev, const struct net_buf *const buf)
 {
 	struct uvc_data *data = dev->data;
-	struct video_format fmt = data->video_fmt;
-	struct video_frmival frmival = data->video_frmival;
+	struct video_format fmt;
 	int ret;
 
 	__ASSERT_NO_MSG(data->video_dev != NULL);
@@ -811,25 +690,20 @@ static int uvc_set_vs_commit(const struct device *dev, const struct net_buf *con
 		return ret;
 	}
 
-	LOG_INF("Ready to transfer, setting source format to '%s' %ux%u",
+	fmt = data->video_fmt;
+
+	/*
+	 * Adaptation: the upstream class pushes the negotiated format and frame
+	 * interval onto the connected source device here. In this design the
+	 * application owns the capture pipeline (which, on the JPEG targets, is a
+	 * multi-stage ISP -> encoder chain the class cannot drive as a single
+	 * source), and configures the source to match the single advertised
+	 * format before enabling USB. The negotiated geometry is already cached
+	 * in data->video_fmt (from the selected descriptors) and drives the
+	 * payload sizing, so no format is pushed onto the source here.
+	 */
+	LOG_INF("Ready to transfer '%s' %ux%u",
 		VIDEO_FOURCC_TO_STR(fmt.pixelformat), fmt.width, fmt.height);
-
-	fmt.type = VIDEO_BUF_TYPE_OUTPUT;
-
-	ret = video_set_format(data->video_dev, &fmt);
-	if (ret != 0) {
-		LOG_ERR("Could not set the format of %s", data->video_dev->name);
-		return ret;
-	}
-
-	LOG_DBG("Setting frame interval of %s to %u/%u",
-		data->video_dev->name,
-		data->video_frmival.numerator, data->video_frmival.denominator);
-
-	ret = video_set_frmival(data->video_dev, &frmival);
-	if (ret != 0) {
-		LOG_WRN("Could not set the framerate of %s", data->video_dev->name);
-	}
 
 	LOG_DBG("UVC device ready, %s can now be started", data->video_dev->name);
 
@@ -843,270 +717,13 @@ static int uvc_set_vs_commit(const struct device *dev, const struct net_buf *con
 	return 0;
 }
 
-static void uvc_get_vc_conversion_map(const uint32_t cid, const int **const map, int *const map_sz)
-{
-	static const int ct_ae_mode[] = {
-		[0] = VIDEO_EXPOSURE_MANUAL,
-		[1] = VIDEO_EXPOSURE_AUTO,
-		[2] = VIDEO_EXPOSURE_SHUTTER_PRIORITY,
-		[3] = VIDEO_EXPOSURE_APERTURE_PRIORITY,
-	};
-
-	switch (cid) {
-	case VIDEO_CID_EXPOSURE_AUTO:
-		*map = ct_ae_mode;
-		*map_sz = ARRAY_SIZE(ct_ae_mode);
-		break;
-	default:
-		*map = NULL;
-		*map_sz = 0;
-		break;
-	}
-}
-
 /*
- * Convert the Zephyr Video control IDs (CID) to UVC Video Control (VC) IDs.
+ * Adaptation: the runtime control forwarding path (uvc_get_vc_ctrl /
+ * uvc_set_vc_ctrl and the CID<->VC conversion helpers) relied on the upstream
+ * video control framework (video_query_ctrl(), struct video_control) that is
+ * not present in this revision. It has been removed; the class advertises no
+ * unit controls, so the host never issues VideoControl GET/SET requests.
  */
-static int uvc_convert_cid_to_vc(const uint32_t cid, int64_t *const val64)
-{
-	const int *map;
-	int map_sz;
-
-	uvc_get_vc_conversion_map(cid, &map, &map_sz);
-	if (map == NULL) {
-		/* No conversion needed */
-		return 0;
-	}
-
-	for (int i = 0; i < map_sz; i++) {
-		if (map[i] == *val64) {
-			*val64 = BIT(i);
-			return 0;
-		}
-	}
-
-	return -ENOTSUP;
-}
-
-/*
- * Convert the UVC Video Control (VC) IDs to Zephyr Video control IDs (CID).
- */
-static int uvc_convert_vc_to_cid(const int32_t cid, int64_t *const val64)
-{
-	const int *map;
-	int map_sz;
-
-	uvc_get_vc_conversion_map(cid, &map, &map_sz);
-	if (map == NULL) {
-		/* No conversion needed */
-		return 0;
-	}
-
-	for (int i = 0; i < map_sz; i++) {
-		if (BIT(i) & *val64) {
-			*val64 = map[i];
-			return 0;
-		}
-	}
-
-	return -ENOTSUP;
-}
-
-static int uvc_get_vc_ctrl(const struct device *dev, struct net_buf *const buf,
-			   const struct usb_setup_packet *const setup,
-			   const struct uvc_control_map *const map)
-{
-	struct uvc_data *data = dev->data;
-	const struct device *video_dev = data->video_dev;
-	struct video_ctrl_query cq = {.id = map->cid, .dev = video_dev};
-	struct video_control ctrl = {.id = map->cid};
-	size_t size = MIN(setup->wLength, net_buf_tailroom(buf));
-	int64_t val64;
-	int ret;
-
-	__ASSERT_NO_MSG(video_dev != NULL);
-
-	ret = video_query_ctrl(&cq);
-	if (ret != 0) {
-		LOG_ERR("Failed to query %s for control 0x%x", video_dev->name, cq.id);
-		return ret;
-	}
-
-	LOG_INF("Responding to GET control '%s', size %u", cq.name, map->size);
-
-	if (cq.type != VIDEO_CTRL_TYPE_BOOLEAN && cq.type != VIDEO_CTRL_TYPE_MENU &&
-	    cq.type != VIDEO_CTRL_TYPE_INTEGER && cq.type != VIDEO_CTRL_TYPE_INTEGER64) {
-		LOG_ERR("Unsupported control type %u", cq.type);
-		return -ENOTSUP;
-	}
-
-	switch (setup->bRequest) {
-	case UVC_GET_INFO:
-		if (size < 1) {
-			return -ENOTSUP;
-		}
-		net_buf_add_u8(buf, UVC_INFO_SUPPORTS_GET | UVC_INFO_SUPPORTS_SET);
-		return 0;
-	case UVC_GET_LEN:
-		if (size < 2) {
-			return -ENOTSUP;
-		}
-		net_buf_add_le16(buf, map->size);
-		return 0;
-	case UVC_GET_CUR:
-		ret = video_get_ctrl(video_dev, &ctrl);
-		if (ret != 0) {
-			LOG_INF("Failed to query %s", video_dev->name);
-			return ret;
-		}
-
-		val64 = (cq.type == VIDEO_CTRL_TYPE_INTEGER64) ? ctrl.val64 : ctrl.val;
-		break;
-	case UVC_GET_MIN:
-		val64 = (cq.type == VIDEO_CTRL_TYPE_INTEGER64) ? cq.range.min64 : cq.range.min;
-		break;
-	case UVC_GET_MAX:
-		val64 = (cq.type == VIDEO_CTRL_TYPE_INTEGER64) ? cq.range.max64 : cq.range.max;
-		break;
-	case UVC_GET_RES:
-		val64 = (cq.type == VIDEO_CTRL_TYPE_INTEGER64) ? cq.range.step64 : cq.range.step;
-		break;
-	case UVC_GET_DEF:
-		val64 = (cq.type == VIDEO_CTRL_TYPE_INTEGER64) ? cq.range.def64 : cq.range.def;
-		break;
-	default:
-		LOG_WRN("Unsupported request type %u", setup->bRequest);
-		return -ENOTSUP;
-	}
-
-	if (size < map->size) {
-		LOG_WRN("Buffer too small (%u bytes) or unexpected size requested (%u bytes)",
-			net_buf_tailroom(buf), setup->wLength);
-		return -ENOTSUP;
-	}
-
-	ret = uvc_convert_cid_to_vc(cq.id, &val64);
-	if (ret != 0) {
-		return ret;
-	}
-
-	switch (map->type) {
-	case UVC_CONTROL_SIGNED:
-		if (map->size == 1) {
-			net_buf_add_u8(buf, CLAMP(val64, INT8_MIN, INT8_MAX));
-		} else if (map->size == 2) {
-			net_buf_add_le16(buf, CLAMP(val64, INT16_MIN, INT16_MAX));
-		} else if (map->size == 3) {
-			net_buf_add_le24(buf, CLAMP(val64, -0x800000, 0x7fffff));
-		} else if (map->size == 4) {
-			net_buf_add_le32(buf, CLAMP(val64, INT32_MIN, INT32_MAX));
-		} else {
-			LOG_WRN("Unsupported integer size %u for UVC control value", map->size);
-			return -ENOTSUP;
-		}
-		break;
-	case UVC_CONTROL_UNSIGNED:
-		if (map->size == 1) {
-			net_buf_add_u8(buf, CLAMP(val64, 0, UINT8_MAX));
-		} else if (map->size == 2) {
-			net_buf_add_le16(buf, CLAMP(val64, 0, UINT16_MAX));
-		} else if (map->size == 3) {
-			net_buf_add_le24(buf, CLAMP(val64, 0, 0xffffff));
-		} else if (map->size == 4) {
-			net_buf_add_le32(buf, CLAMP(val64, 0, UINT32_MAX));
-		} else {
-			LOG_WRN("Unsupported integer size %u for UVC control value", map->size);
-			return -ENOTSUP;
-		}
-		break;
-	}
-
-	return 0;
-}
-
-static int uvc_set_vc_ctrl(const struct device *dev, const struct net_buf *const buf_in,
-			   const struct uvc_control_map *const map)
-{
-	struct uvc_data *data = dev->data;
-	const struct device *video_dev = data->video_dev;
-	struct video_ctrl_query cq = {.id = map->cid, .dev = video_dev};
-	struct video_control ctrl = {.id = map->cid};
-	struct net_buf buf;
-	int64_t val64 = 0;
-	int ret;
-
-	__ASSERT_NO_MSG(video_dev != NULL);
-
-	/* Local copy that can be modified, so that <net_buf.h> functions can be used */
-	memcpy(&buf, buf_in, sizeof(buf));
-
-	ret = video_query_ctrl(&cq);
-	if (ret != 0) {
-		LOG_ERR("Failed to query the video device for control 0x%08x", cq.id);
-		return ret;
-	}
-
-	if (cq.type != VIDEO_CTRL_TYPE_BOOLEAN && cq.type != VIDEO_CTRL_TYPE_MENU &&
-	    cq.type != VIDEO_CTRL_TYPE_INTEGER && cq.type != VIDEO_CTRL_TYPE_INTEGER64) {
-		LOG_ERR("Unsupported control type %u", cq.type);
-		return -ENOTSUP;
-	}
-
-	if (buf.len < map->size) {
-		LOG_ERR("USB message size %u too short for control 0x%08x", buf.len, cq.id);
-		return -ENOTSUP;
-	}
-
-	switch (map->type) {
-	case UVC_CONTROL_SIGNED:
-		if (map->size == 1) {
-			val64 = (int8_t)net_buf_remove_u8(&buf);
-		} else if (map->size == 2) {
-			val64 = (int16_t)net_buf_remove_le16(&buf);
-		} else if (map->size == 3) {
-			val64 = (int32_t)net_buf_remove_le24(&buf);
-		} else if (map->size == 4) {
-			val64 = (int32_t)net_buf_remove_le32(&buf);
-		} else {
-			return -ENOTSUP;
-		}
-		break;
-	case UVC_CONTROL_UNSIGNED:
-		if (map->size == 1) {
-			val64 = net_buf_remove_u8(&buf);
-		} else if (map->size == 2) {
-			val64 = net_buf_remove_le16(&buf);
-		} else if (map->size == 3) {
-			val64 = net_buf_remove_le24(&buf);
-		} else if (map->size == 4) {
-			val64 = net_buf_remove_le32(&buf);
-		} else {
-			return -ENOTSUP;
-		}
-		break;
-	}
-
-	ret = uvc_convert_vc_to_cid(cq.id, &val64);
-	if (ret != 0) {
-		return ret;
-	}
-
-	if (cq.type == VIDEO_CTRL_TYPE_INTEGER64) {
-		ctrl.val64 = val64;
-	} else {
-		ctrl.val = val64;
-	}
-
-	LOG_DBG("Setting control 0x%08x to %llu", cq.id, val64);
-
-	ret = video_set_ctrl(video_dev, &ctrl);
-	if (ret != 0) {
-		LOG_ERR("Failed to configure target video device");
-		return ret;
-	}
-
-	return 0;
-}
 
 static int uvc_get_errno(const struct device *dev, struct net_buf *const buf,
 			       const struct usb_setup_packet *const setup)
@@ -1154,17 +771,13 @@ static void uvc_set_errno(const struct device *dev, const int ret)
 	}
 }
 
-static int uvc_get_control_op(const struct device *dev, const struct usb_setup_packet *const setup,
-			      const struct uvc_control_map **const map)
+static int uvc_get_control_op(const struct device *dev, const struct usb_setup_packet *const setup)
 {
 	const struct uvc_config *cfg = dev->config;
 	struct uvc_data *data = dev->data;
-	const struct uvc_control_map *list = NULL;
-	size_t list_sz;
 	uint8_t ifnum = (setup->wIndex >> 0) & 0xff;
 	uint8_t unit_id = setup->wIndex >> 8;
 	uint8_t selector = setup->wValue >> 8;
-	uint8_t subtype = 0;
 
 	/* VideoStreaming operation */
 
@@ -1194,62 +807,11 @@ static int uvc_get_control_op(const struct device *dev, const struct usb_setup_p
 		return UVC_OP_GET_ERRNO;
 	}
 
-	for (int i = UVC_IDX_VC_UNIT;; i++) {
-		struct uvc_unit_descriptor *desc = (void *)cfg->fs_desc[i];
-
-		if (desc->bDescriptorType != USB_DESC_CS_INTERFACE ||
-		    (desc->bDescriptorSubtype != UVC_VC_INPUT_TERMINAL &&
-		     desc->bDescriptorSubtype != UVC_VC_ENCODING_UNIT &&
-		     desc->bDescriptorSubtype != UVC_VC_SELECTOR_UNIT &&
-		     desc->bDescriptorSubtype != UVC_VC_EXTENSION_UNIT &&
-		     desc->bDescriptorSubtype != UVC_VC_PROCESSING_UNIT)) {
-			break;
-		}
-
-		if (unit_id == desc->bUnitID) {
-			subtype = desc->bDescriptorSubtype;
-			break;
-		}
-	}
-
-	if (subtype == 0) {
-		goto err;
-	}
-
-	switch (subtype) {
-	case UVC_VC_INPUT_TERMINAL:
-		list = uvc_control_map_ct;
-		list_sz = ARRAY_SIZE(uvc_control_map_ct);
-		break;
-	case UVC_VC_SELECTOR_UNIT:
-		list = uvc_control_map_su;
-		list_sz = ARRAY_SIZE(uvc_control_map_su);
-		break;
-	case UVC_VC_PROCESSING_UNIT:
-		list = uvc_control_map_pu;
-		list_sz = ARRAY_SIZE(uvc_control_map_pu);
-		break;
-	case UVC_VC_EXTENSION_UNIT:
-		list = uvc_control_map_xu;
-		list_sz = ARRAY_SIZE(uvc_control_map_xu);
-		break;
-	default:
-		CODE_UNREACHABLE;
-	}
-
-	*map = NULL;
-	for (int i = 0; i < list_sz; i++) {
-		if (list[i].selector == selector) {
-			*map = &list[i];
-			break;
-		}
-	}
-	if (*map == NULL) {
-		goto err;
-	}
-
-	return UVC_OP_VC_CTRL;
-err:
+	/*
+	 * Adaptation: no unit controls are advertised (bmControls = 0), so any
+	 * VideoControl unit request is rejected. Probe/Commit negotiation on the
+	 * VideoStreaming interface above is unaffected.
+	 */
 	LOG_WRN("No control matches selector %u and bUnitID %u", selector, unit_id);
 	data->err = UVC_ERR_INVALID_CONTROL;
 	return UVC_OP_RETURN_ERROR;
@@ -1260,7 +822,6 @@ static int uvc_control_to_host(struct usbd_class_data *const c_data,
 			       struct net_buf *const buf)
 {
 	const struct device *dev = usbd_class_get_private(c_data);
-	const struct uvc_control_map *map = NULL;
 	uint8_t request = setup->bRequest;
 
 	LOG_INF("Host sent a %s request, wValue 0x%04x, wIndex 0x%04x, wLength %u",
@@ -1270,15 +831,12 @@ static int uvc_control_to_host(struct usbd_class_data *const c_data,
 		request == UVC_GET_INFO ? "GET_INFO" : "bad",
 		setup->wValue, setup->wIndex, setup->wLength);
 
-	switch (uvc_get_control_op(dev, setup, &map)) {
+	switch (uvc_get_control_op(dev, setup)) {
 	case UVC_OP_VS_PROBE:
 		errno = -uvc_get_vs_probe(dev, buf, setup);
 		break;
 	case UVC_OP_VS_COMMIT:
 		errno = -uvc_get_vs_commit(dev, buf, setup);
-		break;
-	case UVC_OP_VC_CTRL:
-		errno = -uvc_get_vc_ctrl(dev, buf, setup, map);
 		break;
 	case UVC_OP_GET_ERRNO:
 		errno = -uvc_get_errno(dev, buf, setup);
@@ -1301,7 +859,6 @@ static int uvc_control_to_dev(struct usbd_class_data *const c_data,
 			      const struct net_buf *const buf)
 {
 	const struct device *dev = usbd_class_get_private(c_data);
-	const struct uvc_control_map *map = NULL;
 
 	if (setup->bRequest != UVC_SET_CUR) {
 		LOG_WRN("Host issued a control write message but the bRequest is not SET_CUR");
@@ -1312,15 +869,12 @@ static int uvc_control_to_dev(struct usbd_class_data *const c_data,
 	LOG_INF("Host sent a SET_CUR request, wValue 0x%04x, wIndex 0x%04x, wLength %u",
 		setup->wValue, setup->wIndex, setup->wLength);
 
-	switch (uvc_get_control_op(dev, setup, &map)) {
+	switch (uvc_get_control_op(dev, setup)) {
 	case UVC_OP_VS_PROBE:
 		errno = -uvc_set_vs_probe(dev, buf);
 		break;
 	case UVC_OP_VS_COMMIT:
 		errno = -uvc_set_vs_commit(dev, buf);
-		break;
-	case UVC_OP_VC_CTRL:
-		errno = -uvc_set_vc_ctrl(dev, buf, map);
 		break;
 	case UVC_OP_RETURN_ERROR:
 		errno = EINVAL;
@@ -1475,7 +1029,12 @@ static int uvc_compare_frmival_desc(const void *const a, const void *const b)
 	memcpy(&ia, a, sizeof(uint32_t));
 	memcpy(&ib, b, sizeof(uint32_t));
 
-	return ib - ia;
+	/* The descriptor fields are little-endian */
+	ia = sys_le32_to_cpu(ia);
+	ib = sys_le32_to_cpu(ib);
+
+	/* Compare instead of subtracting to avoid any overflow */
+	return (ia > ib) - (ia < ib);
 }
 
 static void uvc_set_vs_bitrate_range(struct uvc_frame_discrete_descriptor *const desc,
@@ -1562,7 +1121,7 @@ static int uvc_add_vs_frame_desc(const struct device *dev,
 	desc->dwMaxBitRate = sys_cpu_to_le32(0);
 
 	/* Add the adwFrameInterval fields at the end of this descriptor */
-	while (video_enum_frmival(data->video_dev, &fie) == 0) {
+	while (video_enum_frmival(data->video_dev, VIDEO_EP_OUT, &fie) == 0) {
 		switch (fie.type) {
 		case VIDEO_FRMIVAL_TYPE_DISCRETE:
 			LOG_DBG("Adding discrete frame interval %u", fie.index);
@@ -1579,14 +1138,14 @@ static int uvc_add_vs_frame_desc(const struct device *dev,
 		fie.index++;
 	}
 
-	/* If no frame intrval supported, default to 30 FPS */
+	/* If no frame interval supported, default to 30 FPS */
 	if (desc->bFrameIntervalType == 0) {
 		struct video_frmival frmival = {.numerator = 1, .denominator = 30};
 
 		uvc_add_vs_frame_interval(desc, &frmival, &fmt);
 	}
 
-	/* UVC requires the frame intervals to be sorted, but not Zephyr */
+	/* UVC requires the frame intervals to be sorted in ascending order, but not Zephyr */
 	qsort(desc->dwFrameInterval, desc->bFrameIntervalType,
 		sizeof(*desc->dwFrameInterval), uvc_compare_frmival_desc);
 
@@ -1597,28 +1156,12 @@ static int uvc_add_vs_frame_desc(const struct device *dev,
 	return 0;
 }
 
-static uint32_t uvc_get_mask(const struct device *video_dev,
-			     const struct uvc_control_map *const list,
-			     const size_t list_sz)
-{
-	uint32_t mask = 0;
-	uint32_t ok;
-
-	LOG_DBG("Querying which controls are supported:");
-
-	for (int i = 0; i < list_sz; i++) {
-		struct video_ctrl_query cq = {.id = list[i].cid, .dev = video_dev};
-
-		ok = (video_query_ctrl(&cq) == 0);
-
-		LOG_DBG("%s supports control 0x%02x: %s",
-			video_dev->name, cq.id, ok ? "yes" : "no");
-
-		mask |= ok << list[i].bit;
-	}
-
-	return mask;
-}
+/*
+ * Adaptation: uvc_get_mask() queried the source's runtime control list to
+ * populate the unit control bitmaps. That framework is not present in this
+ * revision, so the unit descriptors advertise no controls (bmControls = 0,
+ * left as initialised by the descriptor template).
+ */
 
 static int uvc_init(struct usbd_class_data *const c_data)
 {
@@ -1628,7 +1171,6 @@ static int uvc_init(struct usbd_class_data *const c_data)
 	struct uvc_format_descriptor *format_desc = NULL;
 	struct video_caps caps;
 	uint32_t prev_pixfmt = 0;
-	uint32_t mask = 0;
 	int ret;
 
 	__ASSERT_NO_MSG(data->video_dev != NULL);
@@ -1640,29 +1182,14 @@ static int uvc_init(struct usbd_class_data *const c_data)
 
 	cfg->desc->if0_hdr.baInterfaceNr[0] = cfg->desc->if1.bInterfaceNumber;
 
-	/* Generating VideoControl descriptors (interface 0) */
-
-	mask = uvc_get_mask(data->video_dev, uvc_control_map_ct, ARRAY_SIZE(uvc_control_map_ct));
-	cfg->desc->if0_ct.bmControls[0] = mask >> 0;
-	cfg->desc->if0_ct.bmControls[1] = mask >> 8;
-	cfg->desc->if0_ct.bmControls[2] = mask >> 16;
-
-	mask = uvc_get_mask(data->video_dev, uvc_control_map_pu, ARRAY_SIZE(uvc_control_map_pu));
-	cfg->desc->if0_pu.bmControls[0] = mask >> 0;
-	cfg->desc->if0_pu.bmControls[1] = mask >> 8;
-	cfg->desc->if0_pu.bmControls[2] = mask >> 16;
-
-	mask = uvc_get_mask(data->video_dev, uvc_control_map_xu, ARRAY_SIZE(uvc_control_map_xu));
-	cfg->desc->if0_xu.bmControls[0] = mask >> 0;
-	cfg->desc->if0_xu.bmControls[1] = mask >> 8;
-	cfg->desc->if0_xu.bmControls[2] = mask >> 16;
-	cfg->desc->if0_xu.bmControls[3] = mask >> 24;
+	/*
+	 * Generating VideoControl descriptors (interface 0). Adaptation: no unit
+	 * controls are advertised; bmControls stays zero.
+	 */
 
 	/* Generating VideoStreaming descriptors (interface 1) */
 
-	caps.type = VIDEO_BUF_TYPE_OUTPUT;
-
-	ret = video_get_caps(data->video_dev, &caps);
+	ret = video_get_caps(data->video_dev, VIDEO_EP_OUT, &caps);
 	if (ret != 0) {
 		LOG_ERR("Could not load %s video format list", data->video_dev->name);
 		return ret;
@@ -1779,7 +1306,7 @@ static struct net_buf *uvc_initiate_transfer(const struct device *dev,
 		*next_line_offset = vbuf->line_offset + vbuf->bytesused / fmt->pitch;
 	}
 
-	LOG_INF("Start of transfer, bytes used %u, sending lines %u to %u out of %u",
+	LOG_DBG("Start of transfer, bytes used %u, sending lines %u to %u out of %u",
 		vbuf->bytesused, vbuf->line_offset, vbuf->line_offset, fmt->height);
 
 	/* Copy the header into the buffer */
@@ -2032,11 +1559,22 @@ static const struct usbd_class_api uvc_class_api = {
 	.get_desc = uvc_get_desc,
 };
 
-/* UVC video API */
+/*
+ * UVC video API.
+ *
+ * Adaptation: this revision's video device API is endpoint based. The UVC
+ * device presents the buffers it streams to the host on VIDEO_EP_IN (buffers
+ * the application enqueues) and returns consumed buffers on VIDEO_EP_OUT. The
+ * endpoint argument is otherwise not meaningful for this single-stream device
+ * and is ignored.
+ */
 
-static int uvc_enqueue(const struct device *dev, struct video_buffer *const vbuf)
+static int uvc_enqueue(const struct device *dev, enum video_endpoint_id ep,
+		       struct video_buffer *const vbuf)
 {
 	struct uvc_data *data = dev->data;
+
+	ARG_UNUSED(ep);
 
 	k_fifo_put(&data->fifo_in, vbuf);
 	uvc_flush_queue(dev);
@@ -2044,10 +1582,12 @@ static int uvc_enqueue(const struct device *dev, struct video_buffer *const vbuf
 	return 0;
 }
 
-static int uvc_dequeue(const struct device *dev, struct video_buffer **const vbuf,
-		       const k_timeout_t timeout)
+static int uvc_dequeue(const struct device *dev, enum video_endpoint_id ep,
+		       struct video_buffer **const vbuf, const k_timeout_t timeout)
 {
 	struct uvc_data *data = dev->data;
+
+	ARG_UNUSED(ep);
 
 	*vbuf = k_fifo_get(&data->fifo_out, timeout);
 	if (*vbuf == NULL) {
@@ -2057,11 +1597,12 @@ static int uvc_dequeue(const struct device *dev, struct video_buffer **const vbu
 	return 0;
 }
 
-static int uvc_get_format(const struct device *dev, struct video_format *const fmt)
+static int uvc_get_format(const struct device *dev, enum video_endpoint_id ep,
+			  struct video_format *const fmt)
 {
 	struct uvc_data *data = dev->data;
-	struct video_format tmp_fmt = {0};
-	int ret;
+
+	ARG_UNUSED(ep);
 
 	__ASSERT_NO_MSG(data->video_dev != NULL);
 
@@ -2070,22 +1611,98 @@ static int uvc_get_format(const struct device *dev, struct video_format *const f
 		return -EAGAIN;
 	}
 
-	LOG_DBG("Querying the format from %s", data->video_dev->name);
-
-	tmp_fmt.type = VIDEO_BUF_TYPE_OUTPUT;
-
-	ret = video_get_format(data->video_dev, &tmp_fmt);
-	if (ret != 0) {
-		return ret;
-	}
-
-	*fmt = tmp_fmt;
+	/*
+	 * Adaptation: report the geometry negotiated with the host (cached from
+	 * the selected descriptors) rather than querying the connected source,
+	 * because the class does not drive the source format (see
+	 * uvc_set_vs_commit). This lets the application learn the committed
+	 * width/height/pixelformat via video_get_format(uvc_dev).
+	 */
+	*fmt = data->video_fmt;
 
 	return 0;
 }
 
-static int uvc_set_stream(const struct device *dev, const bool enable,
-			  const enum video_buf_type type)
+static int uvc_set_format(const struct device *dev, enum video_endpoint_id ep,
+			  struct video_format *const fmt)
+{
+	struct uvc_data *data = dev->data;
+
+	ARG_UNUSED(ep);
+
+	/*
+	 * The format is negotiated over USB (Probe/Commit), not set by the
+	 * application. Accept and cache it for consistency with the video API.
+	 */
+	data->video_fmt = *fmt;
+
+	return 0;
+}
+
+static int uvc_get_caps(const struct device *dev, enum video_endpoint_id ep,
+			struct video_caps *const caps)
+{
+	struct uvc_data *data = dev->data;
+
+	ARG_UNUSED(ep);
+
+	if (data->video_dev == NULL) {
+		return -ENODEV;
+	}
+
+	/* The UVC stream mirrors the capabilities of the connected source. */
+	return video_get_caps(data->video_dev, VIDEO_EP_OUT, caps);
+}
+
+/*
+ * Abort the current stream and return ownership of every queued buffer to the
+ * application. Used when the application tears a streaming session down (for
+ * example after the host stops pulling frames) so it can safely reuse or
+ * re-enqueue the buffers it handed to this device with video_enqueue().
+ *
+ * A video buffer handed to the class is either still waiting in fifo_in (a
+ * frame only partially pumped to the controller, whose outstanding USB buffers
+ * do not reference it) or already removed from fifo_in with its final USB
+ * buffer in flight (which does reference it). Cancelling the bulk IN endpoint
+ * returns the latter through the request callback with -ECONNABORTED; draining
+ * fifo_in here returns the former. The two cases are mutually exclusive per
+ * buffer, so no buffer is returned twice.
+ */
+static int uvc_flush(const struct device *dev, enum video_endpoint_id ep, bool cancel)
+{
+	const struct uvc_config *cfg = dev->config;
+	struct uvc_data *data = dev->data;
+	struct video_buffer *vbuf;
+
+	ARG_UNUSED(ep);
+	ARG_UNUSED(cancel);
+
+	/* Stop the pump so no new payloads are started while we tear down. */
+	atomic_set_bit(&data->state, UVC_STATE_PAUSED);
+
+	/* Cancel any bulk IN transfers still pending on the controller. Their
+	 * request callbacks return any fully-pumped frame's buffer to fifo_out.
+	 */
+	if (atomic_test_bit(&data->state, UVC_STATE_ENABLED)) {
+		(void)usbd_ep_dequeue(usbd_class_get_ctx(cfg->c_data), uvc_get_bulk_in(dev));
+	}
+
+	/* Abandon any partially-sent frame and return every still-queued input
+	 * buffer to the application through the output queue.
+	 */
+	k_mutex_lock(&data->mutex, K_FOREVER);
+	data->vbuf_offset = 0;
+	while ((vbuf = k_fifo_get(&data->fifo_in, K_NO_WAIT)) != NULL) {
+		k_fifo_put(&data->fifo_out, vbuf);
+	}
+	k_mutex_unlock(&data->mutex);
+
+	atomic_clear_bit(&data->state, UVC_STATE_PAUSED);
+
+	return 0;
+}
+
+static int uvc_set_stream(const struct device *dev, const bool enable)
 {
 	struct uvc_data *data = dev->data;
 
@@ -2100,9 +1717,12 @@ static int uvc_set_stream(const struct device *dev, const bool enable,
 }
 
 #ifdef CONFIG_POLL
-static int uvc_set_signal(const struct device *dev, struct k_poll_signal *const sig)
+static int uvc_set_signal(const struct device *dev, enum video_endpoint_id ep,
+			  struct k_poll_signal *const sig)
 {
 	struct uvc_data *data = dev->data;
+
+	ARG_UNUSED(ep);
 
 	data->video_sig = sig;
 
@@ -2112,9 +1732,12 @@ static int uvc_set_signal(const struct device *dev, struct k_poll_signal *const 
 
 static DEVICE_API(video, uvc_video_api) = {
 	.get_format = uvc_get_format,
+	.set_format = uvc_set_format,
+	.get_caps = uvc_get_caps,
 	.set_stream = uvc_set_stream,
 	.enqueue = uvc_enqueue,
 	.dequeue = uvc_dequeue,
+	.flush = uvc_flush,
 #if CONFIG_POLL
 	.set_signal = uvc_set_signal,
 #endif
@@ -2349,8 +1972,6 @@ struct usb_desc_header *uvc_hs_desc_##n[UVC_MAX_HS_DESC] = {			\
 	};									\
 										\
 	DEVICE_DT_INST_DEFINE(n, uvc_preinit, NULL, &uvc_data_##n, &uvc_cfg_##n,\
-		POST_KERNEL, CONFIG_VIDEO_INIT_PRIORITY, &uvc_video_api);	\
-										\
-	VIDEO_DEVICE_DEFINE(uvc##n, DEVICE_DT_INST_GET(n), NULL);
+		POST_KERNEL, CONFIG_VIDEO_INIT_PRIORITY, &uvc_video_api);
 
 DT_INST_FOREACH_STATUS_OKAY(USBD_VIDEO_DT_DEVICE_DEFINE)
