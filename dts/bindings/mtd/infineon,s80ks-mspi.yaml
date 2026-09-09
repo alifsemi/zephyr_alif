@@ -1,0 +1,59 @@
+# Copyright (c) 2026 Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: Infineon S80KS HyperRAM on an MSPI bus
+
+compatible: "infineon,s80ks"
+
+include: mspi-device.yaml
+
+properties:
+  size:
+    type: int
+    required: true
+    description: HyperRAM capacity in bytes.
+
+  initial-latency:
+    type: int
+    default: 3
+    enum:
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+    description: Initial read latency in clock cycles programmed into CR0.
+
+  fixed-latency:
+    type: boolean
+    description: Use fixed two-times initial latency instead of variable latency.
+
+  hybrid-burst:
+    type: boolean
+    description: Continue linearly after the first wrapped burst.
+
+  burst-length:
+    type: int
+    default: 32
+    enum:
+      - 16
+      - 32
+      - 64
+      - 128
+    description: Wrapped burst length in bytes programmed into CR0.
+
+  drive-strength-ohms:
+    type: int
+    default: 34
+    enum:
+      - 19
+      - 22
+      - 27
+      - 34
+      - 46
+      - 67
+      - 115
+    description: Output impedance in ohms programmed into CR0.
+
+  xip-config:
+    required: true

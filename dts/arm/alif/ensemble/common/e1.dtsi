@@ -1755,21 +1755,27 @@
 		status = "disabled";
 	};
 	ospi0: ospi0@83000000 {
-		compatible = "snps,designware-ospi";
-		reg = <0x83000000 0x1000>;
+		compatible = "alif,mspi-controller", "snps,designware-ssi";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x83000000 0x1000>,
+		      <0xA0000000 0x10000000>,
+		      <0x83001000 0x100>;
+		reg-names = "core", "xip", "aes";
 		pinctrl-0 = <&pinctrl_ospi0>;
 		pinctrl-names = "default";
 		interrupt-parent = <&nvic>;
 		interrupts = <96 ALIF_DEFAULT_IRQ_PRIORITY>;
-		aes-reg = <0x83001000 0x100>;
 		clocks = <&clockctrl ALIF_OSPI0_ACLK_CLK>;
-		bus-speed = <100000000>;
-		cs-pin = <0>;
+		packet-data-limit = <65536>;
+		fifo-depth = <128>;
+		op-mode = "MSPI_OP_MODE_CONTROLLER";
+		clock-frequency = <400000000>;
 		ddr-drive-edge = <1>;
 		rx-ds-delay = <11>;
+		rx-fifo-threshold = <0>;
 		tx-fifo-threshold = <0>;
 		xip-wait-cycles = <255>;
-		xip-base-address = <0xA0000000 0x10000000>;
 		status = "disabled";
 	};
 
