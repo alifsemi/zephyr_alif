@@ -156,6 +156,23 @@ struct i2c_dw_rom_config {
 #endif
 };
 
+#if defined(CONFIG_PM_DEVICE)
+struct i2c_dw_pm_ctx {
+	uint32_t con;
+	uint32_t tar;
+	uint32_t sar;
+	uint32_t ss_scl_hcnt;
+	uint32_t ss_scl_lcnt;
+	uint32_t fs_scl_hcnt;
+	uint32_t fs_scl_lcnt;
+	uint32_t hs_scl_hcnt;
+	uint32_t hs_scl_lcnt;
+	uint32_t intr_mask;
+	uint32_t fs_spklen;
+	uint32_t hs_spklen;
+};
+#endif
+
 struct i2c_dw_dev_config {
 	DEVICE_MMIO_RAM;
 	struct k_sem device_sync_sem;
@@ -190,6 +207,10 @@ struct i2c_dw_dev_config {
 #endif
 
 	struct i2c_target_config *slave_cfg;
+
+#if defined(CONFIG_PM_DEVICE)
+	struct i2c_dw_pm_ctx pm_ctx;
+#endif
 };
 
 #define Z_REG_READ(__sz)  sys_read##__sz
