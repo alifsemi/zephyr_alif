@@ -651,6 +651,231 @@ static int dma_pl330_submit(const struct device *dev, uint64_t dst,
 	return 0;
 }
 
+/*
+ * Hardware scatter-gather: generate one microcode program covering all blocks
+ * in the chain and start the channel. Each block gets SAR/DAR/CCR moves,
+ * burst loop(s), and DMAWMB. The hardware runs all blocks autonomously;
+ * the ISR fires once after the last block completes.
+ */
+static int dma_pl330_setup_ch_sg(const struct device *dev, uint32_t ch)
+{
+	struct dma_pl330_dev_data *const dev_data = dev->data;
+	const struct dma_pl330_config *const dev_cfg = dev->config;
+	struct dma_pl330_ch_config *channel_cfg = &dev_data->channels[ch];
+	struct dma_pl330_ch_internal *ch_handle = &channel_cfg->internal;
+	struct dma_block_config *blk = channel_cfg->head_block;
+	mem_addr_t dma_exec_addr = channel_cfg->dma_exec_addr;
+	unsigned int irq = dev_data->event_irq[ch];
+	uint32_t offset = 0;
+	uint32_t blk_num = 0;
+	int ret;
+
+	/* Clear channel state from any previous transfer */
+	memset(ch_handle, 0, sizeof(*ch_handle));
+
+	/* Set cache and peripheral attributes (same for every block) */
+	dma_pl330_config_channel(channel_cfg,
+		local_to_global(UINT_TO_POINTER(blk->dest_address)),
+		local_to_global(UINT_TO_POINTER(blk->source_address)),
+		blk->block_size);
+
+	/* Emit microcode segment for each block in the chain */
+	while (blk) {
+		uint64_t src = local_to_global(UINT_TO_POINTER(blk->source_address));
+		uint64_t dst = local_to_global(UINT_TO_POINTER(blk->dest_address));
+		uint32_t size = blk->block_size;
+		uint32_t lp0_start, lp1_start;
+		uint32_t loop_counter0 = 0, loop_counter1 = 0;
+		uint32_t srcbytewidth, dstbytewidth, loop_counter, residue;
+		uint32_t ccr, residue_blen;
+
+		/*
+		 * Pre-check: worst-case bytes per block (3×DMAMOV + nested-loop
+		 * overhead + single-loop + residue + DMAWMB = ~45 bytes) plus the
+		 * 6-byte epilogue (DMASEV + 4×DMAEND) must fit in the buffer.
+		 */
+		if (offset + 52 > MICROCODE_SIZE_MAX) {
+			LOG_ERR("DMA PL330 HW SG: microcode overflow at block %u"
+				" (%u bytes used, max %u)",
+				blk_num, offset, MICROCODE_SIZE_MAX);
+			return -ENOMEM;
+		}
+
+		/* Update per-block src/dst increment from address adjustment */
+		ch_handle->src_inc = (blk->source_addr_adj == DMA_ADDR_ADJ_INCREMENT) ? 1 : 0;
+		ch_handle->dst_inc = (blk->dest_addr_adj  == DMA_ADDR_ADJ_INCREMENT) ? 1 : 0;
+
+		/* Compute optimal burst size/length for this block's alignment */
+		ret = dma_pl330_calc_burstsz_len(channel_cfg, dst, src, size,
+						 dev_data->axi_data_width);
+		if (ret) {
+			LOG_ERR("DMA PL330 HW SG: burst size/len calc failed");
+			return ret;
+		}
+
+		ch_handle->src_addr   = src;
+		ch_handle->dst_addr   = dst;
+		ch_handle->trans_size = size;
+
+		/* DMAMOV SAR — source address for this block */
+		offset += dma_pl330_gen_mov(dma_exec_addr + offset,
+					    SAR, (uint32_t)src);
+
+		/* DMAMOV DAR — destination address for this block */
+		offset += dma_pl330_gen_mov(dma_exec_addr + offset,
+					    DAR, (uint32_t)dst);
+
+		/* DMAMOV CCR — channel control (burst size/len, inc, security) */
+		ccr = dma_pl330_ch_ccr(ch_handle);
+		offset += dma_pl330_gen_mov(dma_exec_addr + offset,
+					    CCR, ccr);
+
+		/* Compute full-burst loop count and leftover residue bytes */
+		dma_pl330_get_counter(ch_handle, &srcbytewidth, &dstbytewidth,
+				      &loop_counter, &residue);
+
+		if (loop_counter >= PL330_LOOP_COUNTER0_MAX) {
+			/* Nested loop: LC1 (outer) x LC0 (inner) */
+			loop_counter0 = PL330_LOOP_COUNTER0_MAX - 1;
+			loop_counter1 = loop_counter / PL330_LOOP_COUNTER0_MAX - 1;
+
+			/* DMALP LC1 */
+			dma_pl330_gen_op(OP_DMA_LOOP_COUNT1,
+					 dma_exec_addr + offset,
+					 loop_counter1 & 0xff);
+			offset += 2;
+
+			/* DMALP LC0 */
+			dma_pl330_gen_op(OP_DMA_LOOP,
+					 dma_exec_addr + offset,
+					 loop_counter0 & 0xff);
+			offset += 2;
+
+			/* Mark start of inner loop body */
+			lp1_start = offset;
+			lp0_start = offset;
+
+			/* Loop body */
+			offset = dma_pl330_gen_copy_op(ch_handle,
+						       dma_exec_addr, offset,
+						       channel_cfg->direction,
+						       ch_handle->dst_burst_len);
+
+			/* DMALPEND (LC0) — end inner loop */
+			dma_pl330_gen_op(OP_DMA_LP_BK_JMP1,
+					 dma_exec_addr + offset,
+					 (offset - lp0_start) & 0xff);
+			offset += 2;
+
+			/* Reload LC0 for next outer iteration */
+			dma_pl330_gen_op(OP_DMA_LOOP,
+					 dma_exec_addr + offset,
+					 loop_counter0 & 0xff);
+			offset += 2;
+
+			/* DMALPEND (LC1) — end outer loop */
+			dma_pl330_gen_op(OP_DMA_LP_BK_JMP2,
+					 dma_exec_addr + offset,
+					 (offset - lp1_start) & 0xff);
+			offset += 2;
+		}
+
+		if ((loop_counter % PL330_LOOP_COUNTER0_MAX) != 0) {
+			/* Single LC0 loop for remaining full bursts */
+			loop_counter0 = (loop_counter % PL330_LOOP_COUNTER0_MAX) - 1;
+
+			/* DMALP LC0 */
+			dma_pl330_gen_op(OP_DMA_LOOP,
+					 dma_exec_addr + offset,
+					 loop_counter0 & 0xff);
+			offset += 2;
+
+			/* Mark start of loop body */
+			lp0_start = offset;
+
+			/* Loop body: DMALD + DMAST */
+			offset = dma_pl330_gen_copy_op(ch_handle,
+						       dma_exec_addr, offset,
+						       channel_cfg->direction,
+						       ch_handle->dst_burst_len);
+
+			/* DMALPEND (LC0) */
+			dma_pl330_gen_op(OP_DMA_LP_BK_JMP1,
+					 dma_exec_addr + offset,
+					 (offset - lp0_start) & 0xff);
+			offset += 2;
+		}
+
+		if (residue != 0) {
+			/* Residue: shrink burst length and do a single DMALD/DMAST */
+			if (residue < srcbytewidth) {
+				LOG_ERR("DMA PL330 HW SG: block size not aligned to"
+					" burst width (residue %u < width %u)",
+					residue, srcbytewidth);
+				return -EINVAL;
+			}
+			residue_blen = (residue / srcbytewidth) - 1;
+
+			/* Update CCR with the smaller residue burst length */
+			ccr &= ~((CC_BRSTLEN_MASK << CC_SRCBRSTLEN_SHIFT) |
+				 (CC_BRSTLEN_MASK << CC_DSTBRSTLEN_SHIFT));
+			ccr |= (residue_blen << CC_SRCBRSTLEN_SHIFT) |
+			       (residue_blen << CC_DSTBRSTLEN_SHIFT);
+
+			/* DMAMOV CCR with residue burst length */
+			offset += dma_pl330_gen_mov(dma_exec_addr + offset,
+						    CCR, ccr);
+
+			/* Single DMALD + DMAST for the residue bytes */
+			offset = dma_pl330_gen_copy_op(ch_handle,
+						       dma_exec_addr, offset,
+						       channel_cfg->direction,
+						       residue_blen);
+		}
+
+		/* DMAWMB — flush AXI writes before next block's SAR/DAR */
+		sys_write8(OP_DMA_WMB, dma_exec_addr + offset);
+		offset++;
+
+		blk_num++;
+		/* Advance to the next block in the chain */
+		blk = blk->next_block;
+	}
+
+	/* DMASEV — signal completion interrupt (callback mode only) */
+	if (channel_cfg->dma_callback) {
+		dma_pl330_gen_op(OP_DMA_SEV, dma_exec_addr + offset,
+				 (irq & 0x1f) << 3);
+		offset += 2;
+	}
+
+	/* DMAEND x4 */
+	sys_write8(OP_DMA_END, dma_exec_addr + offset);
+	sys_write8(OP_DMA_END, dma_exec_addr + offset + 1);
+	sys_write8(OP_DMA_END, dma_exec_addr + offset + 2);
+	sys_write8(OP_DMA_END, dma_exec_addr + offset + 3);
+
+	/* Flush D-cache so PL330 reads the microcode we just wrote */
+	sys_cache_data_flush_range(UINT_TO_POINTER(dma_exec_addr), offset + 4);
+
+	/* Start the channel — fires DMAGO via the PL330 debug interface */
+	ret = dma_pl330_start_dma_ch(dev, dev_cfg->reg_base, ch,
+				     ch_handle->nonsec_mode);
+	if (ret) {
+		return ret;
+	}
+
+	/* Polling mode: block until all blocks complete */
+	if (!channel_cfg->dma_callback) {
+		ret = dma_pl330_wait(dev_cfg->reg_base, ch);
+		if (ret) {
+			LOG_ERR("DMA PL330 HW SG: timeout waiting for completion");
+		}
+	}
+
+	return ret;
+}
+
 static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 			       struct dma_config *cfg)
 {
@@ -700,7 +925,6 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 	channel_cfg->periph_slot = cfg->dma_slot;
 
 	channel_cfg->direction = cfg->channel_direction;
-	channel_cfg->dst_addr_adj = cfg->head_block->dest_addr_adj;
 
 	channel_cfg->src_addr =
 		local_to_global(UINT_TO_POINTER(cfg->head_block->source_address));
@@ -729,8 +953,8 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 	/*
 	 * Scatter-gather configuration
 	 *
-	 * Initialize the scatter-gather chain pointers and count the total
-	 * number of blocks. Validate that address adjustments are supported.
+	 * Initialize scatter-gather chain pointers. If source_gather_en is set,
+	 * enable HW SG mode and validate all blocks; otherwise use SW chaining.
 	 */
 	if (!cfg->head_block) {
 		return -EINVAL;
@@ -756,18 +980,58 @@ static int dma_pl330_configure(const struct device *dev, uint32_t channel,
 	channel_cfg->head_block    = &channel_cfg->block_pool[0];
 	channel_cfg->current_block = &channel_cfg->block_pool[0];
 
-	if (cfg->head_block->source_addr_adj == DMA_ADDR_ADJ_INCREMENT ||
-	    cfg->head_block->source_addr_adj == DMA_ADDR_ADJ_NO_CHANGE) {
-		channel_cfg->src_addr_adj = cfg->head_block->source_addr_adj;
-	} else {
-		return -ENOTSUP;
-	}
+	/*
+	 * Hardware scatter-gather: if source_gather_en is set, validate every
+	 * block's address adjustments and cache the block count.
+	 * SW path validates head_block only.
+	 */
+	if (cfg->head_block->source_gather_en) {
+		struct dma_block_config *blk = cfg->head_block;
+		uint32_t count = 0;
 
-	if (cfg->head_block->dest_addr_adj == DMA_ADDR_ADJ_INCREMENT ||
-	    cfg->head_block->dest_addr_adj == DMA_ADDR_ADJ_NO_CHANGE) {
+		channel_cfg->use_hw_sg = true;
+		channel_cfg->block_count = cfg->block_count;
+		channel_cfg->src_addr_adj = cfg->head_block->source_addr_adj;
 		channel_cfg->dst_addr_adj = cfg->head_block->dest_addr_adj;
+
+		/* walk the chain and validate every block */
+		while (blk) {
+			if (blk->source_addr_adj != DMA_ADDR_ADJ_INCREMENT &&
+			    blk->source_addr_adj != DMA_ADDR_ADJ_NO_CHANGE) {
+				return -ENOTSUP;
+			}
+			if (blk->dest_addr_adj != DMA_ADDR_ADJ_INCREMENT &&
+			    blk->dest_addr_adj != DMA_ADDR_ADJ_NO_CHANGE) {
+				return -ENOTSUP;
+			}
+			count++;
+			blk = blk->next_block;
+		}
+
+		/* validate block count matches what app declared */
+		if (count != cfg->block_count) {
+			LOG_ERR("DMA PL330: block_count mismatch: expected %u got %u",
+				cfg->block_count, count);
+			return -EINVAL;
+		}
 	} else {
-		return -ENOTSUP;
+		channel_cfg->use_hw_sg = false;
+		channel_cfg->block_count = 0;
+
+		/* SW SG path — validate head block address adjustments only */
+		if (cfg->head_block->source_addr_adj == DMA_ADDR_ADJ_INCREMENT ||
+		    cfg->head_block->source_addr_adj == DMA_ADDR_ADJ_NO_CHANGE) {
+			channel_cfg->src_addr_adj = cfg->head_block->source_addr_adj;
+		} else {
+			return -ENOTSUP;
+		}
+
+		if (cfg->head_block->dest_addr_adj == DMA_ADDR_ADJ_INCREMENT ||
+		    cfg->head_block->dest_addr_adj == DMA_ADDR_ADJ_NO_CHANGE) {
+			channel_cfg->dst_addr_adj = cfg->head_block->dest_addr_adj;
+		} else {
+			return -ENOTSUP;
+		}
 	}
 
 	return 0;
@@ -799,7 +1063,14 @@ static int dma_pl330_transfer_start(const struct device *dev,
 	 * The ISR will handle advancing through subsequent blocks.
 	 */
 	channel_cfg->current_block = channel_cfg->head_block;
-	ret = dma_pl330_start_block(dev, channel, channel_cfg->current_block);
+
+	if (channel_cfg->use_hw_sg) {
+		/* HW SG mode: one microcode program for the entire chain */
+		ret = dma_pl330_setup_ch_sg(dev, channel);
+	} else {
+		/* SW SG mode: one microcode program per block, starting with head_block */
+		ret = dma_pl330_start_block(dev, channel, channel_cfg->current_block);
+	}
 
 	if (!channel_cfg->dma_callback || ret) {
 		/* Free the channel if polling was used or en error has happen */
@@ -884,6 +1155,15 @@ static int dma_pl330_transfer_stop(const struct device *dev, uint32_t channel)
 	ret = dma_pl330_stop_dma_ch(dev, reg_base, channel);
 	atomic_set(&dev_data->channels[channel].channel_is_active, DMA_CHANNEL_IS_FREE);
 
+	/*
+	 * Reset current_block back to head so a restart after stop
+	 * begins from the first block.
+	 */
+	dev_data->channels[channel].current_block =
+		dev_data->channels[channel].head_block;
+	dev_data->channels[channel].use_hw_sg = false;
+	dev_data->channels[channel].block_count = 0;
+
 	irq_unlock(irq_key);
 	return ret;
 }
@@ -943,8 +1223,13 @@ static void dma_pl330_isr(const struct device *dev)
 				 * If there are more blocks in the chain, advance to the next
 				 * block and start its transfer. Skip the completion callback
 				 * until all blocks are done.
+				 *
+				 * In HW SG mode, the hardware handles all blocks autonomously
+				 * in one microcode program — ISR fires once at the end, so we
+				 * skip chaining entirely and go straight to the callback.
 				 */
-				if (channel_cfg->current_block &&
+				if (!channel_cfg->use_hw_sg &&
+					channel_cfg->current_block &&
 					channel_cfg->current_block->next_block) {
 
 					/* advance to next block */
