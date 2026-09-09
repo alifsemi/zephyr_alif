@@ -9,3 +9,14 @@ config GPIO_DW
 	depends on DT_HAS_SNPS_DESIGNWARE_GPIO_ENABLED
 	help
 	  Enable driver for Designware GPIO
+
+config GPIO_DW_DMA
+	bool "DesignWare GPIO pin DMA trigger"
+	depends on GPIO_DW && DMA
+	help
+	  Treat selected pins as DMA request sources: keep INTMASK set and
+	  do not EOI them in the GPIO ISR. Same programming for every
+	  DesignWare port that has GPIOx_n_DMA_REQ (GPIO16 on Ensemble
+	  Eagle is not a special case in this driver). Which DMA instance,
+	  event-router group, and request number come from the application
+	  overlay, not from this driver.
