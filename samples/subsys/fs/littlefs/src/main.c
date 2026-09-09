@@ -285,6 +285,12 @@ static int littlefs_mount(struct fs_mount_t *mp)
 {
 	int rc;
 
+	if (CONFIG_APP_LITTLEFS_BLOCK_SIZE > 0) {
+		struct fs_littlefs *lfs = mp->fs_data;
+
+		lfs->cfg.block_size = CONFIG_APP_LITTLEFS_BLOCK_SIZE;
+	}
+
 	rc = littlefs_flash_erase((uintptr_t)mp->storage_dev);
 	if (rc < 0) {
 		return rc;
