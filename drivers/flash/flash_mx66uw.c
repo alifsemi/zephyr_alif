@@ -939,11 +939,22 @@ static const struct flash_parameters *flash_mx66uw_get_parameters(const struct d
 	return &(dev_cfg->flash_param);
 }
 
+static int flash_mx66uw_get_size(const struct device *dev, uint64_t *size)
+{
+	const struct mx_flash_ospi_config *dev_cfg = dev->config;
+
+	*size = (uint64_t)dev_cfg->flash_param.num_of_sector *
+		dev_cfg->flash_param.sector_size;
+
+	return 0;
+}
+
 static const struct flash_driver_api flash_mx66uw_driver_api = {
 	.read = flash_mx66uw_read,
 	.write = flash_mx66uw_write,
 	.erase = flash_mx66uw_erase,
 	.get_parameters = flash_mx66uw_get_parameters,
+	.get_size = flash_mx66uw_get_size,
 #ifdef CONFIG_FLASH_PAGE_LAYOUT
 	.page_layout = flash_mx66uw_page_layout,
 #endif
