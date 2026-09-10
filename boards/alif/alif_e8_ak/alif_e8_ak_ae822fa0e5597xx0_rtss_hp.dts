@@ -73,6 +73,8 @@
 };
 
 &ospi1 {
+	xip-wait-cycles = <10>;
+
 	/* External Flash on OSPI */
 	ospi_flash: ospi_flash@0 {
 		compatible = "mxicy,mx66uw-flash";
