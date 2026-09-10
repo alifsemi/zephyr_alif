@@ -1074,6 +1074,8 @@ static int flash_is25wx_ospi_init(const struct device *dev)
 	init_config.xip_wrap_cmd = ISSI_XIP_WRAP_CMD;
 	init_config.xip_rxds_vl_en = DT_PROP(OSPI_CTRL_NODE, xip_rxds_vl_en);
 	init_config.xip_wait_cycles = DT_PROP(OSPI_CTRL_NODE, xip_wait_cycles);
+	init_config.xip_inst_len = XIP_CTRL_INST_LEN_8_BIT;
+	init_config.xip_inst_ddr_en = 0;
 
 	memset(&dev_data->trans_conf, 0, sizeof(struct ospi_trans_config));
 
