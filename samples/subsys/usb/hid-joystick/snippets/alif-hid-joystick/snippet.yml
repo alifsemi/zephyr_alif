@@ -11,7 +11,7 @@ append:
 
 boards:
   # E1C Balletto boards (gpio5 joystick)
-  /alif_e1c_dk.*/.*/rtss_he/:
+  /alif_(b1|e1c)_dk.*/.*/rtss_he/:
     append:
       EXTRA_DTC_OVERLAY_FILE: alif_balletto_dk.overlay
 
