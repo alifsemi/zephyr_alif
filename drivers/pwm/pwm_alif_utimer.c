@@ -131,6 +131,19 @@ static int pwm_alif_utimer_set_cycles(const struct device *dev, uint32_t channel
 		}
 
 		data->ch[channel].was_enabled = false;
+		/* Stop this timer when no channel is still driving PWM. */
+		bool any_ch_enabled = false;
+
+		for (uint8_t i = 0; i < NUM_CHANNELS; i++) {
+			if (data->ch[i].was_enabled) {
+				any_ch_enabled = true;
+				break;
+			}
+		}
+		if (!any_ch_enabled &&
+			alif_utimer_counter_running(global_base, cfg->timer_id)) {
+			alif_utimer_stop_counter(global_base, cfg->timer_id);
+		}
 		return 0;
 	}
 
