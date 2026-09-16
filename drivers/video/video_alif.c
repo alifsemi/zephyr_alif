@@ -985,7 +985,7 @@ static int alif_video_cam_init(const struct device *dev)
 	struct video_cam_data *data = dev->data;
 	int ret = 0;
 
-	if (config->pixclk) {
+	if (config->pixclk && config->interface == CAM_INTERFACE_SERIAL) {
 		ret = clock_control_on(config->clk_dev, config->pixclk);
 		if (ret) {
 			return ret;
@@ -1193,7 +1193,7 @@ static int alif_cam_resume(const struct device *dev)
 	}
 #endif
 
-	if (config->pixclk) {
+	if (config->pixclk && config->interface == CAM_INTERFACE_SERIAL) {
 		ret = clock_control_on(config->clk_dev, config->pixclk);
 		if (ret) {
 			return ret;
