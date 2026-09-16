@@ -63,8 +63,9 @@
 };
 
 &ospi0 {
-	aps512xxn: aps512xxn {
+	aps512xxn: aps512xxn@0 {
 		compatible = "alif,apmemory-aps512xxn";
+		reg = <0>;
 		size = <DT_SIZE_M(64)>;
 		x16-data-transfer-mode;
 		latency-code = <4>;
@@ -73,6 +74,20 @@
 };
 
 &ospi1 {
+	compatible = "snps,designware-ospi";
+	reg = <0x83002000 0x1000>,
+	      <0xC0000000 0x20000000>,
+	      <0x83003000 0x100>;
+	reg-names = "core", "xip", "aes";
+	/delete-property/ packet-data-limit;
+	/delete-property/ fifo-depth;
+	/delete-property/ op-mode;
+	/delete-property/ rx-fifo-threshold;
+	aes-reg = <0x83003000 0x100>;
+	bus-speed = <100000000>;
+	cs-pin = <0>;
+	xip-base-address = <0xC0000000 0x20000000>;
+
 	/* External Flash on OSPI */
 	ospi_flash: ospi_flash@0 {
 		compatible = "mxicy,mx66uw-flash";
