@@ -286,7 +286,7 @@ static int32_t udc_dwc3_ep0_recv(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t
 	ept->ep_requested_bytes = buf_len;
 	ept->bytes_txed = 0U;
 	trb_ptr = &drv->ep0_trb;
-	sys_cache_data_flush_range(bufferptr, buf_len);
+	sys_cache_data_flush_and_invd_range(bufferptr, buf_len);
 #if CONFIG_UDC_DWC3_ALIF
 	trb_ptr->buf_ptr_low  =  LOWER_32_BITS(local_to_global((uint32_t *)bufferptr));
 #else
@@ -629,7 +629,7 @@ static int32_t udc_dwc3_bulk_int_recv(udc_dwc3_driver_t *drv, uint8_t ep_num, ui
 	if (ept->trb_enqueue == NO_OF_TRB_PER_EP) {
 		ept->trb_enqueue = 0U;
 	}
-	sys_cache_data_flush_range(bufferptr, buf_len);
+	sys_cache_data_flush_and_invd_range(bufferptr, buf_len);
 #if CONFIG_UDC_DWC3_ALIF
 	trb_ptr->buf_ptr_low  = LOWER_32_BITS(local_to_global((uint32_t *)bufferptr));
 #else
@@ -641,7 +641,7 @@ static int32_t udc_dwc3_bulk_int_recv(udc_dwc3_driver_t *drv, uint8_t ep_num, ui
 	SET_BIT(trb_ptr->ctrl, USB_TRB_CTRL_CSP | USB_TRB_CTRL_IOC | USB_TRB_CTRL_ISP_IMI
 			| USB_TRB_CTRL_HWO);
 
-	sys_cache_data_flush_range(trb_ptr, sizeof(*trb_ptr));
+	sys_cache_data_flush_and_invd_range(trb_ptr, sizeof(*trb_ptr));
 	params.param1 = (uint32_t)trb_ptr;
 	if ((ept->ep_status & USB_EP_BUSY) != 0U) {
 		cmd = USB_DEPCMD_UPDATETRANSFER;
