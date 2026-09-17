@@ -53,6 +53,15 @@ struct jpeg_hantro_vc9000e_data {
 	int      encoding_error;
 	uint32_t header_size;
 	struct jpeg_header_info header_info;
+	/*
+	 * Storage for the capability reported on the compressed output
+	 * endpoint (VIDEO_EP_OUT). It is filled at query time under @ref lock,
+	 * either from the currently configured encoding resolution so that
+	 * consumers (e.g. the UVC class) advertise the exact frame size the
+	 * encoder will actually produce, or from the supported size range while
+	 * no format has been set. Index 1 is the list terminator.
+	 */
+	struct video_format_cap out_caps[2];
 };
 
 /**
@@ -176,16 +185,110 @@ static int jpeg_hw_init(const struct device *dev)
 }
 
 /**
- * @brief Set the video format for encoding.
+ * @brief Program the uncompressed input pixel format.
  *
- * Validates the requested pixel format and dimensions, configures the
- * hardware picture size, fill values, and YUV420 mode registers.
+ * The caller must hold @ref jpeg_hantro_vc9000e_data.lock.
+ *
+ * @param dev Pointer to the device structure.
+ * @param pixelformat VIDEO_PIX_FMT_NV12 or VIDEO_PIX_FMT_NV21.
+ */
+static void jpeg_hantro_vc9000e_set_input_pixfmt(const struct device *dev,
+						  uint32_t pixelformat)
+{
+	if (pixelformat == VIDEO_PIX_FMT_NV21) {
+		/* Enable chroma swap (CrCb) in semiplanar input format*/
+		jpeg_modify_reg(dev, JPEG_SWREG45_OFFSET,
+				JPEG_CHROMA_SWAP_MASK, JPEG_CHROMA_SWAP);
+	} else {
+		 /* Disable chroma swap (CbCr) in semiplanar input format*/
+		jpeg_modify_reg(dev, JPEG_SWREG45_OFFSET,
+				JPEG_CHROMA_SWAP_MASK, ~JPEG_CHROMA_SWAP);
+	}
+
+	/* Set mode to 4:2:0 */
+	jpeg_modify_reg(dev, JPEG_SWREG18_OFFSET, JPEG_MODE_MASK, JPEG_MODE_420);
+	jpeg_modify_reg(dev, JPEG_SWREG20_OFFSET, JPEG_CODING_MODE_MASK,
+			JPEG_CODING_MODE_420);
+	jpeg_modify_reg(dev, JPEG_SWREG38_OFFSET, JPEG_INPUT_FORMAT_MASK,
+			JPEG_INPUT_FORMAT_YUV420SP << JPEG_INPUT_FORMAT_POS);
+}
+
+/**
+ * @brief Program the encode resolution.
+ *
+ * The encoder produces one JPEG frame per input frame, at the input
+ * resolution, so a single resolution is shared by both endpoints. The
+ * caller must hold @ref jpeg_hantro_vc9000e_data.lock and must have
+ * range-checked @p width and @p height.
+ *
+ * @param dev Pointer to the device structure.
+ * @param width Frame width in pixels.
+ * @param height Frame height in pixels.
+ */
+static void jpeg_hantro_vc9000e_set_resolution(const struct device *dev,
+						uint32_t width, uint32_t height)
+{
+	struct jpeg_hantro_vc9000e_data *data = dev->data;
+
+	data->fmt.width  = width;
+	data->fmt.height = height;
+	/* The encoding width and height are 16-pixels aligned */
+	data->encoding_width  = ROUND_UP(width, JPEG_ENC_ALIGNMENT);
+	data->encoding_height = ROUND_UP(height, JPEG_ENC_ALIGNMENT);
+
+	uint16_t enc_w = data->encoding_width >> JPEG_PIC_WH_PIXEL_SHIFT;
+	uint16_t enc_h = data->encoding_height >> JPEG_PIC_WH_PIXEL_SHIFT;
+
+	jpeg_modify_reg(dev, JPEG_SWREG5_OFFSET, JPEG_PIC_WIDTH_MASK,
+			(enc_w & JPEG_PIC_WH_MASK) << JPEG_PIC_WIDTH_POS);
+	jpeg_modify_reg(dev, JPEG_SWREG249_OFFSET, JPEG_PIC_WIDTH_MSB_MASK,
+			(enc_w >> JPEG_PIC_WH_FIELD_WIDTH) << JPEG_PIC_WIDTH_MSB_POS);
+	jpeg_modify_reg(dev, JPEG_SWREG5_OFFSET, JPEG_PIC_HEIGHT_MASK,
+			(enc_h & JPEG_PIC_WH_MASK) << JPEG_PIC_HEIGHT_POS);
+	jpeg_modify_reg(dev, JPEG_SWREG249_OFFSET, JPEG_PIC_HEIGHT_MSB_MASK,
+			(enc_h >> JPEG_PIC_WH_FIELD_WIDTH) << JPEG_PIC_HEIGHT_MSB_POS);
+
+	uint8_t xfill = (width % JPEG_ENC_ALIGNMENT) ?
+			(JPEG_ENC_ALIGNMENT - width % JPEG_ENC_ALIGNMENT) /
+			JPEG_YUV420_CHROMA_DIV : 0;
+	uint8_t yfill = (height % JPEG_ENC_ALIGNMENT) ?
+			(JPEG_ENC_ALIGNMENT - height % JPEG_ENC_ALIGNMENT) : 0;
+
+	jpeg_modify_reg(dev, JPEG_SWREG38_OFFSET, JPEG_XFILL_MASK,
+			(xfill & JPEG_XFILL_FIELD_MASK) << JPEG_XFILL_POS);
+	jpeg_modify_reg(dev, JPEG_SWREG38_OFFSET, JPEG_YFILL_MASK,
+			(yfill & JPEG_YFILL_FIELD_MASK) << JPEG_YFILL_POS);
+	jpeg_modify_reg(dev, JPEG_SWREG193_OFFSET, JPEG_XFILL_MSB_MASK,
+			(xfill >> JPEG_XFILL_FIELD_WIDTH) << JPEG_XFILL_MSB_POS);
+	jpeg_modify_reg(dev, JPEG_SWREG193_OFFSET, JPEG_YFILL_MSB_MASK,
+			(yfill >> JPEG_YFILL_FIELD_WIDTH) << JPEG_YFILL_MSB_POS);
+}
+
+/**
+ * @brief Set the video format on an endpoint.
+ *
+ * The endpoints carry the formats get_caps() advertises for them:
+ *
+ * - VIDEO_EP_IN takes the uncompressed input format (NV12 / NV21). This
+ *   selects the chroma order and input line stride and sets the encode
+ *   resolution.
+ * - VIDEO_EP_OUT takes VIDEO_PIX_FMT_JPEG. Its width and height set the
+ *   encode resolution; the input pixel format and stride configured on
+ *   VIDEO_EP_IN are kept, except that the stride is raised to a packed
+ *   stride if it is smaller than the new width. If no input format has been
+ *   configured yet, packed NV12 is assumed.
+ *
+ * For compatibility with earlier releases, where the input format was
+ * configured through VIDEO_EP_OUT, NV12 / NV21 are still accepted on
+ * VIDEO_EP_OUT and on the wildcard and behave as on VIDEO_EP_IN. That use
+ * is deprecated; new code should use VIDEO_EP_IN.
  *
  * @param dev Pointer to the device structure.
  * @param ep Video endpoint identifier.
  * @param fmt Pointer to the video format structure.
  *
- * @return 0 on success, negative errno on failure.
+ * @return 0 on success, -EINVAL on a bad endpoint or out-of-range size,
+ *         -ENOTSUP if the pixel format is not valid on that endpoint.
  */
 static int jpeg_hantro_vc9000e_set_format(const struct device *dev,
 					   enum video_endpoint_id ep,
@@ -193,7 +296,7 @@ static int jpeg_hantro_vc9000e_set_format(const struct device *dev,
 {
 	struct jpeg_hantro_vc9000e_data *data = dev->data;
 
-	if (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL) {
+	if (ep != VIDEO_EP_IN && ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL) {
 		return -EINVAL;
 	}
 
@@ -219,71 +322,50 @@ static int jpeg_hantro_vc9000e_set_format(const struct device *dev,
 		return -EINVAL;
 	}
 
-	k_mutex_lock(&data->lock, K_FOREVER);
+	if (fmt->pixelformat == VIDEO_PIX_FMT_JPEG) {
+		if (ep == VIDEO_EP_IN) {
+			LOG_ERR("JPEG is not a valid input format");
+			return -ENOTSUP;
+		}
 
-	switch (fmt->pixelformat) {
-	case VIDEO_PIX_FMT_NV12:
-		 /* Disable chroma swap (CbCr) in semiplanar input format*/
-		jpeg_modify_reg(dev, JPEG_SWREG45_OFFSET,
-				JPEG_CHROMA_SWAP_MASK, ~JPEG_CHROMA_SWAP);
-		break;
-	case VIDEO_PIX_FMT_NV21:
-		/* Enable chroma swap (CrCb) in semiplanar input format*/
-		jpeg_modify_reg(dev, JPEG_SWREG45_OFFSET,
-				JPEG_CHROMA_SWAP_MASK, JPEG_CHROMA_SWAP);
-		break;
-	default:
-		LOG_ERR("Unsupported pixel format: 0x%x", fmt->pixelformat);
+		k_mutex_lock(&data->lock, K_FOREVER);
+		if (data->fmt.pixelformat == 0) {
+			/* No input format configured yet: assume packed NV12 */
+			data->fmt.pixelformat = VIDEO_PIX_FMT_NV12;
+			jpeg_hantro_vc9000e_set_input_pixfmt(dev, VIDEO_PIX_FMT_NV12);
+		}
+		jpeg_hantro_vc9000e_set_resolution(dev, fmt->width, fmt->height);
+		if (data->fmt.pitch < fmt->width) {
+			data->fmt.pitch = fmt->width;
+		}
 		k_mutex_unlock(&data->lock);
+
+		/* The compressed stream has no line stride */
+		fmt->pitch = 0;
+
+		return 0;
+	}
+
+	if (fmt->pixelformat != VIDEO_PIX_FMT_NV12 &&
+	    fmt->pixelformat != VIDEO_PIX_FMT_NV21) {
+		LOG_ERR("Unsupported pixel format: 0x%x", fmt->pixelformat);
 		return -ENOTSUP;
 	}
 
+	k_mutex_lock(&data->lock, K_FOREVER);
+	jpeg_hantro_vc9000e_set_input_pixfmt(dev, fmt->pixelformat);
 	memcpy(&data->fmt, fmt, sizeof(struct video_format));
-	/* The encoding width and height are 16-pixels aligned */
-	data->encoding_width  = ROUND_UP(fmt->width, JPEG_ENC_ALIGNMENT);
-	data->encoding_height = ROUND_UP(fmt->height, JPEG_ENC_ALIGNMENT);
-
-	uint16_t width  = data->encoding_width >> JPEG_PIC_WH_PIXEL_SHIFT;
-	uint16_t height = data->encoding_height >> JPEG_PIC_WH_PIXEL_SHIFT;
-
-	jpeg_modify_reg(dev, JPEG_SWREG5_OFFSET, JPEG_PIC_WIDTH_MASK,
-			(width & JPEG_PIC_WH_MASK) << JPEG_PIC_WIDTH_POS);
-	jpeg_modify_reg(dev, JPEG_SWREG249_OFFSET, JPEG_PIC_WIDTH_MSB_MASK,
-			(width >> JPEG_PIC_WH_FIELD_WIDTH) << JPEG_PIC_WIDTH_MSB_POS);
-	jpeg_modify_reg(dev, JPEG_SWREG5_OFFSET, JPEG_PIC_HEIGHT_MASK,
-			(height & JPEG_PIC_WH_MASK) << JPEG_PIC_HEIGHT_POS);
-	jpeg_modify_reg(dev, JPEG_SWREG249_OFFSET, JPEG_PIC_HEIGHT_MSB_MASK,
-			(height >> JPEG_PIC_WH_FIELD_WIDTH) << JPEG_PIC_HEIGHT_MSB_POS);
-
-	uint8_t xfill = (fmt->width % JPEG_ENC_ALIGNMENT) ?
-			(JPEG_ENC_ALIGNMENT - fmt->width % JPEG_ENC_ALIGNMENT) /
-			JPEG_YUV420_CHROMA_DIV : 0;
-	uint8_t yfill = (fmt->height % JPEG_ENC_ALIGNMENT) ?
-			(JPEG_ENC_ALIGNMENT - fmt->height % JPEG_ENC_ALIGNMENT) : 0;
-
-	jpeg_modify_reg(dev, JPEG_SWREG38_OFFSET, JPEG_XFILL_MASK,
-			(xfill & JPEG_XFILL_FIELD_MASK) << JPEG_XFILL_POS);
-	jpeg_modify_reg(dev, JPEG_SWREG38_OFFSET, JPEG_YFILL_MASK,
-			(yfill & JPEG_YFILL_FIELD_MASK) << JPEG_YFILL_POS);
-	jpeg_modify_reg(dev, JPEG_SWREG193_OFFSET, JPEG_XFILL_MSB_MASK,
-			(xfill >> JPEG_XFILL_FIELD_WIDTH) << JPEG_XFILL_MSB_POS);
-	jpeg_modify_reg(dev, JPEG_SWREG193_OFFSET, JPEG_YFILL_MSB_MASK,
-			(yfill >> JPEG_YFILL_FIELD_WIDTH) << JPEG_YFILL_MSB_POS);
-
-	/* Set mode to 4:2:0 */
-	jpeg_modify_reg(dev, JPEG_SWREG18_OFFSET, JPEG_MODE_MASK, JPEG_MODE_420);
-	jpeg_modify_reg(dev, JPEG_SWREG20_OFFSET, JPEG_CODING_MODE_MASK,
-			JPEG_CODING_MODE_420);
-	jpeg_modify_reg(dev, JPEG_SWREG38_OFFSET, JPEG_INPUT_FORMAT_MASK,
-			JPEG_INPUT_FORMAT_YUV420SP << JPEG_INPUT_FORMAT_POS);
-
+	jpeg_hantro_vc9000e_set_resolution(dev, fmt->width, fmt->height);
 	k_mutex_unlock(&data->lock);
 
 	return 0;
 }
 
 /**
- * @brief Get the current video format.
+ * @brief Get the current video format of an endpoint.
+ *
+ * VIDEO_EP_IN (and the wildcard) report the uncompressed input format.
+ * VIDEO_EP_OUT reports VIDEO_PIX_FMT_JPEG at the encode resolution.
  *
  * @param dev Pointer to the device structure.
  * @param ep Video endpoint identifier.
@@ -297,7 +379,7 @@ static int jpeg_hantro_vc9000e_get_format(const struct device *dev,
 {
 	struct jpeg_hantro_vc9000e_data *data = dev->data;
 
-	if (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL) {
+	if (ep != VIDEO_EP_IN && ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL) {
 		return -EINVAL;
 	}
 
@@ -307,7 +389,16 @@ static int jpeg_hantro_vc9000e_get_format(const struct device *dev,
 	}
 
 	k_mutex_lock(&data->lock, K_FOREVER);
-	memcpy(fmt, &data->fmt, sizeof(struct video_format));
+	if (ep == VIDEO_EP_OUT) {
+		/* Compressed output: JPEG at the encode resolution */
+		fmt->pixelformat = VIDEO_PIX_FMT_JPEG;
+		fmt->width  = data->fmt.width;
+		fmt->height = data->fmt.height;
+		fmt->pitch  = 0;
+	} else {
+		/* Uncompressed input format (NV12 / NV21) */
+		memcpy(fmt, &data->fmt, sizeof(struct video_format));
+	}
 	k_mutex_unlock(&data->lock);
 
 	return 0;
@@ -643,7 +734,20 @@ static const struct video_format_cap jpeg_hantro_vc9000e_format_caps[] = {
 /**
  * @brief Get the encoder capabilities.
  *
- * Returns the list of supported pixel formats and resolution ranges.
+ * The encoder exposes two kinds of capability depending on the endpoint:
+ *
+ * - VIDEO_EP_IN (or the wildcard) lists the uncompressed input pixel formats
+ *   the encoder accepts (NV12 / NV21) over the full supported size range.
+ * - VIDEO_EP_OUT lists the compressed JPEG output. Once a format has been set,
+ *   this is a single discrete frame whose size matches the configured encoding
+ *   resolution, so that downstream consumers (such as the UVC class) advertise
+ *   the exact frame size the encoder will produce. Before any format has been
+ *   set there is no such resolution to report, so the full supported size range
+ *   is returned instead.
+ *
+ * The VIDEO_EP_OUT list is built in per-device storage and is only valid until
+ * the next set_format() or get_caps() call on the same device. A caller that
+ * needs to keep the values must copy them.
  *
  * @param dev Pointer to the device structure.
  * @param ep Video endpoint identifier.
@@ -655,11 +759,48 @@ static int jpeg_hantro_vc9000e_get_caps(const struct device *dev,
 					 enum video_endpoint_id ep,
 					 struct video_caps *caps)
 {
-	if (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL) {
+	struct jpeg_hantro_vc9000e_data *data = dev->data;
+
+	if (ep == VIDEO_EP_IN || ep == VIDEO_EP_ALL) {
+		caps->format_caps = jpeg_hantro_vc9000e_format_caps;
+		return 0;
+	}
+
+	if (ep != VIDEO_EP_OUT) {
 		return -EINVAL;
 	}
 
-	caps->format_caps = jpeg_hantro_vc9000e_format_caps;
+	k_mutex_lock(&data->lock, K_FOREVER);
+
+	if (data->fmt.width != 0 && data->fmt.height != 0) {
+		/* Configured: the encoder produces exactly this one frame size */
+		data->out_caps[0] = (struct video_format_cap){
+			.pixelformat = VIDEO_PIX_FMT_JPEG,
+			.width_min   = data->fmt.width,
+			.width_max   = data->fmt.width,
+			.height_min  = data->fmt.height,
+			.height_max  = data->fmt.height,
+			.width_step  = 0,
+			.height_step = 0,
+		};
+	} else {
+		/* Not configured yet: any size within the supported range */
+		data->out_caps[0] = (struct video_format_cap){
+			.pixelformat = VIDEO_PIX_FMT_JPEG,
+			.width_min   = CONFIG_VIDEO_JPEG_HANTRO_VC9000E_MIN_SIZE,
+			.width_max   = CONFIG_VIDEO_JPEG_HANTRO_VC9000E_MAX_WIDTH,
+			.height_min  = CONFIG_VIDEO_JPEG_HANTRO_VC9000E_MIN_SIZE,
+			.height_max  = CONFIG_VIDEO_JPEG_HANTRO_VC9000E_MAX_HEIGHT,
+			.width_step  = JPEG_ENC_ALIGNMENT,
+			.height_step = JPEG_ENC_ALIGNMENT,
+		};
+	}
+
+	data->out_caps[1] = (struct video_format_cap){0};
+	caps->format_caps = data->out_caps;
+
+	k_mutex_unlock(&data->lock);
+
 	return 0;
 }
 
