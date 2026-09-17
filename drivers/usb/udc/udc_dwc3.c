@@ -198,7 +198,7 @@ static void udc_dwc3_prepare_setup(udc_dwc3_driver_t *drv)
 	SET_BIT(trb_ptr->ctrl, USB_TRB_CTRL_HWO | USB_TRB_CTRL_LST | USB_TRB_CTRL_IOC
 			| USB_TRB_CTRL_ISP_IMI);
 
-	sys_cache_data_flush_range(trb_ptr, sizeof(*trb_ptr));
+	sys_cache_data_flush_and_invd_range(trb_ptr, sizeof(*trb_ptr));
 	params.param1 = (uint32_t)trb_ptr;
 	drv->ep0_state = EP0_SETUP_PHASE;
 	/* Issue the command to the hardware */
@@ -298,7 +298,7 @@ static int32_t udc_dwc3_ep0_recv(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t
 	SET_BIT(trb_ptr->ctrl, USB_TRB_CTRL_HWO | USB_TRB_CTRL_LST | USB_TRB_CTRL_ISP_IMI
 		| USB_TRB_CTRL_IOC);
 
-	sys_cache_data_flush_range(trb_ptr, sizeof(*trb_ptr));
+	sys_cache_data_flush_and_invd_range(trb_ptr, sizeof(*trb_ptr));
 	params.param1 = (uint32_t)trb_ptr;
 	drv->ep0_state = EP0_DATA_PHASE;
 	/* Issue the command to the hardware */
@@ -380,6 +380,8 @@ static int32_t udc_dwc3_stop_transfer(udc_dwc3_driver_t *drv, uint8_t ep_num,
 		return ret;
 	}
 	trb_ptr = &ept->ep_trb[ept->trb_enqueue];
+	sys_cache_data_invd_range(trb_ptr, sizeof(*trb_ptr));
+
 	if (trb_ptr->ctrl) {
 		trb_ptr->ctrl = 0;
 	}
@@ -704,6 +706,7 @@ static void udc_dwc3_ep_xfer_complete(udc_dwc3_driver_t *drv, uint8_t endp_numbe
 	dir = ept->ep_dir;
 	trb_ptr = &ept->ep_trb[ept->trb_dequeue];
 	sys_cache_data_invd_range(trb_ptr, sizeof(*trb_ptr));
+
 	trb_status = USB_TRB_SIZE_TRBSTS(trb_ptr->size);
 
 	ept->trb_dequeue++;
@@ -877,6 +880,7 @@ static void udc_dwc3_ep0_status_done(udc_dwc3_driver_t *drv)
 	uint32_t trb_status;
 
 	trb_ptr = &drv->ep0_trb;
+	sys_cache_data_invd_range(trb_ptr, sizeof(*trb_ptr));
 	trb_status = USB_TRB_SIZE_TRBSTS(trb_ptr->size);
 	if (trb_status == USB_TRBSTS_SETUP_PENDING) {
 		drv->setup_packet_pending = true;
@@ -1237,6 +1241,7 @@ static int32_t udc_dwc3_ep_stall(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t
 	/* Handle control endpoint (EP0) */
 	if (ep_num == 0) {
 		udc_dwc3_trb_t *trb_ptr = &drv->ep0_trb;
+		sys_cache_data_invd_range(trb_ptr, sizeof(*trb_ptr));
 
 		/* Check if hardware owns the TRB */
 		if (trb_ptr->ctrl & USB_TRB_CTRL_HWO) {
@@ -1377,6 +1382,9 @@ static int32_t udc_dwc3_ep_enable(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 			trb_link->buf_ptr_high = 0;
 			trb_link->ctrl |= USB_TRBCTL_LINK_TRB;
 			SET_BIT(trb_link->ctrl, USB_TRB_CTRL_HWO);
+
+			/* flush direclty to prevent overwriting USB DMA entries */
+			sys_cache_data_flush_range(trb_link, sizeof(*trb_ptr));
 			return USB_SUCCESS;
 		}
 		return USB_SUCCESS;
@@ -1433,7 +1441,13 @@ static void udc_dwc3_initialize_physical_eps(udc_dwc3_driver_t *drv)
 	}
 	/* Fill the TRB memory with zeros */
 	for (ep_num = 0; ep_num < (drv->out_eps + drv->in_eps); ep_num++) {
-		memset(&drv->eps[ep_num].ep_trb[0], 0x00, USB_TRBS_PER_EP * USB_TRB_STRUCTURE_SIZE);
+		udc_dwc3_trb_t *first_trb = &drv->eps[ep_num].ep_trb[0];
+
+		memset(first_trb, 0x00, USB_TRBS_PER_EP * USB_TRB_STRUCTURE_SIZE);
+		/* TRBs range should be flush direclty to prevent overwriting
+		 *	future USB DMA entries
+		 */
+		sys_cache_data_flush_range(first_trb, USB_TRBS_PER_EP * USB_TRB_STRUCTURE_SIZE);
 	}
 }
 
@@ -2668,6 +2682,7 @@ static bool udc_dwc3_is_transfer_ongoing(struct udc_dwc3_data *priv)
 		 * HWO=0: transfer completed, pending software processing
 		 */
 		trb_ptr = &ept->ep_trb[ept->trb_enqueue];
+		sys_cache_data_invd_range(trb_ptr, sizeof(*trb_ptr));
 
 		if (!(trb_ptr->ctrl & USB_TRB_CTRL_HWO)) {
 			LOG_WRN("PM suspend: EP %d has ongoing transfer processing",
