@@ -16,6 +16,7 @@ GROUP_START(NON_SECURE0)
 			KEEP(*(.bss.hid_joystick_report))
 			KEEP(*(.bss.net_buf_data_cdc_ncm_ep_pool))
 			KEEP(*(.noinit.*kheap_buf_net_buf_mem_pool_udc_ep_pool))
+			KEEP(*(.noinit.*kheap_buf_net_buf_mem_pool_uvc_buf_pool))
 			KEEP(*(.bss.disk_buf_0))
 	} GROUP_LINK_IN(NON_SECURE0)
 
