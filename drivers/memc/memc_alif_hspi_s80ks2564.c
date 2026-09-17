@@ -47,6 +47,7 @@ static int memc_alif_hspi_s80ks2564_init(const struct device *dev)
 {
 	const struct alif_hspi_s80ks2564_config *config = dev->config;
 	struct ospi_transfer hspi_cfg;
+	struct ospi_xip_config xip_cfg;
 	uint32_t cmd_buff[S80KS2564_CMD_BUF_SIZE], baud;
 	int32_t ret;
 
@@ -130,7 +131,9 @@ static int memc_alif_hspi_s80ks2564_init(const struct device *dev)
 
 	ospi_set_dfs(config->regs, S80KS2564_DFS);
 
-	ospi_hyperbus_xip_init(config->regs, config->latency_val, SPI_MODE_DUAL_OCTAL);
+	xip_cfg.xip_wait_cycles = config->latency_val;
+	xip_cfg.xip_cs_pin = config->cs_pin;
+	ospi_hyperbus_xip_init(config->regs, &xip_cfg, SPI_MODE_DUAL_OCTAL);
 
 	aes_enable_xip(config->aes_regs);
 
@@ -152,6 +155,7 @@ static const struct alif_hspi_s80ks2564_config s80ks2564_config = {
 	.signal_delay = DT_PROP(CONTROL_NODE, baud2_signal_delay),
 	.rxds_delay = DT_PROP(CONTROL_NODE, rx_ds_delay),
 	.latency_val = DT_PROP(DEVICE_NODE, latency),
+	.cs_pin = DT_PROP(CONTROL_NODE, cs_pin),
 	.reset_gpio = GPIO_DT_SPEC_GET_OR(DEVICE_NODE, reset_gpios, {0})
 };
 
