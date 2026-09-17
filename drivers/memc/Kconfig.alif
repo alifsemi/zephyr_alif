@@ -25,4 +25,10 @@ config MEMC_ALIF_HSPI_S80KS2564
 	help
 	  Enable support for the Infineon S80K2564 hyperRAM device on Alif platforms.
 
+config MEMC_ALIF_OSPI_IS66_HYPERRAM
+	bool "ALIF OSPI ISSI HyperRAM driver"
+	default y
+	depends on DT_HAS_ISSI_IS66WVHXX_ENABLED
+	help
+	  Enable support for the ISSI IS66WVH64M8EALL/BLL HyperRAM device on Alif platforms.
 endif

@@ -32,3 +32,5 @@ zephyr_library_include_directories_ifdef(CONFIG_MEMC_MSPI_APS6404L ${ZEPHYR_BASE
 
 zephyr_library_sources_ifdef(CONFIG_MEMC_ALIF_OSPI_APS512XXN memc_alif_opsi_aps512xxn.c)
 zephyr_library_sources_ifdef(CONFIG_MEMC_ALIF_HSPI_S80KS2564 memc_alif_hspi_s80ks2564.c)
+zephyr_library_sources_ifdef(CONFIG_MEMC_ALIF_OSPI_IS66_HYPERRAM memc_alif_ospi_is66wvhxx.c)
+
