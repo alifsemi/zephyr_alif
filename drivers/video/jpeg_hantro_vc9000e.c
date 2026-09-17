@@ -697,8 +697,8 @@ static int jpeg_hantro_vc9000e_get_ctrl(const struct device *dev,
 		*(uint16_t *)value = data->quality;
 		break;
 	case VIDEO_CID_JPEG_INPUT_BUFFER:
-		/* Get input buffer address */
-		value = data->input_buffer;
+		/* Return the input buffer address through the caller pointer */
+		*((void **)value) = data->input_buffer;
 		break;
 	default:
 		k_mutex_unlock(&data->lock);
