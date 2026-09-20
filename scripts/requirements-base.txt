@@ -15,6 +15,7 @@ pykwalify
 
 # used by west_commands
 canopen
+fdt
 packaging
 progress
 patool
