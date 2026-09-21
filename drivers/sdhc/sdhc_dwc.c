@@ -444,13 +444,11 @@ static void sdhc_dwc_read_response(struct dwc_sdhc_regs *regs, struct sdhc_comma
 		cmd->response[3] = regs->DWC_SDHC_RESP67_R;
 
 		if (IS_ENABLED(CONFIG_SDHC_RSP_136_HAS_CRC)) {
-			for (int i = 0; i < 4; i++) {
-				cmd->response[i] <<= 8;
-				if (i != 3) {
-					cmd->response[i] |=
-						cmd->response[i + 1] >> 24;
-				}
+			for (int i = 3; i > 0; i--) {
+				cmd->response[i] = (cmd->response[i] << 8) |
+						   (cmd->response[i - 1] >> 24);
 			}
+			cmd->response[0] <<= 8;
 		}
 	} else {
 		cmd->response[0] = regs->DWC_SDHC_RESP01_R;
