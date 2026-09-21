@@ -649,7 +649,17 @@ static int mt9m114_set_fmt(const struct device *dev, enum video_endpoint_id ep,
 	}
 
 	/* Apply Config */
-	return mt9m114_set_state(dev, MT9M114_SYS_STATE_ENTER_CONFIG_CHANGE);
+	ret =  mt9m114_set_state(dev, MT9M114_SYS_STATE_ENTER_CONFIG_CHANGE);
+	if (ret) {
+		return ret;
+	}
+#if (!IS_ENABLED(CONFIG_MT9M114_PARALLEL_INIT))
+	ret = mt9m114_set_state(dev, MT9M114_SYS_STATE_ENTER_SUSPEND);
+	if (ret) {
+		return ret;
+	}
+#endif
+	return 0;
 }
 
 static int mt9m114_get_fmt(const struct device *dev, enum video_endpoint_id ep,
@@ -809,7 +819,7 @@ static int mt9m114_init(const struct device *dev)
 	/* Give time for SUSPEND state and LP11 to stabilize */
 	k_msleep(10);
 
-	LOG_INF("Sensor initialized, MIPI lanes in LP11");
+	LOG_INF("Sensor initialized");
 
 	return 0;
 }
