@@ -146,6 +146,7 @@
 #define XIP_CTRL_TRANS_TYPE_TT0		0UL
 #define XIP_CTRL_TRANS_TYPE_TT1		1UL
 #define XIP_CTRL_TRANS_TYPE_TT2		2UL
+#define XIP_CTRL_TRANS_TYPE_TT3		3UL
 #define XIP_CTRL_FRF_MASK		GENMASK(1, 0)
 #define XIP_CTRL_FRF_DUAL		1UL
 #define XIP_CTRL_FRF_QUAD		2UL
@@ -154,6 +155,8 @@
 /* XIP_WRITE_CTRL - XIP Write Control Register */
 #define XIP_WRITE_CTRL_WAIT_CYCLES_MASK	GENMASK(20, 16)
 #define XIP_WRITE_CTRL_WAIT_CYCLES_MAX	BIT_MASK(5)
+#define XIP_WRITE_CTRL_DFS_HC_BIT	BIT(21)
+#define XIP_WRITE_CTRL_DM_EN_BIT		BIT(14)
 #define XIP_WRITE_CTRL_RXDS_SIG_EN_BIT	BIT(13)
 #define XIP_WRITE_CTRL_HYBERBUS_EN_BIT	BIT(12)
 #define XIP_WRITE_CTRL_INST_DDR_EN_BIT	BIT(11)
@@ -168,6 +171,7 @@
 #define XIP_WRITE_CTRL_TRANS_TYPE_TT0	0UL
 #define XIP_WRITE_CTRL_TRANS_TYPE_TT1	1UL
 #define XIP_WRITE_CTRL_TRANS_TYPE_TT2	2UL
+#define XIP_WRITE_CTRL_TRANS_TYPE_TT3	3UL
 #define XIP_WRITE_CTRL_FRF_MASK		GENMASK(1, 0)
 #define XIP_WRITE_CTRL_FRF_DUAL		1UL
 #define XIP_WRITE_CTRL_FRF_QUAD		2UL
@@ -278,5 +282,7 @@ static void reg_write(uint32_t data, const struct device *dev, uint32_t off)
  * driver doesn't yet support the hardware concurrent mem-map feature. Regardless, we still
  * need to use this register.
  */
-#define SUPPORTS_XIP_SER (CONCURRENT_MEMMAP_SUPPORT_INSTANCES != 0 && \
-	MEMMAP_WRITE_SUPPORT_INSTANCES == 0)
+#define SUPPORTS_XIP_SER								\
+	((CONCURRENT_MEMMAP_SUPPORT_INSTANCES != 0 &&				\
+	  MEMMAP_WRITE_SUPPORT_INSTANCES == 0) ||				\
+	 DT_ANY_INST_HAS_BOOL_STATUS_OKAY(xip_ser_support))
