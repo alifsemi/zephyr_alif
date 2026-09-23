@@ -1385,6 +1385,17 @@ static int uvc_reset_transfer(const struct device *dev)
 	struct net_buf *buf;
 	int ret;
 
+	/*
+	 * Nothing of the current frame has been sent yet, so there is no
+	 * transfer to terminate and the next frame can start directly. This
+	 * also avoids queuing a zero-length transfer, which not every UDC
+	 * driver completes.
+	 */
+	if (data->vbuf_offset == 0) {
+		atomic_clear_bit(&data->state, UVC_STATE_STREAM_RESTART);
+		return 0;
+	}
+
 	LOG_DBG("Stream restarted, terminating the transfer after %u bytes", data->vbuf_offset);
 
 	buf = net_buf_alloc_len(&uvc_buf_pool, 0, K_NO_WAIT);
