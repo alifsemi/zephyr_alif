@@ -135,3 +135,34 @@ properties:
       -  "6.25uA"
       -  "7.5uA"
       -  "8.75uA"
+
+  alif,utimer-trigger:
+    type: phandle
+    description: |
+      Phandle to an Alif UTIMER node (compatible = "alif,utimer") that will be
+      programmed as a periodic hardware trigger for ADC conversions. Only used
+      when CONFIG_ADC_ALIF_UTIMER_TRIGGER=y. The referenced utimer node's
+      status must be "okay", and its "timer" and "global" reg entries are
+      accessed directly by this driver (no separate utimer driver required).
+
+  alif,utimer-driver:
+    type: int
+    default: 0
+    description: |
+      UTIMER driver channel to use as the trigger output (0 = driver A,
+      1 = driver B).
+    enum: [0, 1]
+
+  alif,utimer-period:
+    type: int
+    description: |
+      UTIMER counter reload value in ticks. At the default 160 MHz UTIMER
+      clock, 160000000 = 1 s between ADC conversions.
+
+  alif,ext-trigger-src:
+    type: int
+    description: |
+      Bitmask written to ADC_START_SRC[5:0] selecting the external trigger
+      source(s). Each bit corresponds to one hard-wired trigger line from a
+      UTIMER driver output. Use 0x1 for source 0 (UTIMER0 driver A), 0x2 for
+      source 1, etc. Refer to the SoC HWRM for the full mapping.
