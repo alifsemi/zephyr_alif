@@ -1547,6 +1547,18 @@ static void uvc_disable(struct usbd_class_data *const c_data)
 	__ASSERT_NO_MSG(atomic_test_bit(&data->state, UVC_STATE_INITIALIZED));
 
 	atomic_clear_bit(&data->state, UVC_STATE_ENABLED);
+
+	/*
+	 * A bus reset or configuration change ends the stream: the host has to
+	 * probe and commit again before any frame is sent. The transfers in
+	 * flight belong to the old configuration, so the next frame starts
+	 * from its beginning, without terminating the old one.
+	 */
+	atomic_clear_bit(&data->state, UVC_STATE_STREAM_READY);
+	atomic_clear_bit(&data->state, UVC_STATE_STREAM_RESTART);
+	k_mutex_lock(&data->mutex, K_FOREVER);
+	data->vbuf_offset = 0;
+	k_mutex_unlock(&data->mutex);
 }
 
 static void uvc_update(struct usbd_class_data *const c_data, const uint8_t iface,
