@@ -1367,13 +1367,19 @@ static int32_t udc_dwc3_ep_enable(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 		drv->regs->DALEPENA = reg;
 		if (phy_ep > 1) {
 			udc_dwc3_trb_t *trb_ptr, *trb_link;
-			/* Initialize TRB ring   */
+			/*
+			 * Initialize the TRB ring. The ring restarts from its first
+			 * TRB, so clear every TRB, the link TRB included: a transfer
+			 * ended while TRBs were still queued (e.g. by the bus reset
+			 * after a cable replug) leaves them owned by the hardware,
+			 * and the controller would process them again.
+			 */
 			ept->trb_enqueue = 0;
 			ept->trb_dequeue = 0;
+			memset(ept->ep_trb, 0x0, sizeof(ept->ep_trb));
 			trb_ptr = &ept->ep_trb[0U];
 			/* Link TRB. The HWO bit is never reset */
 			trb_link = &ept->ep_trb[NO_OF_TRB_PER_EP];
-			memset(trb_link, 0x0, sizeof(udc_dwc3_trb_t));
 #if CONFIG_UDC_DWC3_ALIF
 			trb_link->buf_ptr_low = LOWER_32_BITS(local_to_global(trb_ptr));
 #else
@@ -1384,7 +1390,7 @@ static int32_t udc_dwc3_ep_enable(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 			SET_BIT(trb_link->ctrl, USB_TRB_CTRL_HWO);
 
 			/* flush direclty to prevent overwriting USB DMA entries */
-			sys_cache_data_flush_range(trb_link, sizeof(*trb_ptr));
+			sys_cache_data_flush_range(ept->ep_trb, sizeof(ept->ep_trb));
 			return USB_SUCCESS;
 		}
 		return USB_SUCCESS;
