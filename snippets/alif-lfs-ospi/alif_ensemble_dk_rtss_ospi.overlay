@@ -5,19 +5,30 @@
 
 &ospi1 {
 	status = "okay";
+	/* pinctrl_flash is defined by the ospi-flash snippet. */
 	pinctrl-0 = <&pinctrl_flash>;
 };
-
-/* Remove MRAM storage to replace flash specific storage */
-/delete-node/ &mram_storage;
 
 /* Update zephyr,flash property */
 /{
 	chosen {
 		zephyr,flash-controller = &ospi_flash;
 		zephyr,flash = &flash_storage;
+	};
 
-		/delete-property/ zephyr,code-partition;
+	fstab {
+		compatible = "zephyr,fstab";
+
+		lfs1: lfs1 {
+			compatible = "zephyr,fstab,littlefs";
+			mount-point = "/lfs";
+			partition = <&lfs1_partition>;
+			read-size = <16>;
+			prog-size = <16>;
+			cache-size = <64>;
+			lookahead-size = <32>;
+			block-cycles = <512>;
+		};
 	};
 };
 
@@ -29,10 +40,10 @@
 		#size-cells = <1>;
 		compatible = "fixed-partitions";
 
-		/* Set 64MB of storage flash */
-		storage_partition: partition@0 {
-			label = "storage";
-			reg = <0x0 DT_SIZE_M(64)>;
+		/* Set 32MB of storage flash */
+		lfs1_partition: partition@0 {
+			label = "lfs1";
+			reg = <0x0 DT_SIZE_M(32)>;
 		};
 	};
 };

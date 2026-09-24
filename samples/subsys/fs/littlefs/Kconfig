@@ -21,4 +21,12 @@ config APP_LITTLEFS_STORAGE_BLK_SDMMC
 	bool "Use block device (e.g. SD MMC) backend"
 endchoice
 
+config APP_LITTLEFS_BLOCK_SIZE
+	int "LittleFS block size override"
+	default 0
+	depends on APP_LITTLEFS_STORAGE_FLASH
+	help
+	  Set an explicit LittleFS block size in bytes. A value of zero lets
+	  LittleFS derive the block size from the flash page layout.
+
 source "Kconfig.zephyr"
