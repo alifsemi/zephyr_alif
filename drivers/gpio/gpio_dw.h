@@ -37,6 +37,13 @@ struct gpio_dw_runtime {
 	struct gpio_driver_data common;
 	uint32_t base_addr;
 	sys_slist_t callbacks;
+#ifdef CONFIG_GPIO_DW_DMA
+	/* Pins last configured with DW_GPIO_DMA_TRIG.
+	 * gpio_pin_configure() must run (with or without that flag) before
+	 * gpio_pin_interrupt_configure(); interrupt configure only reads this.
+	 */
+	uint32_t dma_trig_pins;
+#endif
 };
 
 #ifdef __cplusplus
