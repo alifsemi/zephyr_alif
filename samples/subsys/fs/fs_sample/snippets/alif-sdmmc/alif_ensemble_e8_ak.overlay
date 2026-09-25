@@ -1,0 +1,40 @@
+/*
+ * Copyright (c) 2026 Alif Semiconductor.
+ * SPDX-License-Identifier: Apache-2.0
+ *   SD_RESETn / U24 ON : P13_2  (DK uses P14_7, which is WIFI_RESETn here)
+ *   SD_VSEL            : P6_6   (DK uses P6_3)
+ *   SD_DETn            : P3_3
+ */
+
+ns: &ns {
+	status = "okay";
+};
+
+&gpio3 {
+	status = "okay";
+};
+
+&gpio6 {
+	status = "okay";
+};
+
+&gpio13 {
+	status = "okay";
+};
+
+&sd_pwr {
+	enable-gpios = <&gpio13 2 GPIO_ACTIVE_HIGH>;
+};
+
+&sd_vsel {
+	gpios = <&gpio6 6 GPIO_ACTIVE_HIGH>;
+};
+
+sdhc: &sdhc {
+	status = "okay";
+
+	mmc {
+		disk-name = "SD";
+		status = "okay";
+	};
+};

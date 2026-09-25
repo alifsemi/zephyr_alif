@@ -20,8 +20,14 @@ boards:
     append:
       EXTRA_DTC_OVERLAY_FILE: alif_ensemble_e7_dk.overlay
 
+  #E8 AppKit (gpio3 for CD, gpio13 for reset)
+  /(alif_e8_ak).*/.*/rtss_(hp|he)/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: alif_ensemble_e8_ak.overlay
+      EXTRA_CONF_FILE: alif_ensemble_e8_dk.conf
+
   # E8 Ensemble boards (gpio14 for reset)
-  /(alif_e8).*/.*/rtss_(hp|he)/:
+  /(alif_e8_dk).*/.*/rtss_(hp|he)/:
     append:
       EXTRA_DTC_OVERLAY_FILE: alif_ensemble_e8_dk.overlay
       EXTRA_CONF_FILE: alif_ensemble_e8_dk.conf
