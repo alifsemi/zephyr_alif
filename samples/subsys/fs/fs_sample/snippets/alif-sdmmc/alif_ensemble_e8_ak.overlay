@@ -1,0 +1,38 @@
+/*
+ * Copyright (c) 2026 Alif Semiconductor.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* GPIO3 is needed for SDHC card-detect
+ * GPIO13_2 is needed for SDHC reset
+ * GPIO6_6 is needed for SDHC voltage-select
+ */
+
+ns: &ns {
+	status = "okay";
+};
+
+&gpio3 {
+	status = "okay";
+};
+
+&gpio13 {
+	status = "okay";
+};
+
+&sd_pwr {
+	enable-gpios = <&gpio13 2 GPIO_ACTIVE_HIGH>;
+};
+
+&sd_vsel {
+	gpios = <&gpio6 6 GPIO_ACTIVE_HIGH>;
+};
+
+sdhc: &sdhc {
+	status = "okay";
+
+	mmc {
+		disk-name = "SD";
+		status = "okay";
+	};
+};
