@@ -8,10 +8,38 @@
  * I2S_3 => Mic Input
  */
 
+#include <zephyr/dt-bindings/dma/alif_dma_event_router.h>
+
+&dma0 {
+	status = "okay";
+};
+
+&evtrtr0 {
+	status = "okay";
+};
+
 i2s_tx: &i2s1 {
+	/*
+	 * Cell 0: ALIF_DMA_ENCODE(channel, dma_group, handshake)
+	 *   - channel: Physical DMA channel (0 for TX)
+	 *   - dma_group: Input source selection (1)
+	 *   - handshake: Enable hardware handshaking (1 for I2S)
+	 * Cell 1: Peripheral request number (29 for TX)
+	 */
+	dmas = <&evtrtr0 ALIF_DMA_ENCODE(0, 1, 1) 29>;
+	dma-names = "txdma";
 	status = "okay";
 };
 
 i2s_rx: &i2s3 {
+	/*
+	 * Cell 0: ALIF_DMA_ENCODE(channel, dma_group, handshake)
+	 *   - channel: Physical DMA channel (1 for RX)
+	 *   - dma_group: Input source selection (1)
+	 *   - handshake: Enable hardware handshaking (1 for I2S)
+	 * Cell 1: Peripheral request number (27 for RX)
+	 */
+	dmas = <&evtrtr0 ALIF_DMA_ENCODE(1, 1, 1) 27>;
+	dma-names = "rxdma";
 	status = "okay";
 };
