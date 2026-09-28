@@ -1,4 +1,6 @@
 name: alif-i2s-output
+append:
+  EXTRA_CONF_FILE: prj.conf
 boards:
   /alif_(e1c|b1)_dk/.*/rtss_he/:
     append:
