@@ -235,7 +235,19 @@ static int gpio_dw_pin_interrupt_configure(const struct device *port,
 
 		/* Finally enabling interrupt */
 		dw_set_bit(base_addr, INTEN, pin, true);
+#ifdef CONFIG_GPIO_DW_DMA
+
+		/* INTMASK gates the CPU IRQ only, not DMA_REQ. Leave DMA-trig
+		 * pins masked so gpio_dw_isr() does not EOI them. Unmask
+		 * CPU-IRQ pins as before. dma_trig_pins comes from
+		 * gpio_dw_config(); this API cannot take DW_GPIO_DMA_TRIG.
+		 */
+		if ((context->dma_trig_pins & BIT(pin)) == 0U) {
+			dw_set_bit(base_addr, INTMASK, pin, false);
+		}
+#else
 		dw_set_bit(base_addr, INTMASK, pin, false);
+#endif
 	}
 
 	return 0;
@@ -306,6 +318,23 @@ static inline int gpio_dw_config(const struct device *port,
 	}
 
 	dw_pin_config(port, pin, flags);
+
+#ifdef CONFIG_GPIO_DW_DMA
+	{
+		struct gpio_dw_runtime *context = port->data;
+
+		/* Record DW_GPIO_DMA_TRIG in dma_trig_pins. No GPIO/DMA
+		 * registers are written here. Interrupt configure reads this
+		 * to leave INTMASK set. Must run before
+		 * gpio_pin_interrupt_configure() for this pin.
+		 */
+		if ((flags & DW_GPIO_DMA_TRIG) != 0U) {
+			context->dma_trig_pins |= BIT(pin);
+		} else {
+			context->dma_trig_pins &= ~BIT(pin);
+		}
+	}
+#endif
 
 	return 0;
 }
@@ -401,6 +430,18 @@ static void gpio_dw_isr(const struct device *port)
 	uint32_t int_status;
 
 	int_status = dw_read(base_addr, INTSTATUS);
+
+#ifdef CONFIG_GPIO_DW_DMA
+	/* INTSTATUS is masked status; DMA-trig pins keep INTMASK set.
+	 * Strip them so a mixed port never EOIs a DMA_REQ source.
+	 * PORTA_EOI would clear the shared edge before DMA samples it.
+	 * Return if only DMA-trig bits were pending.
+	 */
+	int_status &= ~context->dma_trig_pins;
+	if (int_status == 0U) {
+		return;
+	}
+#endif
 
 	dw_write(base_addr, PORTA_EOI, int_status);
 
