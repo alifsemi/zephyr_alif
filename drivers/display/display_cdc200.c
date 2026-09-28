@@ -907,7 +907,7 @@ static int cdc200_suspend(const struct device *dev)
 #if !defined(CONFIG_MIPI_DSI)
 	if (config->pcfg) {
 		ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_SLEEP);
-		if (ret < 0) {
+		if (ret < 0 && ret != -ENOENT) {
 			LOG_ERR("Failed to apply sleep pinctrl state");
 			return ret;
 		}
@@ -938,7 +938,7 @@ static int cdc200_resume(const struct device *dev)
 
 	if (config->pcfg) {
 		ret = pinctrl_apply_state(config->pcfg, PINCTRL_STATE_DEFAULT);
-		if (ret < 0) {
+		if (ret < 0 && ret != -ENOENT) {
 			LOG_ERR("Failed to apply default pinctrl state");
 			return ret;
 		}
