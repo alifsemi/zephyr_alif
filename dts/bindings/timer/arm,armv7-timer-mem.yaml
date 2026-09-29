@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Copyright Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  ARM memory-mapped Generic Timer (CNTControl / CNTRead / CNTCTL).
+
+  Parent node for system-timer frames. Each CNTBaseN child is an
+  arm,armv7-timer-mem-frame counter device.
+
+  Expected reg-names are "control", "read", and "ctl". The counter
+  driver uses "control" for CNTCR and "ctl" for CNTACR. "read" is
+  reserved for later use.
+
+compatible: "arm,armv7-timer-mem"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+
+  reg-names:
+    required: true
+
+  clocks:
+    required: true
+    description: Clock that increments the system counter.

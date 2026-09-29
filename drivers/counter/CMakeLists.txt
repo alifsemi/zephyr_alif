@@ -56,3 +56,4 @@ zephyr_library_sources_ifdef(CONFIG_COUNTER_NXP_MRT             counter_nxp_mrt.
 zephyr_library_sources_ifdef(CONFIG_COUNTER_RA_AGT              counter_renesas_ra_agt.c)
 zephyr_library_sources_ifdef(CONFIG_COUNTER_RENESAS_RZ_GTM      counter_renesas_rz_gtm.c)
 zephyr_library_sources_ifdef(CONFIG_COUNTER_ALIF_UTIMER         counter_alif_utimer.c)
+zephyr_library_sources_ifdef(CONFIG_COUNTER_ARM_TIMER_MEM       counter_arm_timer_mem.c)
