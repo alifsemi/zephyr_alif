@@ -140,6 +140,12 @@ struct i2c_dw_rom_config {
 	uint8_t	tx_tl;
 	uint8_t	rx_tl;
 
+	/* Set from the "bus-clear-support" DT property: whether this instance's
+	 * controller was synthesized with the DW bus-clear/stuck-at-low
+	 * recovery feature. Not all DesignWare I2C instances implement it.
+	 */
+	bool bus_clear_support;
+
 #if defined(CONFIG_PINCTRL)
 	const struct pinctrl_dev_config *pcfg;
 #endif
@@ -191,6 +197,11 @@ struct i2c_dw_dev_config {
 	uint8_t xfr_flags;
 	bool support_hs_mode;
 	bool read_in_progress;
+	/* TX_ABRT_SOURCE captured at completion, before the controller's
+	 * interrupt-clear registers reset it, so recover_bus() can still
+	 * see the abort cause of the transfer that triggered recovery.
+	 */
+	uint32_t tx_abrt_source;
 #ifdef CONFIG_I2C_DW_LPSS_DMA
 	uintptr_t phy_addr;
 	uintptr_t base_addr;
