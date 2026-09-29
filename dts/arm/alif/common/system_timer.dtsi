@@ -1,0 +1,80 @@
+/*
+ * SPDX-FileCopyrightText: Copyright Alif Semiconductor
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+&{/soc} {
+	refclk_tmr: timer@1a200000 {
+		compatible = "arm,armv7-timer-mem";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+		reg = <0x1a200000 0x1000>,
+		      <0x1a210000 0x1000>,
+		      <0x1a220000 0x1000>;
+		reg-names = "control", "read", "ctl";
+		clocks = <&clockctrl ALIF_SYSREF_CLK>;
+		status = "okay";
+
+		refclk_cntbase0: frame@1a230000 {
+			compatible = "arm,armv7-timer-mem-frame";
+			reg = <0x1a230000 0x1000>;
+			interrupts = <67 ALIF_DEFAULT_IRQ_PRIORITY>;
+			frame-number = <0>;
+			status = "disabled";
+		};
+
+		refclk_cntbase1: frame@1a240000 {
+			compatible = "arm,armv7-timer-mem-frame";
+			reg = <0x1a240000 0x1000>;
+			interrupts = <68 ALIF_DEFAULT_IRQ_PRIORITY>;
+			frame-number = <1>;
+			status = "disabled";
+		};
+
+		refclk_cntbase2: frame@1a250000 {
+			compatible = "arm,armv7-timer-mem-frame";
+			reg = <0x1a250000 0x1000>;
+			interrupts = <69 ALIF_DEFAULT_IRQ_PRIORITY>;
+			frame-number = <2>;
+			status = "disabled";
+		};
+
+		refclk_cntbase3: frame@1a260000 {
+			compatible = "arm,armv7-timer-mem-frame";
+			reg = <0x1a260000 0x1000>;
+			interrupts = <70 ALIF_DEFAULT_IRQ_PRIORITY>;
+			frame-number = <3>;
+			status = "disabled";
+		};
+	};
+
+	s32kclk_tmr: timer@1a400000 {
+		compatible = "arm,armv7-timer-mem";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+		reg = <0x1a400000 0x1000>,
+		      <0x1a410000 0x1000>,
+		      <0x1a420000 0x1000>;
+		reg-names = "control", "read", "ctl";
+		clocks = <&clockctrl ALIF_S32K_CLK>;
+		status = "okay";
+
+		s32k_cntbase0: frame@1a430000 {
+			compatible = "arm,armv7-timer-mem-frame";
+			reg = <0x1a430000 0x1000>;
+			interrupts = <71 ALIF_DEFAULT_IRQ_PRIORITY>;
+			frame-number = <0>;
+			status = "disabled";
+		};
+
+		s32k_cntbase1: frame@1a440000 {
+			compatible = "arm,armv7-timer-mem-frame";
+			reg = <0x1a440000 0x1000>;
+			interrupts = <72 ALIF_DEFAULT_IRQ_PRIORITY>;
+			frame-number = <1>;
+			status = "disabled";
+		};
+	};
+};
