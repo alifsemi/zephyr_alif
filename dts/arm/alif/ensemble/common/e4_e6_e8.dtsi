@@ -109,6 +109,7 @@
 		interrupts = <51 ALIF_DEFAULT_IRQ_PRIORITY>;
 		tx_threshold = <16>;
 		rx_threshold = <0>;
+		bus-clear-support;
 		status = "disabled";
 	};
 
