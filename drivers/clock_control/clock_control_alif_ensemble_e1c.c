@@ -384,7 +384,7 @@ static int alif_clock_control_on(const struct device *dev,
 	int32_t ret;
 
 	if (!ALIF_CLOCK_CFG_EN_MASK(clk_id)) {
-		LOG_WRN("Clock enable not supported\n");
+		LOG_DBG("Clock enable not supported");
 		return 0;
 	}
 
@@ -435,7 +435,7 @@ static int alif_clock_control_off(const struct device *dev,
 	int32_t ret;
 
 	if (!ALIF_CLOCK_CFG_EN_MASK(clk_id)) {
-		LOG_WRN("Clock disable not supported\n");
+		LOG_DBG("Clock disable not supported");
 		return 0;
 	}
 
