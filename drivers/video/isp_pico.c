@@ -9,6 +9,7 @@
 LOG_MODULE_REGISTER(ISP, CONFIG_VIDEO_LOG_LEVEL);
 
 #include <zephyr/drivers/video.h>
+#include <zephyr/irq.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/device_mmio.h>
 #include <zephyr/drivers/pinctrl.h>
@@ -21,7 +22,12 @@ LOG_MODULE_REGISTER(ISP, CONFIG_VIDEO_LOG_LEVEL);
 
 #define WORKQ_STACK_SIZE 4096
 #define WORKQ_PRIORITY   7
+/* Bound for video_flush(cancel=false) while capture is running. */
+#define ISP_FLUSH_TIMEOUT_MS 500
 K_KERNEL_STACK_DEFINE(isp_cb_workq, WORKQ_STACK_SIZE);
+
+/* Incremented after the MI frame-end handler has retired the frame. */
+static atomic_t mi_frame_end_count;
 
 #define ISP_VIDEO_FORMAT_CAP(format, width, height)                                             \
 	{                                                                                       \
@@ -153,48 +159,6 @@ static int find_format(struct video_format *fmt,
 	return -ENOTSUP;
 }
 
-static int isp_attach_buffer_to_hw(const struct device *dev, struct video_buffer *vbuf)
-{
-	uintptr_t regs = DEVICE_MMIO_GET(dev);
-	struct isp_data *data = dev->data;
-	uint32_t planes[3] = {};
-	size_t size_plane;
-	int num_planes;
-	int i;
-
-	struct channel_parameters *channel = &data->init_cfg.channel;
-
-	num_planes = fourcc_to_numplanes(channel->output_fmt.pixelformat);
-	if (num_planes == 0) {
-		LOG_ERR("Unsupported format!");
-		return -ENOTSUP;
-	}
-
-	for (i = 0; i < num_planes; i++) {
-		if (!i) {
-			planes[i] = POINTER_TO_UINT(local_to_global(vbuf->buffer));
-		} else {
-			size_plane = fourcc_to_plane_size(channel->output_fmt.pixelformat,
-					i - 1, vbuf->size);
-			if (size_plane == 0 || size_plane > vbuf->size) {
-				LOG_ERR("Unsupported format!");
-				return -ENOTSUP;
-			}
-
-			planes[i] = (planes[i-1] + size_plane);
-		}
-	}
-
-	LOG_DBG("planes: 0x%08x 0x%08x 0x%08x", planes[0], planes[1], planes[2]);
-	sys_write32(planes[0], regs + ISP_MI_MP_Y_BASE_AD_INIT);
-	sys_write32(planes[1], regs + ISP_MI_MP_CB_BASE_AD_INIT);
-	sys_write32(planes[2], regs + ISP_MI_MP_CR_BASE_AD_INIT);
-
-	sys_set_bits(regs + ISP_MI_INIT, MI_INIT_CFG_UPD);
-
-	return 0;
-}
-
 static void hw_disable_mi_interrupts(uintptr_t regs, uint32_t mask)
 {
 	sys_clear_bits(regs + ISP_MI_IMSC, mask);
@@ -202,73 +166,18 @@ static void hw_disable_mi_interrupts(uintptr_t regs, uint32_t mask)
 
 static void isp_bottom_half(const struct device *dev)
 {
-	enum video_signal_result signal_status = VIDEO_BUF_DONE;
-	const struct isp_config *config = dev->config;
 	struct isp_data *data = dev->data;
-	struct video_buffer *vbuf = NULL;
 
-	int ret;
-
-	/* Do bottom half processing of all the modules at the end of frame. */
+	/*
+	 * The finished buffer was already moved to the library done list in
+	 * isp_isr_handler() via isp_vsi_mi_irq(). This work item only runs
+	 * the frame-end path (AE and the port callback).
+	 */
 	isp_vsi_bottom_half(dev, &data->init_cfg, data->mi_mis);
 
-
-	vbuf = k_fifo_peek_head(&data->fifo_in);
-	if (vbuf == NULL) {
-		LOG_ERR("Unexpected condition! Empty IN-FIFO");
-		data->is_streaming = false;
-		signal_status = VIDEO_BUF_ERROR;
-		goto isp_bottom_done;
-	}
-
-	if (data->curr_vid_buf != (uint32_t)vbuf->buffer) {
-		signal_status = VIDEO_BUF_ERROR;
-		data->is_streaming = false;
-		LOG_ERR("Unknown Video Buffer assigned to ISP.");
-		goto isp_bottom_done;
-	}
-
-	vbuf = k_fifo_get(&data->fifo_in, K_NO_WAIT);
-	if (!vbuf) {
-		LOG_ERR("Failed to get video buffer from IN-FIFO, "
-			"despite IN-FIFO having data");
-		data->is_streaming = false;
-		signal_status = VIDEO_BUF_ERROR;
-		goto isp_bottom_done;
-	}
-
-	vbuf->timestamp = k_uptime_get_32();
-
-	k_fifo_put(&data->fifo_out, vbuf);
-
-	vbuf = k_fifo_peek_head(&data->fifo_in);
-	if (vbuf == NULL) {
-		LOG_DBG("No more empty buffers in the IN-FIFO. "
-			"Stopping video capture. If re-queued, restart stream.");
-		data->is_streaming = false;
-		signal_status = VIDEO_BUF_DONE;
-		goto isp_bottom_done;
-	}
-	data->curr_vid_buf = (uint32_t) vbuf->buffer;
-
-	ret = isp_attach_buffer_to_hw(dev, vbuf);
-	if (ret) {
-		LOG_ERR("Failed to attach buffer to hardware!");
-		data->is_streaming = false;
-		signal_status = VIDEO_BUF_DONE;
-		goto isp_bottom_done;
-	}
-
-isp_bottom_done:
-	if (!data->is_streaming) {
-		video_stream_stop(config->controller);
-		data->curr_vid_buf = 0;
-	}
-
-	LOG_DBG("current video buffer - 0x%08x", data->curr_vid_buf);
 #if defined(CONFIG_POLL)
 	if (data->signal) {
-		k_poll_signal_raise(data->signal, signal_status);
+		k_poll_signal_raise(data->signal, VIDEO_BUF_DONE);
 	}
 #endif /* defined(CONFIG_POLL) */
 }
@@ -359,6 +268,13 @@ static void isp_isr_handler(const struct device *dev)
 
 	if (mi_int_st & MI_INTR_MP_FRAME_END) {
 		LOG_DBG("End of Frame at MI interface of Main picture.");
+		/*
+		 * Retire the buffer here, not in the work item: both ISP IRQ
+		 * lines share this handler and would overwrite data->mi_mis
+		 * before the work item runs.
+		 */
+		isp_vsi_mi_irq(&data->init_cfg, mi_int_st);
+		atomic_inc(&mi_frame_end_count);
 		if (is_not_corrupted_frame) {
 			k_work_submit_to_queue(&data->cb_workq, &data->cb_work);
 		} else {
@@ -546,8 +462,6 @@ static int isp_stream_start(const struct device *dev)
 	const struct isp_config *config = dev->config;
 	uintptr_t regs = DEVICE_MMIO_GET(dev);
 	struct isp_data *data = dev->data;
-	struct video_buffer *vbuf;
-	struct video_buffer vbuf2;
 
 	struct port_parameters *port = &data->init_cfg.port;
 	uint32_t tmp;
@@ -566,14 +480,10 @@ static int isp_stream_start(const struct device *dev)
 		return -EBUSY;
 	}
 
-	vbuf = k_fifo_peek_head(&data->fifo_in);
-	if (vbuf == NULL) {
-		LOG_ERR("Unexpected condition! Empty IN-FIFO. Can't start streaming!");
-		data->is_streaming = false;
+	if (!isp_vsi_has_buffer()) {
+		LOG_ERR("No buffer queued. Can't start streaming!");
 		return -ENOBUFS;
 	}
-
-	data->curr_vid_buf = POINTER_TO_UINT(vbuf->buffer);
 
 	/* Update ISP configuration to the middleware */
 	switch (port->port_fmt.pixelformat) {
@@ -629,13 +539,6 @@ static int isp_stream_start(const struct device *dev)
 	}
 	sys_write32(tmp, regs + ISP_ACQ_PROP);
 
-	ret = isp_vsi_enqueue(&data->init_cfg, vbuf);
-	if (ret) {
-		LOG_ERR("Failed to assign buffer to hardware!");
-		data->curr_vid_buf = 0;
-		return ret;
-	}
-
 	/* Set is_streaming BEFORE starting hardware to prevent
 	 * bottom_half from stopping CPI mid-start
 	 */
@@ -645,33 +548,77 @@ static int isp_stream_start(const struct device *dev)
 	if (ret) {
 		LOG_ERR("Failed to start stream!");
 		data->is_streaming = false;
-		goto dequeue_buf;
+		return ret;
 	}
 
 	ret = video_stream_start(config->controller);
 	if (ret) {
+		int stop_ret;
+
 		LOG_ERR("Failed to start stream for Endpoint device: %s!",
 				config->controller->name);
 		data->is_streaming = false;
-		goto stop_isp_stream;
-	}
-
-	return 0;
-
-stop_isp_stream:
-	ret = isp_vsi_stop(&data->init_cfg);
-	if (ret) {
-		LOG_ERR("Failed to stop ISP device streaming");
-		return ret;
-	}
-dequeue_buf:
-	ret = isp_vsi_dequeue(&data->init_cfg, &vbuf2);
-	if (ret) {
-		LOG_ERR("Failed to dequeue buffer back!");
+		stop_ret = isp_vsi_stop(&data->init_cfg);
+		if (stop_ret) {
+			LOG_ERR("Failed to stop ISP device streaming");
+		}
 		return ret;
 	}
 
 	return 0;
+}
+
+static void isp_publish_buffer(struct isp_data *data, struct video_buffer *vbuf)
+{
+	struct channel_parameters *channel = &data->init_cfg.channel;
+
+	vbuf->timestamp = k_uptime_get_32();
+	vbuf->bytesused = channel->output_fmt.pitch * channel->output_fmt.height;
+	k_fifo_put(&data->fifo_out, vbuf);
+}
+
+/*
+ * Move finished frames from the library done list to fifo_out.
+ * keep is how many held buffers must stay with the ISP. The MI keeps
+ * one buffer installed, so a non-cancel wait uses keep=1.
+ */
+static void isp_drain_done(struct isp_data *data, int keep)
+{
+	struct video_buffer *vbuf;
+	uint32_t index;
+
+	while (isp_vsi_held_count() > keep) {
+		if (isp_vsi_dequeue(&data->init_cfg, &index) != 0) {
+			break;
+		}
+
+		vbuf = isp_vsi_buffer_by_index(index);
+		if (vbuf == NULL) {
+			continue;
+		}
+
+		isp_publish_buffer(data, vbuf);
+	}
+}
+
+static void isp_release_held(struct isp_data *data, bool aborted)
+{
+	struct video_buffer *vbuf;
+
+	while ((vbuf = isp_vsi_reclaim_held()) != NULL) {
+		k_fifo_put(&data->fifo_out, vbuf);
+		if (!aborted) {
+			continue;
+		}
+
+		LOG_DBG("Video buffer aborted: 0x%x",
+			(uint32_t)vbuf->buffer);
+#if defined(CONFIG_POLL)
+		if (data->signal) {
+			k_poll_signal_raise(data->signal, VIDEO_BUF_ABORTED);
+		}
+#endif
+	}
 }
 
 static int isp_stream_stop(const struct device *dev)
@@ -691,12 +638,16 @@ static int isp_stream_stop(const struct device *dev)
 		return ret;
 	}
 
+	/* Pull finished frames out before StreamOff discards doneList. */
+	isp_drain_done(data, 0);
+
 	ret = isp_vsi_stop(&data->init_cfg);
 	if (ret) {
 		LOG_ERR("Failed to stop ISP from streaming!");
 		return ret;
 	}
 
+	isp_release_held(data, true);
 	data->curr_vid_buf = 0;
 	data->is_streaming = false;
 
@@ -754,23 +705,84 @@ static int isp_flush(const struct device *dev, enum video_endpoint_id ep, bool c
 	struct isp_data *data = dev->data;
 
 	uintptr_t regs = DEVICE_MMIO_GET(dev);
-	struct video_buffer *vbuf = NULL;
-
 	int ret;
 
+	/*
+	 * Buffers live in the ISP library, tracked by isp_vb_held[].
+	 * Finished frames come off the done list. Anything still held after
+	 * the library drops its lists is returned through fifo_out.
+	 */
 	if (cancel) {
-		/* Case when video stream processing needs to be stopped. */
+		if (data->is_streaming) {
+			/*
+			 * Let the ISR acknowledge a latched frame end before
+			 * masking it. Masking first leaves ISP_MI_RIS set.
+			 */
+			for (int i = 0; (i < 20) &&
+					(sys_read32(regs + ISP_MI_RIS) & MI_INTR_MP_FRAME_END); i++) {
+				k_msleep(10);
+			}
+
+			if (sys_read32(regs + ISP_MI_RIS) & MI_INTR_MP_FRAME_END) {
+				LOG_ERR("Failed to observe frame end!");
+				return -EBUSY;
+			}
+
+			hw_disable_mi_interrupts(regs, MI_INTR_MP_FRAME_END);
+		}
+
+		isp_drain_done(data, 0);
+
+		if (data->is_streaming) {
+			ret = isp_vsi_stop(&data->init_cfg);
+			if (ret) {
+				LOG_ERR("Failed to stop ISP device!");
+				return ret;
+			}
+		} else if (isp_vsi_has_buffer()) {
+			(void)isp_vsi_detach_buffers(&data->init_cfg);
+		}
+
+		isp_release_held(data, true);
+	} else if (data->is_streaming) {
+		k_timepoint_t end = sys_timepoint_calc(K_MSEC(ISP_FLUSH_TIMEOUT_MS));
+		atomic_val_t frame;
+		unsigned int key;
+
+		/*
+		 * Drain frames as they complete. Leave the last held buffer
+		 * until a frame end retires it, so it is not returned while
+		 * the MI can still write it. The camera keeps streaming;
+		 * video_flush() below uses the same cancel flag.
+		 */
+		while (isp_vsi_held_count() > 1) {
+			isp_drain_done(data, 1);
+			if (isp_vsi_held_count() <= 1) {
+				break;
+			}
+			if (sys_timepoint_expired(end)) {
+				LOG_ERR("Timed out waiting for ISP buffers to complete");
+				return -EBUSY;
+			}
+			k_msleep(1);
+		}
+
+		if (isp_vsi_held_count() == 1) {
+			frame = atomic_get(&mi_frame_end_count);
+			while (atomic_get(&mi_frame_end_count) == frame) {
+				if (sys_timepoint_expired(end)) {
+					LOG_ERR("Timed out waiting for final ISP frame");
+					return -EBUSY;
+				}
+				k_msleep(1);
+			}
+		}
+
+		key = irq_lock();
 		hw_disable_mi_interrupts(regs, MI_INTR_MP_FRAME_END);
+		irq_unlock(key);
 
-		for (int i = 0; (i < 20) &&
-				(sys_read32(regs + ISP_MI_RIS) & MI_INTR_MP_FRAME_END); i++) {
-			k_msleep(10);
-		}
-
-		if (sys_read32(regs + ISP_MI_RIS) & MI_INTR_MP_FRAME_END) {
-			LOG_ERR("Failed to observe frame end!");
-			return -EBUSY;
-		}
+		isp_drain_done(data, 0);
 
 		ret = isp_vsi_stop(&data->init_cfg);
 		if (ret) {
@@ -778,26 +790,16 @@ static int isp_flush(const struct device *dev, enum video_endpoint_id ep, bool c
 			return ret;
 		}
 
-		while ((vbuf = k_fifo_get(&data->fifo_in, K_NO_WAIT))) {
-			k_fifo_put(&data->fifo_out, vbuf);
-			LOG_DBG("Video Buffer Aborted!!! - 0x%x", (uint32_t)vbuf->buffer);
-#if defined(CONFIG_POLL)
-			if (data->signal) {
-				k_poll_signal_raise(data->signal, VIDEO_BUF_ABORTED);
-			}
-#endif /* defined(CONFIG_POLL) */
-		}
+		/* Not retired by a frame end, so not a completed frame. */
+		isp_release_held(data, false);
 	} else {
-		/* Case when video stream processing need not be stopped. */
-		if (!data->curr_vid_buf) {
-			while ((vbuf = k_fifo_get(&data->fifo_in, K_NO_WAIT))) {
-				k_fifo_put(&data->fifo_out, vbuf);
-			}
+		isp_drain_done(data, 0);
+
+		if (isp_vsi_has_buffer()) {
+			(void)isp_vsi_detach_buffers(&data->init_cfg);
 		}
 
-		while (!k_fifo_is_empty(&data->fifo_in)) {
-			k_msleep(1);
-		}
+		isp_release_held(data, false);
 	}
 
 	data->curr_vid_buf = 0;
@@ -813,6 +815,7 @@ static int isp_enqueue(const struct device *dev, enum video_endpoint_id ep,
 {
 	struct isp_data *data = dev->data;
 	uint32_t tmp;
+	int ret;
 
 	if (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL) {
 		return -EINVAL;
@@ -828,7 +831,11 @@ static int isp_enqueue(const struct device *dev, enum video_endpoint_id ep,
 
 	buf->bytesused = 0;
 
-	k_fifo_put(&data->fifo_in, buf);
+	ret = isp_vsi_enqueue(&data->init_cfg, buf);
+	if (ret) {
+		LOG_ERR("Failed to enqueue buffer to ISP library: %d", ret);
+		return ret;
+	}
 
 	LOG_DBG("Enqueued buffer: Addr - 0x%x, size - %d, bytesused - %d",
 		(uint32_t)buf->buffer, buf->size, buf->bytesused);
@@ -842,21 +849,53 @@ static int isp_dequeue(const struct device *dev, enum video_endpoint_id ep,
 		       struct video_buffer **buf, k_timeout_t timeout)
 {
 	struct isp_data *data = dev->data;
-
 	struct channel_parameters *channel = &data->init_cfg.channel;
+	k_timepoint_t end = sys_timepoint_calc(timeout);
+	uint32_t index;
+	int ret;
 
-	if (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL) {
+	if (!buf || (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL)) {
 		return -EINVAL;
 	}
 
-	*buf = k_fifo_get(&data->fifo_out, timeout);
-	if (!(*buf)) {
-		return -EAGAIN;
+	/*
+	 * The library wait is compiled out, so an empty doneList returns
+	 * immediately. Retry until a frame end queues one, or the timeout
+	 * expires. fifo_out is checked every pass: stop, cancel-flush, and
+	 * suspend park buffers there while this thread is asleep.
+	 */
+	for (;;) {
+		*buf = k_fifo_get(&data->fifo_out, K_NO_WAIT);
+		if (*buf != NULL) {
+			return 0;
+		}
+
+		ret = isp_vsi_dequeue(&data->init_cfg, &index);
+		if (!ret) {
+			break;
+		}
+		if (ret != -ENOBUFS) {
+			LOG_ERR("Failed to dequeue ISP buffer: %d",
+				ret);
+			return ret;
+		}
+		if (!data->is_streaming || K_TIMEOUT_EQ(timeout, K_NO_WAIT) ||
+		    sys_timepoint_expired(end)) {
+			*buf = k_fifo_get(&data->fifo_out, K_NO_WAIT);
+			return (*buf != NULL) ? 0 : -EAGAIN;
+		}
+		k_msleep(1);
 	}
 
+	*buf = isp_vsi_buffer_by_index(index);
+	if (*buf == NULL) {
+		LOG_ERR("Dequeued ISP index %u has no video buffer", index);
+		return -EIO;
+	}
+
+	(*buf)->timestamp = k_uptime_get_32();
 	(*buf)->bytesused = channel->output_fmt.pitch * channel->output_fmt.height;
-	LOG_DBG("Dequeued buffer: Addr - 0x%08x, size - %d, bytesused - %d",
-		(uint32_t)(*buf)->buffer, (*buf)->size, (*buf)->bytesused);
+
 	return 0;
 }
 
@@ -1082,7 +1121,6 @@ static int isp_pico_suspend(const struct device *dev)
 	struct isp_data *data = dev->data;
 	uintptr_t regs = DEVICE_MMIO_GET(dev);
 	struct k_work_sync sync;
-	struct video_buffer *vbuf;
 	int ret;
 
 	/* 1. Stop streaming first (needs IRQs for clean stop) */
@@ -1109,19 +1147,10 @@ static int isp_pico_suspend(const struct device *dev)
 		}
 
 	/*
-	 * Return queued buffers to the caller through fifo_out using the
-	 * same abort/notify path as isp_flush(..., true). Dropping them
-	 * here would lose ownership and leave a blocked dequeue hanging.
-	 * Leave already-completed fifo_out entries available.
+	 * Buffers queued before streaming never reached isp_stream_stop().
+	 * Hand those back. Buffers already returned by stop stay on fifo_out.
 	 */
-	while ((vbuf = k_fifo_get(&data->fifo_in, K_NO_WAIT))) {
-		k_fifo_put(&data->fifo_out, vbuf);
-#if defined(CONFIG_POLL)
-		if (data->signal) {
-			k_poll_signal_raise(data->signal, VIDEO_BUF_ABORTED);
-		}
-#endif
-	}
+	isp_release_held(data, true);
 
 	/* 6. Reset driver state */
 	data->is_streaming = false;
