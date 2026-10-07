@@ -1,0 +1,21 @@
+#
+# Copyright (c) 2026 Alif Semiconductor.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+name: alif-uac2-explicit-feedback
+
+append:
+  EXTRA_CONF_FILE: alif-uac2-explicit.conf
+
+boards:
+  # E1C/B1 Balletto boards
+  /alif_(b1|e1c)_dk.*/.*/rtss_he/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: alif_balletto_dk.overlay
+
+  # E8 Ensemble boards
+  /alif_e8_dk.*/.*/rtss_(hp|he)/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: alif_ensemble_e8_dk.overlay
