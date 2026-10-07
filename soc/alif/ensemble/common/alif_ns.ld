@@ -17,6 +17,7 @@ GROUP_START(NON_SECURE0)
 			KEEP(*(.bss.net_buf_data_cdc_ncm_ep_pool))
 			KEEP(*(.noinit.*kheap_buf_net_buf_mem_pool_udc_ep_pool))
 			KEEP(*(.noinit.*kheap_buf_net_buf_mem_pool_uvc_buf_pool))
+			KEEP(*(.noinit.*k_mem_slab_buf_i2s_tx_slab))
 #if !defined(CONFIG_ALIF_NET_PKT_SRAM0)
 			KEEP(*net_pkt.c.obj*(.noinit*))
 #endif
