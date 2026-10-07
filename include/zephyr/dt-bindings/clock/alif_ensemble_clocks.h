@@ -314,6 +314,10 @@
 /* SPI Clock */
 #define ALIF_SPI_CLK	ALIF_CLK(2)
 
+/* System timer timebases (no clock-enable bit) */
+#define ALIF_SYSREF_CLK		ALIF_CLK(3U)
+#define ALIF_S32K_CLK		ALIF_CLK(4U)
+
 /* OSPI clocks */
 #define ALIF_OSPI0_ACLK_CLK              \
 	ALIF_CLK_CFG(CLKCTL_PER_SLV, OSPI_CTRL, 0U, 1U, 0U, 1U, 0U)

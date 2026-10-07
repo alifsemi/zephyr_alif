@@ -12,6 +12,7 @@
 #include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
 #include <mem.h>
 #include <alif/common/alif_common.dtsi>
+#include <alif/common/system_timer.dtsi>
 #include <zephyr/dt-bindings/mipi_dsi/mipi_dsi.h>
 
 &{/} {
