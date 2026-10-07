@@ -7,3 +7,29 @@ config ADC_ALIF
 	default y
 	help
 	  Enable ADC Module
+
+config ADC_ALIF_DMA
+	bool "Alif ADC DMA support"
+	depends on ADC_ALIF
+	depends on DMA
+	default n
+	help
+	  Enables DMA support for the Alif ADC driver.
+	  Even though the code path is enabled by this,
+	  DMA is only used if configured in the DTS.
+
+config ADC_ALIF_UTIMER_TRIGGER
+	bool "Alif ADC UTIMER hardware trigger support"
+	depends on ADC_ALIF
+	select USE_ALIF_HAL_UTIMER
+	default n
+	help
+	  Use an Alif UTIMER instance to drive the ADC's external
+	  trigger input, removing the CPU START write from periodic
+	  conversions. Combine with ADC_ALIF_DMA for CPU-free sample
+	  transfers. The UTIMER instance,
+	  channel, period and ADC_START_SRC mux value are supplied
+	  by the DTS via the alif,utimer-trigger phandle and the
+	  alif,utimer-driver / alif,utimer-period / alif,ext-trigger-src
+	  properties. The code path is only enabled when both this
+	  option is set and the DTS properties are present.
