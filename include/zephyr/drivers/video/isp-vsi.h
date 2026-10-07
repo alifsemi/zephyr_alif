@@ -120,12 +120,16 @@ int isp_vsi_update_cfg(struct isp_config_params *init_cfg);
 int isp_vsi_uninit(struct isp_config_params *init_cfg);
 void isp_vsi_bottom_half(const struct device *dev,
 		struct isp_config_params *init_cfg, uint32_t mi_mis);
+void isp_vsi_mi_irq(struct isp_config_params *init_cfg, uint32_t mi_mis);
 int isp_vsi_start(struct isp_config_params *init_cfg);
 int isp_vsi_stop(struct isp_config_params *init_cfg);
 int isp_vsi_enqueue(struct isp_config_params *init_cfg,
 		struct video_buffer *buf);
-int isp_vsi_dequeue(struct isp_config_params *init_cfg,
-		struct video_buffer *buf);
+int isp_vsi_dequeue(struct isp_config_params *init_cfg, uint32_t *index);
+struct video_buffer *isp_vsi_buffer_by_index(uint32_t index);
+bool isp_vsi_has_buffer(void);
+struct video_buffer *isp_vsi_reclaim_held(void);
+int isp_vsi_detach_buffers(struct isp_config_params *init_cfg);
 
 /**
  * @brief Set ISP module parameters on a live ISP port.
