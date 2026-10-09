@@ -12,6 +12,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/irq.h>
 #include <zephyr/drivers/clock_control.h>
+#include <zephyr/drivers/ospi/alif_ospi_dt.h>
 
 #include "ospi_hal.h"
 #include "ospi.h"
@@ -20,6 +21,26 @@ LOG_MODULE_REGISTER(memc_alif_aps512xxn, CONFIG_MEMC_LOG_LEVEL);
 
 #define DEVICE_NODE DT_NODELABEL(aps512xxn)
 #define CONTROLLER_NODE  DT_PARENT(DEVICE_NODE)
+
+#define OSPI_CTRL_NODE CONTROLLER_NODE
+
+ALIF_OSPI_VALIDATE_SIGNAL_DELAYS(OSPI_CTRL_NODE);
+
+#if DT_PROP(OSPI_CTRL_NODE, enable_signal_delay)
+static const struct ospi_signal_delay_config signal_delays = {
+	.txd = DT_PROP_OR(OSPI_CTRL_NODE, txd_delays, {0}),
+	.rxd = DT_PROP_OR(OSPI_CTRL_NODE, rxd_delays, {0}),
+	.ssioen = DT_PROP_OR(OSPI_CTRL_NODE, ssi_oe_n_delays, {0}),
+	.rxds = COND_CODE_1(DT_NODE_HAS_PROP(OSPI_CTRL_NODE, rx_ds_delays),
+		(DT_PROP(OSPI_CTRL_NODE, rx_ds_delays)),
+		({DT_PROP(OSPI_CTRL_NODE, rx_ds_delay), DT_PROP(OSPI_CTRL_NODE, rx_ds_delay)})),
+	.txddm = DT_PROP_OR(OSPI_CTRL_NODE, txd_dm_delays, {0}),
+	.dmoen = DT_PROP_OR(OSPI_CTRL_NODE, dm_oe_n_delays, {0}),
+	.ssn = DT_PROP_OR(OSPI_CTRL_NODE, ss_n_delays, {0}),
+	.sclk = DT_PROP_OR(OSPI_CTRL_NODE, sclk_delay, 0),
+	.sclkn = DT_PROP_OR(OSPI_CTRL_NODE, sclkn_delay, 0),
+};
+#endif
 
 /* APS256XXN Device ID */
 #define APS256XXN_ID                           0xDE
@@ -110,6 +131,9 @@ static int32_t err_map_alif_hal_to_zephyr(int32_t err)
 		break;
 	case OSPI_ERR_CTRL_BUSY:
 		err_code = -EBUSY;
+		break;
+	case OSPI_ERR_UNSUPPORTED:
+		err_code = -ENOTSUP;
 		break;
 	default:
 		err_code = -EIO;
@@ -325,6 +349,15 @@ static int memc_alif_ospi_aps512xxn_init(const struct device *dev)
 		return ret;
 	}
 
+#if DT_PROP(OSPI_CTRL_NODE, enable_signal_delay)
+	ret = alif_hal_ospi_apply_signal_delays(data->ospi_handle, &signal_delays);
+	if (ret != OSPI_ERR_NONE) {
+		LOG_ERR("Failed to apply OSPI signal delays (%d)", ret);
+		alif_hal_ospi_deinit(data->ospi_handle);
+		return err_map_alif_hal_to_zephyr(ret);
+	}
+#endif
+
 	/* Common OSPI transfer settings for RAM */
 	data->trans_conf.frame_size = APS256XXN_OSPI_DFS;
 	data->trans_conf.frame_format = OSPI_FRF_OCTAL;
@@ -465,7 +498,10 @@ static int memc_alif_ospi_aps512xxn_init(const struct device *dev)
 		aes_ctrl_xip_addr(config->aes_regs, &ram_addr_ctrl);
 	}
 
+#if !DT_PROP(OSPI_CTRL_NODE, enable_signal_delay)
+	/* Preserve per-signal RXDS delays when signal-delay configuration is enabled. */
 	aes_set_rxds_delay(config->aes_regs, config->rxds_delay);
+#endif
 
 	aes_enable_xip(config->aes_regs);
 
