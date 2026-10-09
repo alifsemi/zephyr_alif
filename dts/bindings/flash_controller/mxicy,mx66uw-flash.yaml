@@ -31,13 +31,24 @@ properties:
 
   write-block-size:
     type: int
-    description: minmum number of bytes for read and write
+    description: minimum number of bytes for read and write
     required: true
 
   def-wait-cycle:
     type: int
-    description: default number of wait cycles depends on the bus speed
     required: true
+    enum: [6, 8, 10, 12, 14, 16, 18, 20]
+    description: |
+      Flash read dummy clocks.
+      Maximum supported clock frequency for Octal STR and DTR operation:
+        6 clocks: 66 MHz
+        8 clocks: 84 MHz
+        10 clocks: 104 MHz
+        12 clocks: 133 MHz
+        14 clocks: 155 MHz
+        16 clocks: 166 MHz
+        18 clocks: 173 MHz
+        20 clocks: 200 MHz
 
   read-wait-cycle:
     type: int

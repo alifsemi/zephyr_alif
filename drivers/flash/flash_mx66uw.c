@@ -11,6 +11,7 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/pinctrl.h>
+#include <zephyr/drivers/ospi/alif_ospi_dt.h>
 #include <zephyr/irq.h>
 #include <zephyr/kernel.h>
 
@@ -21,10 +22,30 @@ LOG_MODULE_REGISTER(OSPI_FLASH, CONFIG_FLASH_LOG_LEVEL);
 #define OSPI_FLASH_NODE		DT_NODELABEL(ospi_flash)
 #define OSPI_CTRL_NODE		DT_PARENT(OSPI_FLASH_NODE)
 
+ALIF_OSPI_VALIDATE_SIGNAL_DELAYS(OSPI_CTRL_NODE);
+
+#if DT_PROP(OSPI_CTRL_NODE, enable_signal_delay)
+static const struct ospi_signal_delay_config mx_signal_delays = {
+	.txd = DT_PROP_OR(OSPI_CTRL_NODE, txd_delays, {0}),
+	.rxd = DT_PROP_OR(OSPI_CTRL_NODE, rxd_delays, {0}),
+	.ssioen = DT_PROP_OR(OSPI_CTRL_NODE, ssi_oe_n_delays, {0}),
+	.rxds = COND_CODE_1(DT_NODE_HAS_PROP(OSPI_CTRL_NODE, rx_ds_delays),
+		(DT_PROP(OSPI_CTRL_NODE, rx_ds_delays)),
+		({DT_PROP(OSPI_CTRL_NODE, rx_ds_delay), DT_PROP(OSPI_CTRL_NODE, rx_ds_delay)})),
+	.txddm = DT_PROP_OR(OSPI_CTRL_NODE, txd_dm_delays, {0}),
+	.dmoen = DT_PROP_OR(OSPI_CTRL_NODE, dm_oe_n_delays, {0}),
+	.ssn = DT_PROP_OR(OSPI_CTRL_NODE, ss_n_delays, {0}),
+	.sclk = DT_PROP_OR(OSPI_CTRL_NODE, sclk_delay, 0),
+	.sclkn = DT_PROP_OR(OSPI_CTRL_NODE, sclkn_delay, 0),
+};
+#endif
+
 #define OSPI_AES_REG_NODE_NAME	aes_reg
 
 #define ADDR_IS_SEC_ALIGNED(addr, _bits)	((addr)&BIT_MASK(_bits))
 #define FLASH_SEC_SIZE_BIT			12
+
+#define MX_DUMMY_CYCLES_TO_REG_VALUE(cycles) ((20U - (cycles)) / 2U)
 
 static void flash_alif_ospi_irq_config_func(const struct device *dev);
 
@@ -59,6 +80,9 @@ static inline int32_t err_map_alif_hal_to_zephyr(int32_t err)
 		break;
 	case OSPI_ERR_CTRL_BUSY:
 		e_code = -EBUSY;
+		break;
+	case OSPI_ERR_UNSUPPORTED:
+		e_code = -ENOTSUP;
 		break;
 	default:
 		e_code = -EIO;
@@ -315,12 +339,14 @@ static int set_dtr_ospi_mode(struct mx_flash_ospi_dev_data *dev_data)
 static int update_dummy_cycle(struct mx_flash_ospi_dev_data *dev_data, int dummy_cyl)
 {
 	uint32_t cmd_buff[4];
+	uint32_t dummy_cyl_reg_val = MX_DUMMY_CYCLES_TO_REG_VALUE(dummy_cyl);
 	int ret;
 
 	/**Prepare command and config */
 	cmd_buff[0] = MX_OSPI_WRCR2_CMD;
 	cmd_buff[1] = MX_CONF_REG2_DUMMY_CYL_ADDR;
-	cmd_buff[2] = ((dummy_cyl << 8) | 0x0);   /*shift value byte :16-bit*/
+	/* Repeat the CR2 dummy-cycle in both bytes of the DTR data frame.*/
+	cmd_buff[2] = (dummy_cyl_reg_val << 8) | dummy_cyl_reg_val;
 
 	dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_32_BITS;
 	dev_data->trans_conf.wait_cycles = 0;
@@ -871,6 +897,16 @@ static int flash_mx66uw_ospi_init(const struct device *dev)
 		ret = err_map_alif_hal_to_zephyr(ret);
 		return ret;
 	}
+
+#if DT_PROP(OSPI_CTRL_NODE, enable_signal_delay)
+	ret = alif_hal_ospi_apply_signal_delays(dev_data->ospi_handle,
+					      &mx_signal_delays);
+	if (ret != OSPI_ERR_NONE) {
+		LOG_ERR("Failed to apply OSPI signal delays (%d)", ret);
+		alif_hal_ospi_deinit(dev_data->ospi_handle);
+		return err_map_alif_hal_to_zephyr(ret);
+	}
+#endif
 
 	/* Initialize Configuration */
 	ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle, &dev_data->trans_conf);
