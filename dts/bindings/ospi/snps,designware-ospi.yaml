@@ -1,7 +1,7 @@
 # Copyright (C) 2024 Alif Semiconductor.
 # SPDX-License-Identifier: Apache-2.0
 
-description: Synopsys Designware OSPI controller
+description: Synopsys Designware OSPI controller.
 
 compatible: "snps,designware-ospi"
 
@@ -32,8 +32,7 @@ properties:
 
   clock-frequency:
     type: int
-    description: |
-      Input clock frequency
+    description: Input clock frequency
 
   cs-pin:
     type: int
@@ -49,6 +48,66 @@ properties:
     type: int
     description: receive datastrobe delay
     default: 16
+
+  enable-signal-delay:
+    type: boolean
+    description: |
+      Enable/Disable signal delay for higher frequency
+      This is used to enable/disable the signal delay for higher frequency operation.
+      When enabled, the controller will add a delay to the signals to meet timing requirements.
+      When disabled, the controller will not add any delay to the signals.
+
+  txd-delays:
+    type: array
+    description: |
+      Output data lines 0 through 15, in delay taps (0 through 23, approximately 350 ps each).
+      Must contain exactly 16 entries.
+
+  rxd-delays:
+    type: array
+    description: |
+      Input data lines 0 through 15, in delay taps (0 through 23, approximately 350 ps each).
+      Must contain exactly 16 entries.
+
+  ssi-oe-n-delays:
+    type: array
+    description: |
+      Data output-enable lines 0 through 15, in delay taps (0 through 23, approximately 350 ps each).
+      Must contain exactly 16 entries.
+
+  rx-ds-delays:
+    type: array
+    description: |
+      Read strobes 0 and 1, in delay taps (0 through 23, approximately 350 ps each).
+      Must contain exactly 2 entries.
+
+  txd-dm-delays:
+    type: array
+    description: |
+      Data masks 0 and 1, in delay taps (0 through 23, approximately 350 ps each).
+      Must contain exactly 2 entries.
+
+  dm-oe-n-delays:
+    type: array
+    description: |
+      Data-mask output-enable lines 0 and 1, in delay taps (0 through 23, approximately 350 ps each).
+      Must contain exactly 2 entries.
+
+  ss-n-delays:
+    type: array
+    description: |
+      Chip selects 0 and 1, in delay taps (0 through 23, approximately 350 ps each).
+      Must contain exactly 2 entries.
+
+  sclk-delay:
+    type: int
+    description: |
+      Serial clock, in delay taps (0 through 23, approximately 350 ps each).
+
+  sclkn-delay:
+    type: int
+    description: |
+      Inverted serial clock, in delay taps (0 through 23, approximately 350 ps each).
 
   baud2-signal-delay:
     type: int
