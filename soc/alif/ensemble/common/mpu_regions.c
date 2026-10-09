@@ -16,6 +16,14 @@
 #define ALIF_ENSEMBLE_OSPI1_XIP_BASE		0xC0000000
 #define ALIF_ENSEMBLE_OSPI1_XIP_SIZE		MB(512)
 
+#define REGION_OSPI_RAM_ATTR(base, size) \
+{\
+	.rbar = P_RW_U_RW_Msk | NON_SHAREABLE_Msk, \
+	/* Cache-ability */ \
+	.mair_idx = MPU_MAIR_INDEX_SRAM, \
+	.r_limit = REGION_LIMIT_ADDR(base, size),  \
+}
+
 #define REGION_OSPI_FLASH_ATTR(base, size) \
 {\
 	.rbar = RO_Msk | NON_SHAREABLE_Msk, \
@@ -115,6 +123,18 @@ static const struct arm_mpu_region mpu_regions[] = {
 	MPU_REGION_ENTRY("OSPI1_XIP", ALIF_ENSEMBLE_OSPI1_XIP_BASE,
 			 REGION_OSPI_FLASH_ATTR(ALIF_ENSEMBLE_OSPI1_XIP_BASE,
 							ALIF_ENSEMBLE_OSPI1_XIP_SIZE)),
+#ifdef CONFIG_ENSEMBLE_GEN2
+	/* Region 7 */
+	MPU_REGION_ENTRY("OSPI0_XIP", ALIF_ENSEMBLE_OSPI0_XIP_BASE,
+			 REGION_OSPI_RAM_ATTR(ALIF_ENSEMBLE_OSPI0_XIP_BASE,
+							ALIF_ENSEMBLE_OSPI0_XIP_SIZE)),
+#else
+	/* Region 7: Device memory on non-Gen2 devices. */
+	MPU_REGION_ENTRY("OSPI0_XIP", ALIF_ENSEMBLE_OSPI0_XIP_BASE,
+			 REGION_DEVICE_ATTR(ALIF_ENSEMBLE_OSPI0_XIP_BASE,
+							ALIF_ENSEMBLE_OSPI0_XIP_SIZE)),
+#endif /* CONFIG_ENSEMBLE_GEN2 */
+
 #endif
 };
 
