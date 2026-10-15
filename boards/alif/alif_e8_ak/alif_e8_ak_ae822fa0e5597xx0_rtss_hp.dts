@@ -73,7 +73,21 @@
 };
 
 &ospi1 {
-	xip-wait-cycles = <10>;
+	enable-signal-delay;
+	xip-wait-cycles = <20>;
+	bus-speed = <200000000>;
+	ddr-drive-edge = <0>;
+
+	/* MX66 signal-delay taps calibrated at 200 MHz on E8 AppKit. */
+	txd-delays = <11 11 11 11 11 11 11 11 0 0 0 0 0 0 0 0>;
+	rxd-delays = <3 4 3 3 3 4 3 3 0 0 0 0 0 0 0 0>;
+	ssi-oe-n-delays = <11 11 11 11 11 11 11 11 0 0 0 0 0 0 0 0>;
+	rx-ds-delays = <8 0>;
+	txd-dm-delays = <0 0>;
+	dm-oe-n-delays = <0 0>;
+	ss-n-delays = <0 0>;
+	sclk-delay = <0>;
+	sclkn-delay = <0>;
 
 	/* External Flash on OSPI */
 	ospi_flash: ospi_flash@0 {
@@ -86,8 +100,8 @@
 		write-block-size = <2>;
 
 		/* wait cycles based on bus speed*/
-		def-wait-cycle = <5>;
-		read-wait-cycle = <10>;
+		def-wait-cycle = <20>;
+		read-wait-cycle = <20>;
 
 		/* Flash Size 128MB */
 		#address-cells = <1>;
