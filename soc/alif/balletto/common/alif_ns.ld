@@ -18,6 +18,7 @@ GROUP_START(NON_SECURE0)
 			KEEP(*(.noinit.*kheap_buf_net_buf_mem_pool_udc_ep_pool))
 			KEEP(*(.noinit.*kheap_buf_net_buf_mem_pool_uvc_buf_pool))
 			KEEP(*(.bss.disk_buf_0))
+			KEEP(*(.noinit.*k_mem_slab_buf_i2s_tx_slab))
 	} GROUP_LINK_IN(NON_SECURE0)
 
 GROUP_END(NON_SECURE0)

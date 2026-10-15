@@ -60,6 +60,20 @@ enum udc_dwc3_msg_type {
 	UDC_DWC3_MSG_DATA_IN,
 };
 
+/*
+ * First isochronous transfer scheduling state.
+ *
+ * DWC_usb3 reports a 16-bit IsocMicroFrameNum in an ISO XferNotReady
+ * event.  Keep the state per physical endpoint so ISO OUT audio and ISO IN
+ * feedback do not share timing state.
+ */
+static bool isoc_waiting_xnr[USB_NUM_OF_EPS];
+/* Software ownership of the eight data TRBs (the ninth is the link TRB). */
+static uint8_t isoc_queued[USB_NUM_OF_EPS];
+static uint32_t isoc_length[USB_NUM_OF_EPS][NO_OF_TRB_PER_EP];
+static uint16_t isoc_xnr_uframe[USB_NUM_OF_EPS];
+
+
 #define USB_ENDPOINT_NUMBER_MASK      0xF
 #define EP_NUM(ep_addr)               (ep_addr & USB_ENDPOINT_NUMBER_MASK)
 #define DWC3DATA(drv) CONTAINER_OF(drv, struct udc_dwc3_data, drv)
@@ -395,6 +409,55 @@ static int32_t udc_dwc3_stop_transfer(udc_dwc3_driver_t *drv, uint8_t ep_num,
 	return ret;
 }
 
+static int32_t udc_dwc3_isoc_start_from_xnr(udc_dwc3_driver_t *drv,
+		udc_dwc3_ep_t *ept, uint8_t phy_ep, uint16_t xnr_uframe)
+{
+	udc_dwc3_ep_params_t params = {0};
+	udc_dwc3_trb_t *trb_ptr;
+	uint32_t start_uframe;
+	uint32_t cmd;
+	int32_t ret;
+
+	/* The oldest queued TRB is the first TRB of this transfer. */
+	trb_ptr = &ept->ep_trb[ept->trb_dequeue];
+
+	/* Keep the XNR 16-bit microframe time domain. Retry Bus Expiry
+	 * immediately: waiting for another XNR can leave this EP stopped.
+	 * +1 stays the first choice because it gave the best observed rate.
+	 */
+	static const uint8_t ahead[] = {1U, 2U, 4U, 8U, 16U};
+	size_t attempt;
+
+	sys_cache_data_invd_range(trb_ptr, sizeof(*trb_ptr));
+	sys_cache_data_flush_range(trb_ptr, sizeof(*trb_ptr));
+	params.param1 = (uint32_t)trb_ptr;
+
+	for (attempt = 0U; attempt < ARRAY_SIZE(ahead); attempt++) {
+		start_uframe = (uint16_t)(xnr_uframe + ahead[attempt]);
+		if (ept->interval_uframe > 1U) {
+			start_uframe = ROUND_UP(start_uframe, ept->interval_uframe);
+			start_uframe &= 0xFFFFU;
+		}
+		cmd = USB_DEPCMD_STARTTRANSFER | USB_DEPCMD_PARAM(start_uframe);
+		ret = udc_dwc3_send_ep_cmd(drv, phy_ep, cmd, params);
+		if (ret != USB_EP_CMD_CMPLT_BUS_EXPIRY_ERROR) {
+			break;
+		}
+	}
+	if (ret < USB_SUCCESS) {
+		LOG_ERR("ISO START failed ep=%u ret=%d xnr=%u", phy_ep, ret,
+			xnr_uframe);
+		return ret;
+	}
+
+	ept->ep_resource_index = udc_dwc3_get_ep_transfer_resource_index(
+		drv, ept->ep_index, ept->ep_dir);
+	SET_BIT(ept->ep_status, USB_EP_BUSY);
+	isoc_waiting_xnr[phy_ep] = false;
+
+	return USB_SUCCESS;
+}
+
 static int32_t udc_dwc3_isoc_send(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t dir,
 		uint8_t *bufferptr, uint32_t buf_len)
 {
@@ -415,6 +478,10 @@ static int32_t udc_dwc3_isoc_send(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 
 	ept->bytes_txed = 0U;
 	ept->ep_requested_bytes = buf_len;
+	if (isoc_queued[phy_ep] >= NO_OF_TRB_PER_EP) {
+		return USB_EP_BUSY_ERROR;
+	}
+	isoc_length[phy_ep][ept->trb_enqueue] = buf_len;
 	trb_ptr = &ept->ep_trb[ept->trb_enqueue];
 	ept->trb_enqueue++;
 	if (ept->trb_enqueue == NO_OF_TRB_PER_EP) {
@@ -473,63 +540,138 @@ static int32_t udc_dwc3_isoc_send(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 		params.param1 = (uint32_t) trb_ptr;
 
 		ret = udc_dwc3_send_ep_cmd(drv, phy_ep, cmd, params);
+		if (ret < USB_SUCCESS) {
+			LOG_ERR("ISO IN UPDATE failed ep=%u ret=%d", phy_ep, ret);
+			goto fail;
+		}
+		isoc_queued[phy_ep]++;
+		return USB_SUCCESS;
+	}
+
+	isoc_queued[phy_ep]++;
+	/* First transfer: TRB is ready.  Wait for the ISO XferNotReady event. */
+	isoc_waiting_xnr[phy_ep] = true;
+	LOG_INF("ISO IN ep=%u TRB ready, waiting for XNR", phy_ep);
+	return USB_SUCCESS;
+
+fail:
+	if (ept->trb_enqueue == 0U) {
+		ept->trb_enqueue = NO_OF_TRB_PER_EP - 1U;
 	} else {
-		uint32_t future_frame;
-		int retries = 3;
+		ept->trb_enqueue--;
+	}
+	trb_ptr->ctrl = 0U;
+	return ret;
+}
+static int32_t udc_dwc3_isoc_recv(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t dir,
+		uint8_t *bufferptr, uint32_t buf_len)
+{
+	udc_dwc3_ep_t *ept;
+	udc_dwc3_trb_t *trb_ptr;
+	udc_dwc3_ep_params_t params = {0};
+	uint8_t phy_ep;
+	uint32_t cmd;
+	int32_t ret;
 
-		trb_ptr->ctrl = USB_TRBCTL_ISOCHRONOUS_FIRST;
-		/* The future microframe time must be an integral multiple of
-		 * intervals after the current time and aligned to the beginning
-		 * of an interval. Add a small margin (e.g. 2 microframes) to
-		 * avoid Bus Expiry.
-		 */
-		future_frame = drv->micro_frame_number + 2;
-		if (ept->interval_uframe > 1) {
-			future_frame = ROUND_UP(future_frame, ept->interval_uframe);
+	phy_ep = USB_GET_PHYSICAL_EP(ep_num, dir);
+	ept = &drv->eps[phy_ep];
+
+	if (ept->ep_dir != USB_DIR_OUT) {
+		LOG_ERR("Wrong ISOC OUT endpoint direction");
+		return USB_EP_DIRECTION_WRONG;
+	}
+
+	/* DWC3 OUT Buffer Descriptor total size must be a multiple of MPS. */
+	if ((buf_len == 0U) || !IS_ALIGNED(buf_len, ept->ep_maxpacket)) {
+		LOG_ERR("ISOC OUT buffer size %u must be a non-zero multiple of MPS %u",
+			buf_len, ept->ep_maxpacket);
+		return USB_EP_BUFF_LENGTH_INVALID;
+	}
+
+	ept->ep_requested_bytes = buf_len;
+	ept->bytes_txed = 0U;
+	ept->unaligned_txed = 0U;
+
+	if (isoc_queued[phy_ep] >= NO_OF_TRB_PER_EP) {
+		return USB_EP_BUSY_ERROR;
+	}
+	isoc_length[phy_ep][ept->trb_enqueue] = buf_len;
+	trb_ptr = &ept->ep_trb[ept->trb_enqueue];
+
+	ept->trb_enqueue++;
+	if (ept->trb_enqueue == NO_OF_TRB_PER_EP) {
+		ept->trb_enqueue = 0U;
+	}
+
+	sys_cache_data_flush_range(bufferptr, buf_len);
+
+#if CONFIG_UDC_DWC3_ALIF
+
+	uint32_t global_addr;
+
+	global_addr =
+		LOWER_32_BITS(local_to_global((uint32_t *)bufferptr));
+
+
+	trb_ptr->buf_ptr_low = global_addr;
+#else
+	trb_ptr->buf_ptr_low =
+		LOWER_32_BITS((uint32_t *)bufferptr);
+#endif
+
+	trb_ptr->buf_ptr_high = 0U;
+	trb_ptr->size = USB_TRB_SIZE_LENGTH(buf_len);
+	trb_ptr->ctrl = USB_TRBCTL_ISOCHRONOUS_FIRST;
+
+	SET_BIT(trb_ptr->ctrl,
+		USB_TRB_CTRL_HWO |
+		USB_TRB_CTRL_IOC |
+		USB_TRB_CTRL_ISP_IMI);
+
+	sys_cache_data_flush_range(trb_ptr, sizeof(*trb_ptr));
+
+	params.param1 = (uint32_t)trb_ptr;
+
+	if ((ept->ep_status & USB_EP_BUSY) != 0U) {
+		cmd = USB_DEPCMD_UPDATETRANSFER |
+			USB_DEPCMD_PARAM(ept->ep_resource_index);
+
+		ret = udc_dwc3_send_ep_cmd(drv, phy_ep, cmd, params);
+
+		if (ret < USB_SUCCESS) {
+			LOG_ERR("ISO OUT UPDATE failed ep=%u ret=%d",
+				phy_ep, ret);
+			goto fail;
 		}
 
-		SET_BIT(trb_ptr->ctrl, USB_TRB_CTRL_HWO | USB_TRB_CTRL_IOC | USB_TRB_CTRL_ISP_IMI);
-		sys_cache_data_flush_range(trb_ptr, sizeof(*trb_ptr));
-		params.param1 = (uint32_t) trb_ptr;
-
-		do {
-			cmd  = USB_DEPCMD_STARTTRANSFER;
-			cmd |= USB_DEPCMD_PARAM(future_frame);
-
-			ret = udc_dwc3_send_ep_cmd(drv, phy_ep, cmd, params);
-			if (ret != USB_EP_CMD_CMPLT_BUS_EXPIRY_ERROR) {
-				break;
-			}
-
-			/* Bus Expiry: the requested frame has already passed.
-			 * Push it further into the future.
-			 */
-			LOG_WRN("ISOC STARTTRANSFER Bus Expiry, retrying with future frame");
-			future_frame += (ept->interval_uframe > 0) ? ept->interval_uframe : 1;
-			retries--;
-		} while (retries > 0);
+		isoc_queued[phy_ep]++;
+		return USB_SUCCESS;
 	}
 
-	if (ret < USB_SUCCESS) {
-		LOG_ERR("failed to send the command for isoc send");
-		/* Revert TRB enqueue since we completely failed to submit it */
-		if (ept->trb_enqueue == 0U) {
-			ept->trb_enqueue = NO_OF_TRB_PER_EP - 1;
-		} else {
-			ept->trb_enqueue--;
-		}
-		return ret;
+	isoc_queued[phy_ep]++;
+	/*
+	 * First transfer:
+	 * TRB is ready. Wait for ISO XferNotReady.
+	 */
+	isoc_waiting_xnr[phy_ep] = true;
+
+	LOG_INF("ISO OUT ep=%u TRB ready, waiting for XNR",
+		phy_ep);
+
+	return USB_SUCCESS;
+
+fail:
+	if (ept->trb_enqueue == 0U) {
+		ept->trb_enqueue = NO_OF_TRB_PER_EP - 1U;
+	} else {
+		ept->trb_enqueue--;
 	}
 
-	if ((ept->ep_status & USB_EP_BUSY) == 0U) {
-		ept->ep_resource_index = udc_dwc3_get_ep_transfer_resource_index(drv,
-				ept->ep_index, ept->ep_dir);
-
-		SET_BIT(ept->ep_status, USB_EP_BUSY);
-	}
+	trb_ptr->ctrl = 0U;
 
 	return ret;
 }
+
 static int32_t udc_dwc3_bulk_int_send(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t dir,
 		uint8_t *bufferptr, uint32_t buf_len)
 {
@@ -709,6 +851,82 @@ static void udc_dwc3_ep_xfer_complete(udc_dwc3_driver_t *drv, uint8_t endp_numbe
 
 	trb_status = USB_TRB_SIZE_TRBSTS(trb_ptr->size);
 
+	/*
+	 * A MISSED_ISOC OUT TRB contains no valid payload.
+	 *
+	 * UPDATE TRANSFER after a missed service interval returned success on
+	 * this controller, but no further endpoint events were generated.
+	 * End the expired hardware transfer and release the missed software
+	 * request with zero bytes.  The next queued TRB owns the next buffer.
+	 * XferNotReady supplies the frame number for a new STARTTRANSFER.
+	 */
+	if ((trb_status == USB_TRBSTS_MISSED_ISOC) &&
+	    (ept->ep_type == USB_ISOCRONOUS_EP) &&
+	    (dir == USB_DIR_OUT)) {
+		udc_dwc3_ep_params_t end_params = {0};
+		uint32_t end_cmd;
+		int32_t end_ret;
+
+		/*
+		 * End only the active hardware transfer resource here.
+		 * Do not use udc_dwc3_stop_transfer(), because that routine also
+		 * changes/reset the software enqueue state.
+		 */
+		if (ept->ep_resource_index != 0U) {
+			end_cmd = USB_DEPCMD_ENDTRANSFER |
+				USB_DEPCMD_PARAM(ept->ep_resource_index);
+			SET_BIT(end_cmd, USB_DEPCMD_CMDIOC);
+
+			end_ret = udc_dwc3_send_ep_cmd(drv, endp_number,
+				end_cmd, end_params);
+			if (end_ret < USB_SUCCESS) {
+				/* Keep the current state visible for debugging. */
+				return;
+			}
+		}
+
+		CLEAR_BIT(ept->ep_status, USB_EP_BUSY);
+		ept->ep_resource_index = 0U;
+
+		/* A missed buffer has no valid data.  Release it exactly once so
+		 * the UDC FIFO, software TRB ring and UAC2 pending count stay aligned.
+		 */
+		if (isoc_queued[endp_number] != 0U) {
+			isoc_queued[endp_number]--;
+			ept->trb_dequeue = (ept->trb_dequeue + 1U) % NO_OF_TRB_PER_EP;
+			drv->num_bytes = 0U;
+			if (drv->udc_dwc3_data_out_cb != NULL) {
+				drv->udc_dwc3_data_out_cb(drv, ept->ep_index);
+			}
+		}
+		/* ENDTRANSFER may relinquish HWO on later TRBs in the ring.
+		 * They still belong to queued UAC2 requests: restore their sizes
+		 * before handing the next transfer back to the controller.
+		 */
+		for (uint32_t i = 0U; i < isoc_queued[endp_number]; i++) {
+			uint32_t slot = (ept->trb_dequeue + i) % NO_OF_TRB_PER_EP;
+			udc_dwc3_trb_t *queued_trb = &ept->ep_trb[slot];
+
+			sys_cache_data_invd_range(queued_trb, sizeof(*queued_trb));
+			queued_trb->size = USB_TRB_SIZE_LENGTH(isoc_length[endp_number][slot]);
+			queued_trb->ctrl = USB_TRBCTL_ISOCHRONOUS_FIRST |
+				USB_TRB_CTRL_HWO | USB_TRB_CTRL_IOC | USB_TRB_CTRL_ISP_IMI;
+			sys_cache_data_flush_range(queued_trb, sizeof(*queued_trb));
+		}
+
+		/* Do not START with a frame number from the expired transfer. */
+		isoc_waiting_xnr[endp_number] = isoc_queued[endp_number] != 0U;
+
+		return;
+	}
+
+	if (ept->ep_type == USB_ISOCRONOUS_EP) {
+		if (isoc_queued[endp_number] == 0U) {
+			return;
+		}
+		ept->ep_requested_bytes = isoc_length[endp_number][ept->trb_dequeue];
+		isoc_queued[endp_number]--;
+	}
 	ept->trb_dequeue++;
 	if (ept->trb_dequeue == NO_OF_TRB_PER_EP) {
 		ept->trb_dequeue = 0U;
@@ -1010,14 +1228,57 @@ static void udc_dwc3_depevt_handler(udc_dwc3_driver_t *drv, uint32_t reg)
 		uint32_t cmd_param;
 		switch (event_type) {
 		case USB_DEPEVT_XFERINPROGRESS:
+			/* An ISO event consumes a TRB only after DMA releases HWO. */
+			if (ept->ep_type == USB_ISOCRONOUS_EP) {
+				udc_dwc3_trb_t *trb = &ept->ep_trb[ept->trb_dequeue];
+
+				if (isoc_queued[endp_number] == 0U) {
+					break;
+				}
+				sys_cache_data_invd_range(trb, sizeof(*trb));
+				if ((trb->ctrl & USB_TRB_CTRL_HWO) != 0U) {
+					break;
+				}
+			}
 			udc_dwc3_ep_xfer_complete(drv, endp_number);
 			break;
 		case USB_DEPEVT_XFERCOMPLETE:
+			if (ept->ep_type == USB_ISOCRONOUS_EP &&
+			    isoc_queued[endp_number] != 0U) {
+				udc_dwc3_trb_t *trb = &ept->ep_trb[ept->trb_dequeue];
+
+				sys_cache_data_invd_range(trb, sizeof(*trb));
+				if ((trb->ctrl & USB_TRB_CTRL_HWO) == 0U) {
+					udc_dwc3_ep_xfer_complete(drv, endp_number);
+				}
+			}
 			break;
 		case USB_DEPEVT_XFERNOTREADY:
-			/* for Isoc_only */
-			/* Get the frame from event param BIT[31:16] */
 			cmd_param = USB_GET_EVENT_CMD_PARAM(reg);
+
+			if (ept->ep_type == USB_ISOCRONOUS_EP) {
+				uint16_t xnr_uframe = (uint16_t)(cmd_param & 0xFFFFU);
+
+				isoc_xnr_uframe[endp_number] = xnr_uframe;
+
+				/* EP3 reported XferActive (status=1) while software busy=0,
+				 * so do not issue a second initial STARTTRANSFER for EP3 yet.
+				 */
+				if (isoc_waiting_xnr[endp_number] &&
+				    !(ept->ep_status & USB_EP_BUSY)) {
+					int32_t start_ret;
+
+					start_ret = udc_dwc3_isoc_start_from_xnr(
+						drv, ept, endp_number, xnr_uframe);
+
+					if (start_ret < USB_SUCCESS) {
+						LOG_ERR("ISO XNR start failed ep=%u ret=%d",
+							endp_number, start_ret);
+					}
+				}
+				break;
+			}
+
 			usbd_isoc_micro_frame_update(drv, cmd_param);
 			break;
 		default:
@@ -1092,6 +1353,9 @@ static void udc_dwc3_devt_handler(udc_dwc3_driver_t *drv, uint32_t reg)
 		if (drv->udc_dwc3_disconnect_cb != NULL) {
 			drv->udc_dwc3_disconnect_cb(drv);
 		}
+		break;
+	case USB_EVENT_SOF:
+		udc_submit_event(DWC3DATA(drv)->dev, UDC_EVT_SOF, 0);
 		break;
 	case USB_EVENT_EOPF:
 		break;
@@ -1376,6 +1640,8 @@ static int32_t udc_dwc3_ep_enable(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 			 */
 			ept->trb_enqueue = 0;
 			ept->trb_dequeue = 0;
+			isoc_queued[phy_ep] = 0U;
+			isoc_waiting_xnr[phy_ep] = false;
 			memset(ept->ep_trb, 0x0, sizeof(ept->ep_trb));
 			trb_ptr = &ept->ep_trb[0U];
 			/* Link TRB. The HWO bit is never reset */
@@ -1517,6 +1783,7 @@ static void udc_dwc3_enable_events(udc_dwc3_driver_t *drv)
 	SET_BIT(reg, USB_DEV_CONNECTDONEEVTEN);
 	SET_BIT(reg, USB_DEV_WKUPEVTEN);
 	SET_BIT(reg, USB_DEV_EVENT_ULSTCNGEN);
+	SET_BIT(reg, USB_DEV_SOFTEVTEN);
 	drv->regs->DEVTEN = reg;
 }
 
@@ -1839,6 +2106,7 @@ static void udc_dwc3_disable_events(udc_dwc3_driver_t *drv)
 	CLEAR_BIT(reg, USB_DEV_CONNECTDONEEVTEN);
 	CLEAR_BIT(reg, USB_DEV_WKUPEVTEN);
 	CLEAR_BIT(reg, USB_DEV_EVENT_ULSTCNGEN);
+	CLEAR_BIT(reg, USB_DEV_SOFTEVTEN);
 	drv->regs->DEVTEN = reg;
 }
 
@@ -2355,8 +2623,9 @@ static int udc_dwc3_rx(const struct device *dev, uint8_t ep, struct net_buf *buf
 		ret = udc_dwc3_bulk_int_recv(&priv->drv, ep_num, ep_dir, buf->data, buf->size);
 		break;
 	case USB_ISOCRONOUS_EP:
-		LOG_WRN("Isoc Out transfer not yet implemented");
-		return -ENOTSUP;
+		ret = udc_dwc3_isoc_recv(&priv->drv, ep_num, ep_dir,
+					buf->data, buf->size);
+		break;
 	default:
 		LOG_ERR("Invalid endpoint type index %d", ep_type);
 		return -EINVAL;
@@ -2372,15 +2641,29 @@ static int udc_dwc3_ep_enqueue(const struct device *dev, struct udc_ep_config *e
 		struct net_buf *buf)
 {
 	unsigned int lock_key;
+	uint8_t ep_type;
 	int ret;
 
-	udc_buf_put(epcfg, buf);
+	ep_type = epcfg->attributes & USB_EP_TRANSFER_TYPE_MASK;
+
+	/* Preserve original behavior for non-ISO endpoints */
+	if (ep_type != USB_ISOCRONOUS_EP) {
+		udc_buf_put(epcfg, buf);
+	}
+
 	lock_key = irq_lock();
+
 	if (USB_EP_DIR_IS_IN(epcfg->addr)) {
 		ret = udc_dwc3_tx(dev, epcfg->addr, buf);
 	} else {
 		ret = udc_dwc3_rx(dev, epcfg->addr, buf);
 	}
+
+	/* Queue ISO buffers only after successful submission */
+	if (ep_type == USB_ISOCRONOUS_EP && ret == 0) {
+		udc_buf_put(epcfg, buf);
+	}
+
 	irq_unlock(lock_key);
 
 	return ret;
@@ -2390,10 +2673,17 @@ static int udc_dwc3_ep_dequeue(const struct device *dev, struct udc_ep_config *e
 {
 	struct net_buf *buf;
 
-	buf = udc_buf_get_all(dev, epcfg->addr);
-	if (buf) {
-		udc_submit_ep_event(dev, buf, -ECONNABORTED);
+	if ((epcfg->attributes & USB_EP_TRANSFER_TYPE_MASK) == USB_ISOCRONOUS_EP) {
+		while ((buf = udc_buf_get(dev, epcfg->addr)) != NULL) {
+			udc_submit_ep_event(dev, buf, -ECONNABORTED);
+		}
+	} else {
+		buf = udc_buf_get_all(dev, epcfg->addr);
+		if (buf != NULL) {
+			udc_submit_ep_event(dev, buf, -ECONNABORTED);
+		}
 	}
+
 	udc_ep_set_busy(dev, epcfg->addr, false);
 	return 0;
 }
@@ -2548,6 +2838,13 @@ static void handle_data_out(struct udc_dwc3_data *priv, uint8_t ep_num, uint16_t
 		LOG_ERR("ep 0x%02x queue is empty", ep);
 		return;
 	}
+
+	/* OUT data was written by the USB DMA. Invalidate the CPU cache before
+	 * exposing the received bytes to the USB class/application layer.
+	 */
+	if (recv_bytes != 0U) {
+		sys_cache_data_invd_range(buf->data, recv_bytes);
+	}
 	net_buf_add(buf, recv_bytes);
 	if (ep == USB_CONTROL_EP_OUT) {
 		if (udc_ctrl_stage_is_status_out(dev)) {
@@ -2562,9 +2859,16 @@ static void handle_data_out(struct udc_dwc3_data *priv, uint8_t ep_num, uint16_t
 	} else {
 		udc_submit_ep_event(dev, buf, 0);
 	}
-	buf = udc_buf_peek(dev, ep);
-	if (buf) {
-		udc_dwc3_rx(dev, ep, buf);
+	/* Every ISO OUT request was armed in udc_dwc3_ep_enqueue().
+	 * The next FIFO item already owns its own TRB. Arming it again here
+	 * creates a second TRB pointing at the same application buffer.
+	 */
+	if ((udc_get_ep_cfg(dev, ep)->attributes &
+	     USB_EP_TRANSFER_TYPE_MASK) != USB_ISOCRONOUS_EP) {
+		buf = udc_buf_peek(dev, ep);
+		if (buf) {
+			udc_dwc3_rx(dev, ep, buf);
+		}
 	}
 }
 
