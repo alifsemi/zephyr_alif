@@ -11,6 +11,7 @@
 #include <zephyr/dt-bindings/pwm/pwm.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
 #include <alif/common/alif_common.dtsi>
+#include <alif/common/system_timer.dtsi>
 #include <zephyr/dt-bindings/mipi_dsi/mipi_dsi.h>
 #include <zephyr/dt-bindings/power-domain/alif_power_domain.h>
 #include <zephyr/dt-bindings/memory-attr/memory-attr-arm.h>
