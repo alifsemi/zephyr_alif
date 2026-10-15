@@ -9,3 +9,56 @@ config COUNTER_ALIF_UTIMER
 	select USE_ALIF_HAL_UTIMER
 	help
 	  Enable ALIF UTIMER counter driver.
+
+config COUNTER_ALIF_UTIMER_DMA
+	bool "Alif UTIMER DMA trigger"
+	depends on COUNTER_ALIF_UTIMER && DMA
+	help
+	  Treat selected UTIMER instances as DMA request sources (UTn_Tx
+	  driver output, typically UT0_T0 for compare channel 0). Per HRM,
+	  the Event Router connects these lines to PL330 DMA_REQ inputs.
+	  The driver holds the request low, drives it high at compare match
+	  (COMPARE_TRIG_EN), leaves CPU IRQ disabled, and re-arms on
+	  cancel_alarm. The application may EOI CHAN_INTERRUPT after DMA.
+	  Mux (DMA instance, group, request) comes from the overlay dmas
+	  property. Alarm callbacks are not supported; pass NULL and
+	  re-arm with cancel_alarm() after each trigger. The channel
+	  returns -EBUSY until cancel_alarm() clears dma_armed, including
+	  after the compare match fires.
+
+choice COUNTER_ALIF_UTIMER_DMA_REARM
+	prompt "UTIMER DMA re-arm: driver A high to low between alarms"
+	depends on COUNTER_ALIF_UTIMER_DMA
+	default COUNTER_ALIF_UTIMER_DMA_REARM_FORCE_LOW
+
+config COUNTER_ALIF_UTIMER_DMA_REARM_FORCE_LOW
+	bool "Force-low dummy compare (creates falling edge after alarm)"
+	help
+	  After each alarm compare (driver high), run a near-term
+	  LOW_AT_COMP_MATCH compare to pull driver A low, then arm the
+	  next HIGH_AT_COMP_MATCH. Validated for repeated 2s/4s/8s DMA.
+
+config COUNTER_ALIF_UTIMER_DMA_REARM_IDLE_LOW
+	bool "Idle driver low only (DRIVER_EN=0, no dummy compare)"
+	help
+	  On cancel_alarm: disable driver with DISABLE_VAL low. Tests
+	  whether that high-to-low is enough without force-low compare.
+
+endchoice
+
+config COUNTER_ALIF_UTIMER_DMA_HW_CLEAR_ENABLE
+	bool "Enable DMA_CLEAR (SRC_A_1 fall) with selected re-arm"
+	depends on COUNTER_ALIF_UTIMER_DMA
+	default n
+	help
+	  Programs DMA_CLEAR_SRC_A_1=0x4 (DRIVE_A_FALLING_B_0) and sets
+	  COMPARE_CTRL DMA_CLEAR_EN. Combine with FORCE_LOW or IDLE_LOW
+	  for a 2x2 dependency test:
+
+	  - force-low + CLEAR=n  (baseline, expect PASS loop)
+	  - force-low + CLEAR=y  (is CLEAR redundant if force-low falls?)
+	  - idle-low  + CLEAR=n  (fall without dummy compare?)
+	  - idle-low  + CLEAR=y  (prior failed case on E8)
+
+	  DMA_CLEAR clears the DMA request on programmed driver edges;
+	  it does not replace a rising edge for the next transfer.
