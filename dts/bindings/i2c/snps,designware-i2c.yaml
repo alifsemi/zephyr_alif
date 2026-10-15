@@ -48,3 +48,13 @@ properties:
 
       For example, with an input clock frequency of 100 MHz, a value of
       1 corresponds to a spike width of 10 ns.
+
+  bus-clear-support:
+    type: boolean
+    description: |
+      Set if this instance's controller was synthesized with the DesignWare
+      bus-clear feature (IC_CON bus_clear_feature_ctrl bit, SDA/SCL
+      stuck-at-low detection, and SDA_STUCK_RECOVERY_ENABLE). Not all
+      DesignWare I2C instances implement this optional feature; when unset,
+      the driver leaves the feature disabled and recover_bus() returns
+      -ENOSYS instead of reporting a recovery that never happened.

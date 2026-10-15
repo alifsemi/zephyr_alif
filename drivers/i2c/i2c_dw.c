@@ -348,6 +348,8 @@ static inline void i2c_dw_transfer_complete(const struct device *dev)
 	uint32_t value;
 	uint32_t reg_base = get_regs(dev);
 
+	dw->tx_abrt_source = read_tx_abrt_source(reg_base);
+
 	write_intr_mask(DW_DISABLE_ALL_I2C_INT, reg_base);
 	value = read_clr_intr(reg_base);
 
@@ -623,6 +625,9 @@ static int i2c_dw_setup(const struct device *dev, uint16_t slave_address)
 		LOG_DBG("I2C: host configured as Master Device");
 		ic_con.bits.master_mode = 1U;
 		ic_con.bits.slave_disable = 1U;
+		if (rom->bus_clear_support) {
+			ic_con.bits.bus_clear_feature_ctrl = 1U;
+		}
 	} else {
 		return -EINVAL;
 	}
@@ -815,6 +820,7 @@ static int i2c_dw_transfer(const struct device *dev, struct i2c_msg *msgs, uint8
 		/* Wait for transfer to be done */
 		ret = k_sem_take(&dw->device_sync_sem, K_MSEC(CONFIG_I2C_DW_RW_TIMEOUT_MS));
 		if (ret != 0) {
+			dw->tx_abrt_source = read_tx_abrt_source(reg_base);
 			write_intr_mask(DW_DISABLE_ALL_I2C_INT, reg_base);
 			value = read_clr_intr(reg_base);
 			break;
@@ -1137,10 +1143,87 @@ static void i2c_dw_slave_read_clear_intr_bits(const struct device *dev)
 }
 #endif /* CONFIG_I2C_TARGET */
 
+/* Implements the hardware SDA stuck-at-low recovery flow. Self-contained: does
+ * not assume a prior transfer already enabled BUS_CLEAR_FEATURE_CTRL or left
+ * a usable abort cause behind, since recover_bus() is a public API that can
+ * be called cold (e.g. to clear a bus left stuck low from before boot).
+ */
+static int i2c_dw_recover_bus(const struct device *dev)
+{
+	const struct i2c_dw_rom_config *const rom = dev->config;
+	uint32_t reg_base = get_regs(dev);
+	struct i2c_dw_dev_config *const dw = dev->data;
+	union ic_con_register ic_con;
+	int ret = 0;
+	int i;
+
+	if (!rom->bus_clear_support) {
+		return -ENOSYS;
+	}
+
+	ret = k_mutex_lock(&dw->bus_mutex, K_FOREVER);
+	if (ret != 0) {
+		return ret;
+	}
+
+	if (read_raw_intr_stat(reg_base) & DW_IC_RAW_INTR_SCL_STUCK_AT_LOW) {
+		LOG_ERR("%s: SCL stuck at low, hardware reset required", dev->name);
+		ret = -EIO;
+		goto out;
+	}
+
+	if (dw->tx_abrt_source & DW_IC_TX_ABRT_SDA_STUCK_AT_LOW) {
+		LOG_WRN("%s: SDA stuck at low detected, initiating hardware recovery",
+			dev->name);
+	} else {
+		LOG_WRN("%s: attempting hardware bus-clear recovery", dev->name);
+	}
+
+	/* BUS_CLEAR_FEATURE_CTRL may not have been enabled yet if no transfer
+	 * has run i2c_dw_setup(). Must be written while I2C is disabled.
+	 */
+	clear_bit_enable_en(reg_base);
+	ic_con.raw = read_con(reg_base);
+	ic_con.bits.bus_clear_feature_ctrl = 1U;
+	write_con(ic_con.raw, reg_base);
+
+	/* I2C must be enabled for SDA_STUCK_RECOVERY_ENABLE to take effect. */
+	set_bit_enable_en(reg_base);
+	set_bit_enable_sda_recovery(reg_base);
+
+	for (i = 0; i < 1000 && test_bit_enable_sda_recovery(reg_base); i++) {
+		k_busy_wait(10);
+	}
+
+	if (test_bit_enable_sda_recovery(reg_base)) {
+		LOG_ERR("%s: SDA recovery timed out", dev->name);
+		clear_bit_enable_sda_recovery(reg_base);
+		ret = -ETIMEDOUT;
+		goto out;
+	}
+
+	if (test_bit_status_sda_stuck_not_recovered(reg_base)) {
+		LOG_ERR("%s: SDA stuck not recovered, hardware reset required", dev->name);
+		ret = -EIO;
+		goto out;
+	}
+
+	LOG_INF("%s: SDA stuck at low recovered", dev->name);
+
+out:
+	dw->tx_abrt_source = 0;
+	(void)read_clr_scl_stuck_det(reg_base);
+	(void)read_clr_tx_abrt(reg_base);
+	dw->state = I2C_DW_STATE_READY;
+	k_mutex_unlock(&dw->bus_mutex);
+	return ret;
+}
+
 static DEVICE_API(i2c, funcs) = {
 	.configure = i2c_dw_runtime_configure,
 	.get_config = i2c_dw_get_configuration,
 	.transfer = i2c_dw_transfer,
+	.recover_bus = i2c_dw_recover_bus,
 #ifdef CONFIG_I2C_TARGET
 	.target_register = i2c_dw_slave_register,
 	.target_unregister = i2c_dw_slave_unregister,
@@ -1259,6 +1342,15 @@ static int i2c_dw_initialize(const struct device *dev)
 	/* Set spike length */
 	write_fs_spklen(rom->fs_spk_len, reg_base);
 	write_hs_spklen(rom->hs_spk_len, reg_base);
+
+	/* Configure stuck-at-low detection timeouts for the controller's bus clear
+	 * feature. Must be written while I2C is disabled. Only instances marked
+	 * "bus-clear-support" in DT implement these registers.
+	 */
+	if (rom->bus_clear_support) {
+		write_scl_stuck_timeout(DW_IC_SCL_STUCK_TIMEOUT_DEFAULT, reg_base);
+		write_sda_stuck_timeout(DW_IC_SDA_STUCK_TIMEOUT_DEFAULT, reg_base);
+	}
 
 	dw->app_config = I2C_MODE_CONTROLLER | i2c_map_dt_bitrate(rom->bitrate);
 
@@ -1514,6 +1606,7 @@ static int i2c_dw_pm_action(const struct device *dev, enum pm_device_action acti
 		.hcnt_offset = (int16_t)DT_INST_PROP_OR(n, hcnt_offset, 0),                        \
 		.fs_spk_len = MAX((uint8_t)DT_INST_PROP_OR(n, fs_spike_len, 0), DW_IC_SPKLEN_MIN), \
 		.hs_spk_len = MAX((uint8_t)DT_INST_PROP_OR(n, hs_spike_len, 0), DW_IC_SPKLEN_MIN), \
+		.bus_clear_support = DT_INST_PROP(n, bus_clear_support),                           \
 		RESET_DW_CONFIG(n) PINCTRL_DW_CONFIG(n) I2C_DW_INIT_PCIE(n)                        \
 			I2C_CONFIG_DMA_INIT(n)};                                                   \
 	static struct i2c_dw_dev_config i2c_##n##_runtime;                                         \
