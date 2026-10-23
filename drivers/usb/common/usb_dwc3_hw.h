@@ -265,6 +265,8 @@ typedef struct {     /*!< (@ 0x48200000) USB Structure */
 #define USB_DEV_EVENT_ULSTCNGEN                          BIT(3)
 /* USB wakeup event */
 #define USB_DEV_WKUPEVTEN                                BIT(4)
+/* USB Start of Frame Event */
+#define USB_DEV_SOFTEVTEN                                BIT(7)
 
 /* Dwc3 device status register      */
 #define USB_DSTS_USBLNKST_POS                            18

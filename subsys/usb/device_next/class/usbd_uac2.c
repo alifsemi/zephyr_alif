@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2023-2024 Nordic Semiconductor ASA
+ * Copyright (C) 2026 Alif Semiconductor.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -32,7 +33,13 @@ LOG_MODULE_REGISTER(usbd_uac2, CONFIG_USBD_UAC2_LOG_LEVEL);
 #define COUNT_UAC2_EP_BUFFERS(i)						\
 	+ DT_PROP(DT_DRV_INST(i), interrupt_endpoint)				\
 	DT_INST_FOREACH_CHILD(i, COUNT_UAC2_AS_ENDPOINT_BUFFERS)
-#define UAC2_NUM_EP_BUFFERS DT_INST_FOREACH_STATUS_OKAY(COUNT_UAC2_EP_BUFFERS)
+#define UAC2_ISO_OUT_DEPTH 4U
+#define COUNT_UAC2_OUT_EXTRA(node) \
+	IF_ENABLED(DT_NODE_HAS_COMPAT(node, zephyr_uac2_audio_streaming), ( \
+		+ 3 * (AS_HAS_ISOCHRONOUS_DATA_ENDPOINT(node) - AS_IS_USB_ISO_IN(node))))
+#define COUNT_UAC2_OUT_EXTRA_INST(i) DT_INST_FOREACH_CHILD(i, COUNT_UAC2_OUT_EXTRA)
+#define UAC2_NUM_EP_BUFFERS (DT_INST_FOREACH_STATUS_OKAY(COUNT_UAC2_EP_BUFFERS) \
+	DT_INST_FOREACH_STATUS_OKAY(COUNT_UAC2_OUT_EXTRA_INST))
 
 /* Net buf is used mostly with external data. The main reason behind external
  * data is avoiding unnecessary isochronous data copy operations.
@@ -86,6 +93,7 @@ struct uac2_ctx {
 	atomic_t as_active;
 	atomic_t as_queued;
 	atomic_t as_double;
+	atomic_t out_queued[32];
 	uint32_t fb_queued;
 };
 
@@ -364,16 +372,22 @@ static void schedule_iso_out_read(struct usbd_class_data *const c_data,
 		return;
 	}
 
-	if (atomic_test_and_set_bit(&ctx->as_queued, as_idx)) {
-		/* Transfer already queued - do not requeue */
-		return;
+	for (;;) {
+		atomic_val_t current = atomic_get(&ctx->out_queued[as_idx]);
+
+		if (current >= UAC2_ISO_OUT_DEPTH) {
+			return;
+		}
+		if (atomic_cas(&ctx->out_queued[as_idx], current, current + 1)) {
+			break;
+		}
 	}
 
 	/* Prepare transfer to read audio OUT data from host */
 	data_buf = ctx->ops->get_recv_buf(dev, terminal, mps, ctx->user_data);
 	if (!data_buf) {
 		LOG_ERR("No data buffer for terminal %d", terminal);
-		atomic_clear_bit(&ctx->as_queued, as_idx);
+		atomic_dec(&ctx->out_queued[as_idx]);
 		return;
 	}
 
@@ -386,7 +400,7 @@ static void schedule_iso_out_read(struct usbd_class_data *const c_data,
 		 */
 		ctx->ops->data_recv_cb(dev, terminal,
 				       data_buf, 0, ctx->user_data);
-		atomic_clear_bit(&ctx->as_queued, as_idx);
+		atomic_dec(&ctx->out_queued[as_idx]);
 		return;
 	}
 
@@ -394,7 +408,9 @@ static void schedule_iso_out_read(struct usbd_class_data *const c_data,
 	if (ret) {
 		LOG_ERR("Failed to enqueue net_buf for 0x%02x", ep);
 		net_buf_unref(buf);
-		atomic_clear_bit(&ctx->as_queued, as_idx);
+		ctx->ops->data_recv_cb(dev, terminal,
+				       data_buf, 0, ctx->user_data);
+		atomic_dec(&ctx->out_queued[as_idx]);
 	}
 }
 
@@ -498,9 +514,11 @@ void uac2_update(struct usbd_class_data *const c_data,
 	__ASSERT_NO_MSG(data_ep);
 
 	if (USB_EP_DIR_IS_OUT(data_ep->bEndpointAddress)) {
-		schedule_iso_out_read(c_data, data_ep->bEndpointAddress,
-				      sys_le16_to_cpu(data_ep->wMaxPacketSize),
-				      cfg->as_terminals[as_idx]);
+		for (unsigned int n = 0; n < UAC2_ISO_OUT_DEPTH; n++) {
+			schedule_iso_out_read(c_data, data_ep->bEndpointAddress,
+					      sys_le16_to_cpu(data_ep->wMaxPacketSize),
+					      cfg->as_terminals[as_idx]);
+		}
 
 		fb_ep = get_as_feedback_ep(c_data, as_idx);
 		if (fb_ep) {
@@ -807,6 +825,8 @@ static int uac2_request(struct usbd_class_data *const c_data, struct net_buf *bu
 
 	if (is_feedback) {
 		ctx->fb_queued &= ~BIT(as_idx);
+	} else if (USB_EP_DIR_IS_OUT(ep)) {
+		atomic_dec(&ctx->out_queued[as_idx]);
 	} else if (!atomic_test_and_clear_bit(&ctx->as_queued, as_idx) || buf->frags) {
 		atomic_clear_bit(&ctx->as_double, as_idx);
 	}
@@ -825,7 +845,9 @@ static int uac2_request(struct usbd_class_data *const c_data, struct net_buf *bu
 
 	/* Reschedule the read or explicit feedback write */
 	if (USB_EP_DIR_IS_OUT(ep)) {
-		schedule_iso_out_read(c_data, ep, mps, terminal);
+		for (unsigned int n = 0; n < UAC2_ISO_OUT_DEPTH; n++) {
+			schedule_iso_out_read(c_data, ep, mps, terminal);
+		}
 	} else if (is_feedback) {
 		write_explicit_feedback(c_data, ep, cfg->as_terminals[as_idx]);
 	}
@@ -851,9 +873,11 @@ static void uac2_sof(struct usbd_class_data *const c_data)
 		 */
 		data_ep = get_as_data_ep(c_data, as_idx);
 		if (data_ep && USB_EP_DIR_IS_OUT(data_ep->bEndpointAddress)) {
-			schedule_iso_out_read(c_data, data_ep->bEndpointAddress,
-				sys_le16_to_cpu(data_ep->wMaxPacketSize),
-				cfg->as_terminals[as_idx]);
+			for (unsigned int n = 0; n < UAC2_ISO_OUT_DEPTH; n++) {
+				schedule_iso_out_read(c_data, data_ep->bEndpointAddress,
+					sys_le16_to_cpu(data_ep->wMaxPacketSize),
+					cfg->as_terminals[as_idx]);
+			}
 		}
 
 		/* Skip interfaces without explicit feedback endpoint */

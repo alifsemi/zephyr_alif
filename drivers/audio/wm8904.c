@@ -504,13 +504,15 @@ static int wm8904_configure(const struct device *dev, struct audio_codec_cfg *cf
 
 	wm8904_audio_fmt_config(dev, &cfg->dai_cfg, cfg->mclk_freq);
 
-	if ((cfg->dai_cfg.i2s.options & I2S_OPT_FRAME_CLK_MASTER) == I2S_OPT_FRAME_CLK_MASTER) {
-		wm8904_set_master_clock(dev, &cfg->dai_cfg, cfg->mclk_freq);
-	} else {
-		/* BCLK/LRCLK default direction input */
+	if (cfg->dai_cfg.i2s.options & I2S_OPT_FRAME_CLK_SLAVE) {
+		/* BCLK/LRCLK direction input */
 		wm8904_update_reg(dev, WM8904_REG_AUDIO_IF_1, 1U << 6U, 0U);
-		wm8904_update_reg(dev, WM8904_REG_AUDIO_IF_3, (uint16_t)(1UL << 11U), 0U);
+		wm8904_update_reg(dev, WM8904_REG_AUDIO_IF_3,
+			(uint16_t)(1UL << 11U), 0U);
+	} else {
+		wm8904_set_master_clock(dev, &cfg->dai_cfg, cfg->mclk_freq);
 	}
+}
 
 	switch (cfg->dai_route) {
 	case AUDIO_ROUTE_PLAYBACK:
