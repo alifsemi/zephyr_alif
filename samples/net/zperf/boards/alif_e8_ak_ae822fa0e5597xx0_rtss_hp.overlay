@@ -3,12 +3,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/*
+ * E8 AppKit with the Wi-Fi module on the microSD slot.
+ *
+ * On this board the on-board 2FY is not populated, so the module (e.g. Murata
+ * 2FY M.2) is plugged into the microSD slot through the Murata uSD-M.2
+ * adapter. The slot only carries power and the SDIO lines, there is no
+ * separate WL_REG_ON line, so the module is reset by switching slot power.
+ *
+ * Adapter setup: J1 in position 2-3 (power from the microSD slot, default).
+ * Do not power the adapter from its USB connector (J1 1-2): the module then
+ * never sees a power cycle and fails to come up after a reset.
+ *
+ * Pins (E8 AppKit schematic):
+ *   P13_2 - SD_RESETn, enables the 3.3 V slot power switch
+ *   P6_6  - SD_VSEL, I/O voltage select of the SD level translator
+ *   P3_3  - SD_DETn, card detect
+ */
+
 ns: &ns {
 	reg = <0x20030000 DT_SIZE_K(256)>;
-	status = "okay";
-};
-
-&gpio14 {
 	status = "okay";
 };
 
@@ -16,10 +30,19 @@ ns: &ns {
 	status = "okay";
 };
 
-&gpio0 {
+&gpio13 {
 	status = "okay";
 };
 
+/* microSD slot power */
+&sd_pwr {
+	enable-gpios = <&gpio13 2 GPIO_ACTIVE_HIGH>;
+};
+
+/* microSD I/O voltage select */
+&sd_vsel {
+	gpios = <&gpio6 6 GPIO_ACTIVE_HIGH>;
+};
 
 sdhc: &sdhc {
 	compatible = "snps,dwc-sdhc";
@@ -29,9 +52,7 @@ sdhc: &sdhc {
 		compatible = "infineon,airoc-wifi";
 		status = "okay";
 
-		/* Wi-Fi control gpios */
-		wifi-reg-on-gpios    = <&gpio14 7 GPIO_ACTIVE_HIGH>;
-	/*	wifi-host-wake-gpios = <&gpio0 1 GPIO_ACTIVE_LOW>; */
-	/*	wifi-dev-wake-gpios  = <&gpio0 0 GPIO_ACTIVE_LOW>; */
+		/* No reset line through the slot: reset = slot power */
+		wifi-reg-on-gpios = <&gpio13 2 GPIO_ACTIVE_HIGH>;
 	};
 };
