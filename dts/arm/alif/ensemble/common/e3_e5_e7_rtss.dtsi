@@ -1,0 +1,110 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* e3/e5/e7 NVIC interrupts */
+&uart6 {
+	interrupt-parent = <&nvic>;
+	interrupts = <130 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&uart7 {
+	interrupt-parent = <&nvic>;
+	interrupts = <131 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&gpio10 {
+	interrupt-parent = <&nvic>;
+	interrupts = <259 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <260 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <261 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <262 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <263 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <264 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <265 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <266 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&gpio11 {
+	interrupt-parent = <&nvic>;
+	interrupts = <267 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <268 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <269 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <270 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <271 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <272 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <273 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <274 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&gpio12 {
+	interrupt-parent = <&nvic>;
+	interrupts = <275 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <276 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <277 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <278 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <279 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <280 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <281 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <282 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&gpio13 {
+	interrupt-parent = <&nvic>;
+	interrupts = <283 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <284 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <285 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <286 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <287 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <288 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <289 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <290 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&gpio14 {
+	interrupt-parent = <&nvic>;
+	interrupts = <291 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <292 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <293 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <294 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <295 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <296 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <297 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <298 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&i2c2 {
+	interrupt-parent = <&nvic>;
+	interrupts = <134 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&i2c3 {
+	interrupt-parent = <&nvic>;
+	interrupts = <135 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&i2s2 {
+	interrupt-parent = <&nvic>;
+	interrupts = <143 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&i2s3 {
+	interrupt-parent = <&nvic>;
+	interrupts = <144 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&cam {
+	interrupt-parent = <&nvic>;
+	interrupts = <345 0>;
+};
+
+&csi {
+	interrupt-parent = <&nvic>;
+	interrupts = <344 0>;
+};
+
+&ospi1 {
+	interrupt-parent = <&nvic>;
+	interrupts = <97 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
