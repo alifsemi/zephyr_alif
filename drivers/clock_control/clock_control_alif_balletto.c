@@ -345,7 +345,10 @@ static uint32_t alif_get_input_clock(const struct device *dev, uint32_t const cl
 	case ALIF_GPIO9_DB_CLK:
 	case ALIF_LPTIMER0_S32K_CLK:
 	case ALIF_LPTIMER1_S32K_CLK:
+	case ALIF_S32K_CLK:
 		return ALIF_CLOCK_S32K_CLK_FREQ;
+	case ALIF_SYSREF_CLK:
+		return get_syst_refclk_freq(dev);
 	case ALIF_LPTIMER0_128K_CLK:
 	case ALIF_LPTIMER1_128K_CLK:
 		return ALIF_CLOCK_128K_CLK_FREQ;
