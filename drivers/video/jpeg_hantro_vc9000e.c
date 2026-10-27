@@ -53,6 +53,7 @@ struct jpeg_hantro_vc9000e_data {
 	int      encoding_error;
 	uint32_t header_size;
 	struct jpeg_header_info header_info;
+	const struct jpeg_thumbnail_info *thumbnail;
 	/*
 	 * Storage for the capability reported on the compressed output
 	 * endpoint (VIDEO_EP_OUT). It is filled at query time under @ref lock,
@@ -422,6 +423,9 @@ static void jpeg_start_encode(const struct device *dev)
 	uint32_t chroma_offset;
 	uint32_t input_size;
 
+	/* Header grows when a thumbnail is embedded. No DRI segment in frame mode. */
+	data->header_size = jpeg_header_get_size(data->thumbnail, NULL);
+
 	/* Output buffer: JPEG header + compressed data */
 	uint8_t *output_ptr = (uint8_t *)buf->buffer + data->header_size;
 
@@ -461,6 +465,8 @@ static void jpeg_start_encode(const struct device *dev)
 	data->header_info.width  = data->fmt.width;
 	data->header_info.height = data->fmt.height;
 	data->header_info.num_components = JPEG_YUV420_NUM_COMPONENTS;
+	data->header_info.thumbnail = data->thumbnail;
+	data->header_info.slice = NULL;
 
 	jpeg_header_generation(data->header_info);
 
@@ -637,6 +643,7 @@ static int jpeg_hantro_vc9000e_set_stream(const struct device *dev, bool enable)
  * Supported controls:
  * - VIDEO_CID_JPEG_COMPRESSION_QUALITY: Set compression quality (1-100).
  * - VIDEO_CID_JPEG_INPUT_BUFFER: Set the input buffer address for encoding.
+ * - VIDEO_CID_JPEG_THUMBNAIL_CONFIG: Set thumbnail configuration (NULL to disable).
  *
  * @param dev Pointer to the device structure.
  * @param cid Control identifier.
@@ -663,6 +670,10 @@ static int jpeg_hantro_vc9000e_set_ctrl(const struct device *dev,
 		/* Set input buffer address for encoding */
 		data->input_buffer = value;
 		break;
+	case VIDEO_CID_JPEG_THUMBNAIL_CONFIG:
+		/* NULL disables thumbnail embedding */
+		data->thumbnail = value;
+		break;
 	default:
 		k_mutex_unlock(&data->lock);
 		return -ENOTSUP;
@@ -678,6 +689,7 @@ static int jpeg_hantro_vc9000e_set_ctrl(const struct device *dev,
  * Supported controls:
  * - VIDEO_CID_JPEG_COMPRESSION_QUALITY: Get the current compression quality.
  * - VIDEO_CID_JPEG_INPUT_BUFFER: Get the input buffer address.
+ * - VIDEO_CID_JPEG_THUMBNAIL_CONFIG: Get thumbnail configuration.
  *
  * @param dev Pointer to the device structure.
  * @param cid Control identifier.
@@ -699,6 +711,9 @@ static int jpeg_hantro_vc9000e_get_ctrl(const struct device *dev,
 	case VIDEO_CID_JPEG_INPUT_BUFFER:
 		/* Return the input buffer address through the caller pointer */
 		*((void **)value) = data->input_buffer;
+		break;
+	case VIDEO_CID_JPEG_THUMBNAIL_CONFIG:
+		*((const struct jpeg_thumbnail_info **)value) = data->thumbnail;
 		break;
 	default:
 		k_mutex_unlock(&data->lock);
@@ -903,6 +918,7 @@ static int jpeg_hantro_vc9000e_init(const struct device *dev)
 	data->streaming = false;
 	data->current_buf = NULL;
 	data->input_buffer = NULL;
+	data->thumbnail = NULL;
 	data->header_size = CONFIG_VIDEO_JPEG_HANTRO_VC9000E_HEADER_SIZE;
 
 	ret = jpeg_hw_init(dev);
