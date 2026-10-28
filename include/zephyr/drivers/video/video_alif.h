@@ -20,6 +20,27 @@ extern "C" {
 #define VIDEO_CID_JPEG_INPUT_BUFFER          (VIDEO_CID_JPEG_CLASS_BASE + 4)
 #define VIDEO_CID_JPEG_THUMBNAIL_CONFIG      (VIDEO_CID_JPEG_CLASS_BASE + 5)
 #define VIDEO_CID_JPEG_CROP_CONFIG           (VIDEO_CID_JPEG_CLASS_BASE + 6)
+
+/**
+ * @brief JPEG slice-mode height (in MCU rows; 1 row = 16 px for 4:2:0).
+ *
+ * Argument: pointer to uint32_t.
+ *   0           : slice mode disabled (default; single-shot encode).
+ *   1..(H/16)   : slice mode enabled. The encoder produces one slice's
+ *                 worth of compressed bytes per enqueue/dequeue cycle.
+ *                 The application must:
+ *                   1. set VIDEO_CID_JPEG_INPUT_BUFFER to the slice's
+ *                      input buffer (refilled before every slice),
+ *                   2. cache-flush that input buffer,
+ *                   3. video_enqueue() a small output buffer,
+ *                   4. video_dequeue() to receive that slice's bytes
+ *                      (header is included in slice 0's output).
+ *                 Repeat ceil(H / (rows*16)) times. Concatenate the
+ *                 returned slice buffers to obtain a single decodable
+ *                 JPEG frame.
+ */
+#define VIDEO_CID_JPEG_SLICE_HEIGHT          (VIDEO_CID_JPEG_CLASS_BASE + 7)
+
 /**
  * @brief JPEG encoder crop configuration.
  *
