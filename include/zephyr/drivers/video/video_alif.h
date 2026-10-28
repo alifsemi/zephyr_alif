@@ -19,6 +19,20 @@ extern "C" {
 #define VIDEO_CID_ALIF_CSI_CURR_CAM          (VIDEO_CID_PRIVATE_BASE + 1)
 #define VIDEO_CID_JPEG_INPUT_BUFFER          (VIDEO_CID_JPEG_CLASS_BASE + 4)
 #define VIDEO_CID_JPEG_THUMBNAIL_CONFIG      (VIDEO_CID_JPEG_CLASS_BASE + 5)
+#define VIDEO_CID_JPEG_CROP_CONFIG           (VIDEO_CID_JPEG_CLASS_BASE + 6)
+/**
+ * @brief JPEG encoder crop configuration.
+ *
+ * Defines a rectangular crop window within the source image. The encoder
+ * will output only the pixels within this window. Set to NULL to disable
+ * cropping and encode the full frame.
+ */
+struct jpeg_crop_config {
+uint32_t x;       /**< Horizontal offset in pixels (must be even for NV12). */
+uint32_t y;       /**< Vertical offset in pixels (must be even for NV12). */
+uint32_t width;   /**< Encoded output width in pixels. */
+uint32_t height;  /**< Encoded output height in pixels. */
+};
 
 /* ISP aggregate parameter controls — value is a pointer to struct isp_params
  * (defined in isp_ctrl_params.h).  Set valid_mask to the ISP_PARAM_MASK_*
