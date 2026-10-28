@@ -24,6 +24,7 @@ extern "C" {
 #define JPEG_SWREG14_OFFSET     0x038
 #define JPEG_SWREG18_OFFSET     0x048
 #define JPEG_SWREG20_OFFSET     0x050
+#define JPEG_SWREG37_OFFSET     0x094
 #define JPEG_SWREG38_OFFSET     0x098
 #define JPEG_SWREG45_OFFSET     0x0B4
 #define JPEG_SWREG80_OFFSET     0x140
@@ -103,7 +104,12 @@ extern "C" {
 #define JPEG_CODING_MODE_MASK           (0x3UL << JPEG_CODING_MODE_POS)
 #define JPEG_CODING_MODE_420            0
 
-/* SWREG38 - Input Format and Rotation */
+/* SWREG37 - Chroma Base Offset */
+#define JPEG_CHROMA_BASE_OFFSET_POS     0
+#define JPEG_CHROMA_BASE_OFFSET_MASK    (0xFUL << JPEG_CHROMA_BASE_OFFSET_POS)
+/* SWREG38 - Input Format, Rotation, and Luma Base Offset */
+#define JPEG_LUMA_BASE_OFFSET_POS       20
+#define JPEG_LUMA_BASE_OFFSET_MASK      (0xFUL << JPEG_LUMA_BASE_OFFSET_POS)
 #define JPEG_INPUT_FORMAT_POS           28
 #define JPEG_INPUT_FORMAT_MASK          (0xFUL << JPEG_INPUT_FORMAT_POS)
 #define JPEG_INPUT_FORMAT_YUV420SP      1

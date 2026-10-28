@@ -54,6 +54,7 @@ struct jpeg_hantro_vc9000e_data {
 	uint32_t header_size;
 	struct jpeg_header_info header_info;
 	const struct jpeg_thumbnail_info *thumbnail;
+	const struct jpeg_crop_config *crop;
 	/*
 	 * Storage for the capability reported on the compressed output
 	 * endpoint (VIDEO_EP_OUT). It is filled at query time under @ref lock,
@@ -229,25 +230,19 @@ static void jpeg_hantro_vc9000e_set_input_pixfmt(const struct device *dev,
 static void jpeg_hantro_vc9000e_set_resolution(const struct device *dev,
 						uint32_t width, uint32_t height)
 {
-	struct jpeg_hantro_vc9000e_data *data = dev->data;
-
-	data->fmt.width  = width;
-	data->fmt.height = height;
-	/* The encoding width and height are 16-pixels aligned */
-	data->encoding_width  = ROUND_UP(width, JPEG_ENC_ALIGNMENT);
-	data->encoding_height = ROUND_UP(height, JPEG_ENC_ALIGNMENT);
-
-	uint16_t enc_w = data->encoding_width >> JPEG_PIC_WH_PIXEL_SHIFT;
-	uint16_t enc_h = data->encoding_height >> JPEG_PIC_WH_PIXEL_SHIFT;
+	uint32_t enc_w = ROUND_UP(width, JPEG_ENC_ALIGNMENT);
+	uint32_t enc_h = ROUND_UP(height, JPEG_ENC_ALIGNMENT);
+	uint16_t wt    = enc_w >> JPEG_PIC_WH_PIXEL_SHIFT;
+	uint16_t ht    = enc_h >> JPEG_PIC_WH_PIXEL_SHIFT;
 
 	jpeg_modify_reg(dev, JPEG_SWREG5_OFFSET, JPEG_PIC_WIDTH_MASK,
-			(enc_w & JPEG_PIC_WH_MASK) << JPEG_PIC_WIDTH_POS);
+			(wt & JPEG_PIC_WH_MASK) << JPEG_PIC_WIDTH_POS);
 	jpeg_modify_reg(dev, JPEG_SWREG249_OFFSET, JPEG_PIC_WIDTH_MSB_MASK,
-			(enc_w >> JPEG_PIC_WH_FIELD_WIDTH) << JPEG_PIC_WIDTH_MSB_POS);
+			(wt >> JPEG_PIC_WH_FIELD_WIDTH) << JPEG_PIC_WIDTH_MSB_POS);
 	jpeg_modify_reg(dev, JPEG_SWREG5_OFFSET, JPEG_PIC_HEIGHT_MASK,
-			(enc_h & JPEG_PIC_WH_MASK) << JPEG_PIC_HEIGHT_POS);
+			(ht & JPEG_PIC_WH_MASK) << JPEG_PIC_HEIGHT_POS);
 	jpeg_modify_reg(dev, JPEG_SWREG249_OFFSET, JPEG_PIC_HEIGHT_MSB_MASK,
-			(enc_h >> JPEG_PIC_WH_FIELD_WIDTH) << JPEG_PIC_HEIGHT_MSB_POS);
+			(ht >> JPEG_PIC_WH_FIELD_WIDTH) << JPEG_PIC_HEIGHT_MSB_POS);
 
 	uint8_t xfill = (width % JPEG_ENC_ALIGNMENT) ?
 			(JPEG_ENC_ALIGNMENT - width % JPEG_ENC_ALIGNMENT) /
@@ -335,6 +330,11 @@ static int jpeg_hantro_vc9000e_set_format(const struct device *dev,
 			data->fmt.pixelformat = VIDEO_PIX_FMT_NV12;
 			jpeg_hantro_vc9000e_set_input_pixfmt(dev, VIDEO_PIX_FMT_NV12);
 		}
+		data->fmt.width  = fmt->width;
+		data->fmt.height = fmt->height;
+		/* The encoding width and height are 16-pixels aligned */
+		data->encoding_width  = ROUND_UP(fmt->width, JPEG_ENC_ALIGNMENT);
+		data->encoding_height = ROUND_UP(fmt->height, JPEG_ENC_ALIGNMENT);
 		jpeg_hantro_vc9000e_set_resolution(dev, fmt->width, fmt->height);
 		if (data->fmt.pitch < fmt->width) {
 			data->fmt.pitch = fmt->width;
@@ -356,6 +356,11 @@ static int jpeg_hantro_vc9000e_set_format(const struct device *dev,
 	k_mutex_lock(&data->lock, K_FOREVER);
 	jpeg_hantro_vc9000e_set_input_pixfmt(dev, fmt->pixelformat);
 	memcpy(&data->fmt, fmt, sizeof(struct video_format));
+
+	/* The encoding width and height are 16-pixels aligned */
+	data->encoding_width  = ROUND_UP(fmt->width, JPEG_ENC_ALIGNMENT);
+	data->encoding_height = ROUND_UP(fmt->height, JPEG_ENC_ALIGNMENT);
+
 	jpeg_hantro_vc9000e_set_resolution(dev, fmt->width, fmt->height);
 	k_mutex_unlock(&data->lock);
 
@@ -391,10 +396,10 @@ static int jpeg_hantro_vc9000e_get_format(const struct device *dev,
 
 	k_mutex_lock(&data->lock, K_FOREVER);
 	if (ep == VIDEO_EP_OUT) {
-		/* Compressed output: JPEG at the encode resolution */
+		/* Compressed output: crop window when set, otherwise the full frame */
 		fmt->pixelformat = VIDEO_PIX_FMT_JPEG;
-		fmt->width  = data->fmt.width;
-		fmt->height = data->fmt.height;
+		fmt->width  = (data->crop != NULL) ? data->crop->width : data->fmt.width;
+		fmt->height = (data->crop != NULL) ? data->crop->height : data->fmt.height;
 		fmt->pitch  = 0;
 	} else {
 		/* Uncompressed input format (NV12 / NV21) */
@@ -419,11 +424,13 @@ static void jpeg_start_encode(const struct device *dev)
 	struct jpeg_hantro_vc9000e_data *data = dev->data;
 	struct video_buffer *buf = data->current_buf;
 	void *input_ptr = data->input_buffer;
+	struct jpeg_crop_offsets crop_out;
+	struct jpeg_crop_input crop_in;
 	uint32_t stride;
-	uint32_t chroma_offset;
 	uint32_t input_size;
+	uint32_t enc_w, enc_h;
 
-	/* Header grows when a thumbnail is embedded. No DRI segment in frame mode. */
+	/* Compute dynamic header size (no DRI segment in frame mode) */
 	data->header_size = jpeg_header_get_size(data->thumbnail, NULL);
 
 	/* Output buffer: JPEG header + compressed data */
@@ -432,24 +439,65 @@ static void jpeg_start_encode(const struct device *dev)
 	/* Set output stream address (compressed data) */
 	jpeg_write_reg(dev, JPEG_SWREG8_OFFSET, (uint32_t)output_ptr);
 
-	/* Set input luma address */
-	jpeg_write_reg(dev, JPEG_SWREG12_OFFSET, (uint32_t)input_ptr);
-
 	stride = data->fmt.pitch;
-	/* Set input chroma address for YUV420 formats */
-	chroma_offset = stride * data->fmt.height;
 
-	/* Cb offset for YUV420 */
-	jpeg_write_reg(dev, JPEG_SWREG13_OFFSET,
-			(uint32_t)input_ptr + chroma_offset);
-	/* Cr offset is zero for YUV420 */
+	/* Determine encoded dimensions (crop or full frame) */
+	if (data->crop != NULL) {
+		enc_w = data->crop->width;
+		enc_h = data->crop->height;
+	} else {
+		enc_w = data->fmt.width;
+		enc_h = data->fmt.height;
+	}
+
+	if (data->crop != NULL) {
+		crop_in.input_addr   = (uint32_t)input_ptr,
+		crop_in.crop_x       = data->crop->x,
+		crop_in.crop_y       = data->crop->y,
+		crop_in.stride       = stride,
+		crop_in.frame_height = data->fmt.height,
+
+		jpeg_calc_crop_offsets(&crop_in, &crop_out);
+
+		jpeg_write_reg(dev, JPEG_SWREG12_OFFSET, crop_out.luma_addr);
+		jpeg_write_reg(dev, JPEG_SWREG13_OFFSET, crop_out.chroma_addr);
+
+		/* Write sub-16-byte remainders to offset registers */
+		jpeg_modify_reg(dev, JPEG_SWREG38_OFFSET,
+				JPEG_LUMA_BASE_OFFSET_MASK,
+				crop_out.luma_base_offset << JPEG_LUMA_BASE_OFFSET_POS);
+		jpeg_modify_reg(dev, JPEG_SWREG37_OFFSET,
+				JPEG_CHROMA_BASE_OFFSET_MASK,
+				crop_out.chroma_base_offset << JPEG_CHROMA_BASE_OFFSET_POS);
+
+		/* Override pic resolution and fill registers for crop dimensions */
+		jpeg_hantro_vc9000e_set_resolution(dev, enc_w, enc_h);
+	} else {
+		/* No crop: use full frame addresses */
+		jpeg_write_reg(dev, JPEG_SWREG12_OFFSET, (uint32_t)input_ptr);
+		/* Set cb base address for NV12/NV21 */
+		jpeg_write_reg(dev, JPEG_SWREG13_OFFSET,
+				(uint32_t)input_ptr + stride * data->fmt.height);
+
+		/* Clear base offset registers */
+		jpeg_modify_reg(dev, JPEG_SWREG38_OFFSET,
+				JPEG_LUMA_BASE_OFFSET_MASK, 0);
+		jpeg_modify_reg(dev, JPEG_SWREG37_OFFSET,
+				JPEG_CHROMA_BASE_OFFSET_MASK, 0);
+
+		/* Restore full-frame picture size after a previous crop */
+		jpeg_hantro_vc9000e_set_resolution(dev, data->fmt.width,
+						   data->fmt.height);
+	}
+
+	/* Cr base is zero for NV12/NV21 */
 	jpeg_write_reg(dev, JPEG_SWREG14_OFFSET, 0);
 
 	/* Flush input buffer (YUV420 format) cache */
 	input_size = JPEG_YUV420_FRAME_SIZE(stride, data->fmt.height);
 	(void)sys_cache_data_flush_and_invd_range(input_ptr, input_size);
 
-	/* Set stride configuration */
+	/* Set stride configuration (always full source stride) */
 	jpeg_modify_reg(dev, JPEG_SWREG20_OFFSET, JPEG_ROWLENGTH_MASK,
 			(stride & JPEG_ROWLENGTH_FIELD_MASK) << JPEG_ROWLENGTH_POS);
 	jpeg_modify_reg(dev, JPEG_SWREG249_OFFSET, JPEG_ROWLENGTH_MSB_MASK,
@@ -460,10 +508,10 @@ static void jpeg_start_encode(const struct device *dev)
 	jpeg_modify_reg(dev, JPEG_SWREG211_OFFSET, JPEG_CHROMA_STRIDE_MASK,
 			stride << JPEG_CHROMA_STRIDE_POS);
 
-	/* Generate JPEG header in output buffer */
+	/* Generate JPEG header in output buffer (use crop dims if active) */
 	data->header_info.buffer = buf->buffer;
-	data->header_info.width  = data->fmt.width;
-	data->header_info.height = data->fmt.height;
+	data->header_info.width  = enc_w;
+	data->header_info.height = enc_h;
 	data->header_info.num_components = JPEG_YUV420_NUM_COMPONENTS;
 	data->header_info.thumbnail = data->thumbnail;
 	data->header_info.slice = NULL;
@@ -644,6 +692,7 @@ static int jpeg_hantro_vc9000e_set_stream(const struct device *dev, bool enable)
  * - VIDEO_CID_JPEG_COMPRESSION_QUALITY: Set compression quality (1-100).
  * - VIDEO_CID_JPEG_INPUT_BUFFER: Set the input buffer address for encoding.
  * - VIDEO_CID_JPEG_THUMBNAIL_CONFIG: Set thumbnail configuration (NULL to disable).
+ * - VIDEO_CID_JPEG_CROP_CONFIG: Set crop configuration (NULL to disable).
  *
  * @param dev Pointer to the device structure.
  * @param cid Control identifier.
@@ -674,6 +723,10 @@ static int jpeg_hantro_vc9000e_set_ctrl(const struct device *dev,
 		/* NULL disables thumbnail embedding */
 		data->thumbnail = value;
 		break;
+	case VIDEO_CID_JPEG_CROP_CONFIG:
+		/* NULL disables cropping */
+		data->crop = value;
+		break;
 	default:
 		k_mutex_unlock(&data->lock);
 		return -ENOTSUP;
@@ -690,6 +743,7 @@ static int jpeg_hantro_vc9000e_set_ctrl(const struct device *dev,
  * - VIDEO_CID_JPEG_COMPRESSION_QUALITY: Get the current compression quality.
  * - VIDEO_CID_JPEG_INPUT_BUFFER: Get the input buffer address.
  * - VIDEO_CID_JPEG_THUMBNAIL_CONFIG: Get thumbnail configuration.
+ * - VIDEO_CID_JPEG_CROP_CONFIG: Get crop configuration.
  *
  * @param dev Pointer to the device structure.
  * @param cid Control identifier.
@@ -714,6 +768,10 @@ static int jpeg_hantro_vc9000e_get_ctrl(const struct device *dev,
 		break;
 	case VIDEO_CID_JPEG_THUMBNAIL_CONFIG:
 		*((const struct jpeg_thumbnail_info **)value) = data->thumbnail;
+		break;
+	case VIDEO_CID_JPEG_CROP_CONFIG:
+		/* Get crop configuration */
+		*((const struct jpeg_crop_config **)value) = data->crop;
 		break;
 	default:
 		k_mutex_unlock(&data->lock);
@@ -787,7 +845,18 @@ static int jpeg_hantro_vc9000e_get_caps(const struct device *dev,
 
 	k_mutex_lock(&data->lock, K_FOREVER);
 
-	if (data->fmt.width != 0 && data->fmt.height != 0) {
+	if (data->crop != NULL) {
+		/* Crop active: the encoder produces exactly this window */
+		data->out_caps[0] = (struct video_format_cap){
+			.pixelformat = VIDEO_PIX_FMT_JPEG,
+			.width_min   = data->crop->width,
+			.width_max   = data->crop->width,
+			.height_min  = data->crop->height,
+			.height_max  = data->crop->height,
+			.width_step  = 0,
+			.height_step = 0,
+		};
+	} else if (data->fmt.width != 0 && data->fmt.height != 0) {
 		/* Configured: the encoder produces exactly this one frame size */
 		data->out_caps[0] = (struct video_format_cap){
 			.pixelformat = VIDEO_PIX_FMT_JPEG,
@@ -918,8 +987,9 @@ static int jpeg_hantro_vc9000e_init(const struct device *dev)
 	data->streaming = false;
 	data->current_buf = NULL;
 	data->input_buffer = NULL;
+	data->header_size = 0;
 	data->thumbnail = NULL;
-	data->header_size = CONFIG_VIDEO_JPEG_HANTRO_VC9000E_HEADER_SIZE;
+	data->crop = NULL;
 
 	ret = jpeg_hw_init(dev);
 	if (ret != 0) {
