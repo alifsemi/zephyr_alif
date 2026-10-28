@@ -37,6 +37,22 @@ struct jpeg_hantro_vc9000e_config {
 	uint16_t               default_quality;
 };
 
+/**
+ * @brief JPEG slice-mode encoding state.
+ *
+ * Populated when VIDEO_CID_JPEG_SLICE_HEIGHT is set to a non-zero value.
+ * Tracks the per-frame slice partition and the index of the slice that
+ * is currently being driven through the enqueue/dequeue cycle.
+ */
+struct jpeg_slice_state {
+	bool     enabled;       /**< Slice mode active for this stream.   */
+	uint32_t height_rows;   /**< Rows of MCUs in a regular slice.     */
+	uint32_t height_px;     /**< height_rows * JPEG_ENC_ALIGNMENT.    */
+	uint32_t total;         /**< ceil(fmt.height / height_px).        */
+	uint32_t current;       /**< Next slice to be dequeued (advanced  */
+				/*   in ISR on FRAME_RDY).                */
+	uint32_t last_height;   /**< Pixel height of the final slice.     */
+};
 /* Device runtime data */
 struct jpeg_hantro_vc9000e_data {
 	DEVICE_MMIO_RAM;
@@ -55,6 +71,7 @@ struct jpeg_hantro_vc9000e_data {
 	struct jpeg_header_info header_info;
 	const struct jpeg_thumbnail_info *thumbnail;
 	const struct jpeg_crop_config *crop;
+	struct jpeg_slice_state slice;
 	/*
 	 * Storage for the capability reported on the compressed output
 	 * endpoint (VIDEO_EP_OUT). It is filled at query time under @ref lock,
@@ -409,6 +426,139 @@ static int jpeg_hantro_vc9000e_get_format(const struct device *dev,
 
 	return 0;
 }
+/**
+ * @brief Prepare hardware registers and trigger JPEG slice encoding.
+ *
+ * Drives one slice of a slice-mode encode.
+ * The application is required to refresh VIDEO_CID_JPEG_INPUT_BUFFER
+ * before every enqueue.
+ *
+ * @param dev Pointer to the device structure.
+ */
+static void jpeg_start_slice_encode(const struct device *dev)
+{
+	struct jpeg_hantro_vc9000e_data *data = dev->data;
+	struct video_buffer *buf = data->current_buf;
+	uint8_t *input_ptr = data->input_buffer;
+	uint32_t pitch     = data->fmt.pitch;
+	uint32_t input_size;
+	uint16_t rst_marker;
+
+	if (data->slice.current == 0) {
+		/* First slice: compute partition + emit header + slice-mode regs. */
+		data->slice.height_px =
+			data->slice.height_rows * JPEG_ENC_ALIGNMENT;
+		data->slice.total =
+			DIV_ROUND_UP(data->fmt.height, data->slice.height_px);
+		data->slice.last_height = data->fmt.height -
+			(data->slice.total - 1) * data->slice.height_px;
+
+		/* Slice-mode header metadata: restart_interval is in MCUs
+		 * (= slice_height_rows * mcus_per_row). The library emits a
+		 * DRI segment so decoders interpret HW-emitted FFD0..FFD7
+		 * restart markers correctly.
+		 */
+		uint32_t mcus_per_row = data->encoding_width / JPEG_ENC_ALIGNMENT;
+		struct jpeg_slice_info slice_hdr = {
+			.restart_interval = (uint16_t)
+				(data->slice.height_rows * mcus_per_row),
+		};
+
+		/* JPEG header reflects the FULL picture dimensions. */
+		data->header_size =
+			jpeg_header_get_size(data->thumbnail, &slice_hdr);
+		data->header_info.buffer = buf->buffer;
+		data->header_info.width  = data->fmt.width;
+		data->header_info.height = data->fmt.height;
+		data->header_info.num_components = JPEG_YUV420_NUM_COMPONENTS;
+		data->header_info.thumbnail = data->thumbnail;
+		data->header_info.slice     = &slice_hdr;
+		jpeg_header_generation(data->header_info);
+		(void)sys_cache_data_flush_and_invd_range(buf->buffer,
+							  data->header_size);
+
+		/* Output stream begins right after the header. */
+		jpeg_write_reg(dev, JPEG_SWREG8_OFFSET,
+			       (uint32_t)((uint8_t *)buf->buffer +
+					  data->header_size));
+
+		/* Stride config (full source pitch; unchanged across slices). */
+		jpeg_modify_reg(dev, JPEG_SWREG20_OFFSET, JPEG_ROWLENGTH_MASK,
+			(pitch & JPEG_ROWLENGTH_FIELD_MASK)
+				<< JPEG_ROWLENGTH_POS);
+		jpeg_modify_reg(dev, JPEG_SWREG249_OFFSET,
+			JPEG_ROWLENGTH_MSB_MASK,
+			(pitch >> JPEG_ROWLENGTH_FIELD_WIDTH)
+				<< JPEG_ROWLENGTH_MSB_POS);
+		jpeg_modify_reg(dev, JPEG_SWREG210_OFFSET, JPEG_LUMA_STRIDE_MASK,
+			pitch << JPEG_LUMA_STRIDE_POS);
+		jpeg_modify_reg(dev, JPEG_SWREG211_OFFSET, JPEG_CHROMA_STRIDE_MASK,
+			pitch << JPEG_CHROMA_STRIDE_POS);
+
+		/* Set JPEG_SLICE_MODE. A one-slice frame is also the last
+		 * slice, so leave slice mode clear and let HW emit EOI.
+		 */
+		if (data->slice.total > 1) {
+			jpeg_modify_reg(dev, JPEG_SWREG18_OFFSET,
+					JPEG_SLICE_MODE, JPEG_SLICE_MODE);
+		} else {
+			jpeg_modify_reg(dev, JPEG_SWREG18_OFFSET,
+					JPEG_SLICE_MODE, 0);
+		}
+		/* Logical width so XFILL matches the JPEG header. */
+		jpeg_hantro_vc9000e_set_resolution(dev, data->fmt.width,
+						   data->slice.height_px);
+
+	} else {
+		/* Subsequent slice: re-aim output, shrink pic size on the last */
+		jpeg_write_reg(dev, JPEG_SWREG8_OFFSET, (uint32_t)buf->buffer);
+
+		if (data->slice.current == data->slice.total - 1) {
+			/* Final slice may be partial; jpeg_hantro_vc9000e_set_resolution()
+			 * auto-computes YFILL = ALIGN - (last_height % ALIGN).
+			 */
+			jpeg_hantro_vc9000e_set_resolution(dev, data->fmt.width,
+							   data->slice.last_height);
+
+			/* Clear JPEG_SLICE_MODE so HW terminates the stream
+			 * with a proper EOI (FFD9) marker on this final slice.
+			 */
+			jpeg_modify_reg(dev, JPEG_SWREG18_OFFSET,
+					JPEG_SLICE_MODE, 0);
+		}
+	}
+
+	/* Restart interval (slice height in MCU rows).
+	 * + Restart Markers (0xFFd0 to 0xFFd7 in a cyclic manner).
+	 */
+	rst_marker = JPEG_RST_MARKER_0 + (data->slice.current % JPEG_RST_MARKER_CYCLE_SIZE);
+
+	jpeg_modify_reg(dev, JPEG_SWREG18_OFFSET,
+		JPEG_RST_INT_MASK | JPEG_RST_MARKER_MASK,
+		JPEG_RST_INT(data->slice.height_rows) |
+		JPEG_RST_MARKER(rst_marker));
+
+	/* Input addresses (refreshed every slice from VIDEO_CID_JPEG_INPUT_BUFFER). */
+	jpeg_write_reg(dev, JPEG_SWREG12_OFFSET, (uint32_t)input_ptr);
+	jpeg_write_reg(dev, JPEG_SWREG13_OFFSET,
+		       (uint32_t)input_ptr + pitch * data->slice.height_px);
+	jpeg_write_reg(dev, JPEG_SWREG14_OFFSET, 0);
+
+	jpeg_modify_reg(dev, JPEG_SWREG38_OFFSET, JPEG_LUMA_BASE_OFFSET_MASK, 0);
+	jpeg_modify_reg(dev, JPEG_SWREG37_OFFSET, JPEG_CHROMA_BASE_OFFSET_MASK, 0);
+
+	/* Cache-flush slice-sized input. */
+	input_size = JPEG_YUV420_FRAME_SIZE(pitch, data->slice.height_px);
+	(void)sys_cache_data_flush_and_invd_range(input_ptr, input_size);
+
+	/* Output buffer capacity. */
+	jpeg_write_reg(dev, JPEG_SWREG9_OFFSET, buf->bytesused);
+
+	/* Reset error and kick. */
+	data->encoding_error = 0;
+	jpeg_modify_reg(dev, JPEG_SWREG5_OFFSET, JPEG_ENC_ENABLE,
+			JPEG_ENC_ENABLE);
+}
 
 /**
  * @brief Prepare hardware registers and trigger JPEG encoding.
@@ -429,6 +579,11 @@ static void jpeg_start_encode(const struct device *dev)
 	uint32_t stride;
 	uint32_t input_size;
 	uint32_t enc_w, enc_h;
+
+	/* Drop restart state left by a previous slice encode. */
+	jpeg_modify_reg(dev, JPEG_SWREG18_OFFSET,
+			JPEG_SLICE_MODE | JPEG_RST_INT_MASK | JPEG_RST_MARKER_MASK,
+			0);
 
 	/* Compute dynamic header size (no DRI segment in frame mode) */
 	data->header_size = jpeg_header_get_size(data->thumbnail, NULL);
@@ -571,7 +726,11 @@ static int jpeg_hantro_vc9000e_enqueue(const struct device *dev,
 
 	/* If already streaming, trigger encoding immediately */
 	if (data->streaming) {
-		jpeg_start_encode(dev);
+		if (data->slice.enabled) {
+			jpeg_start_slice_encode(dev);
+		} else {
+			jpeg_start_encode(dev);
+		}
 	}
 
 	k_mutex_unlock(&data->lock);
@@ -623,12 +782,20 @@ static int jpeg_hantro_vc9000e_dequeue(const struct device *dev,
 		return err;
 	}
 
-	/* Invalidate CPU cache for DMA-written compressed data */
-	(void)sys_cache_data_invd_range(
-		(uint8_t *)(*buf)->buffer + data->header_size,
-		data->encoding_size - data->header_size);
+	if (data->slice.enabled) {
+		/* bytesused for this slice was set by the ISR. Invalidate the
+		 * full slice payload so the application reads fresh DMA data.
+		 */
+		(void)sys_cache_data_flush_and_invd_range((*buf)->buffer,
+						(*buf)->bytesused);
+	} else {
+		/* Invalidate CPU cache for DMA-written compressed data */
+		(void)sys_cache_data_flush_and_invd_range(
+			(uint8_t *)(*buf)->buffer + data->header_size,
+			data->encoding_size - data->header_size);
 
-	(*buf)->bytesused = data->encoding_size;
+		(*buf)->bytesused = data->encoding_size;
+	}
 	(*buf)->timestamp = k_uptime_get_32();
 
 	data->current_buf = NULL;
@@ -665,9 +832,18 @@ static int jpeg_hantro_vc9000e_set_stream(const struct device *dev, bool enable)
 		JPEG_IRQ_STATUS_MASK, JPEG_IRQ_EN_MASK);
 		data->streaming = true;
 
+		/* Reset slice loop state for a fresh frame */
+		if (data->slice.enabled) {
+			data->slice.current = 0;
+		}
+
 		/* If a buffer was already enqueued, trigger encoding now */
 		if (data->current_buf != NULL && data->input_buffer != NULL) {
-			jpeg_start_encode(dev);
+			if (data->slice.enabled) {
+				jpeg_start_slice_encode(dev);
+			} else {
+				jpeg_start_encode(dev);
+			}
 		}
 
 	} else {
@@ -677,6 +853,13 @@ static int jpeg_hantro_vc9000e_set_stream(const struct device *dev, bool enable)
 		}
 		jpeg_modify_reg(dev, JPEG_SWREG1_OFFSET, JPEG_IRQ_EN_MASK, 0);
 		jpeg_write_reg(dev, JPEG_SWREG5_OFFSET, 0);
+
+		/* Slice-mode cleanup: clear SLICE_MODE bit. */
+		if (data->slice.enabled) {
+			jpeg_modify_reg(dev, JPEG_SWREG18_OFFSET,
+					JPEG_SLICE_MODE, 0);
+			data->slice.current = 0;
+		}
 		data->streaming = false;
 	}
 
@@ -724,9 +907,43 @@ static int jpeg_hantro_vc9000e_set_ctrl(const struct device *dev,
 		data->thumbnail = value;
 		break;
 	case VIDEO_CID_JPEG_CROP_CONFIG:
+		if (value != NULL && data->slice.enabled) {
+			LOG_ERR("Slice mode + crop not supported in v1");
+			k_mutex_unlock(&data->lock);
+			return -ENOTSUP;
+		}
 		/* NULL disables cropping */
 		data->crop = value;
 		break;
+	case VIDEO_CID_JPEG_SLICE_HEIGHT: {
+		uint32_t rows = *(uint32_t *)value;
+
+		if (data->streaming) {
+			LOG_ERR("Cannot change slice height while streaming");
+			k_mutex_unlock(&data->lock);
+			return -EBUSY;
+		}
+		if (rows == 0) {
+			data->slice.enabled = false;
+			data->slice.height_rows = 0;
+			break;
+		}
+		if (rows * JPEG_ENC_ALIGNMENT > data->fmt.height) {
+			LOG_ERR("Slice height (%u rows = %u px) exceeds picture"
+				" height (%u)", rows,
+				rows * JPEG_ENC_ALIGNMENT, data->fmt.height);
+			k_mutex_unlock(&data->lock);
+			return -EINVAL;
+		}
+		if (data->crop != NULL) {
+			LOG_ERR("Slice mode + crop not supported in v1");
+			k_mutex_unlock(&data->lock);
+			return -ENOTSUP;
+		}
+		data->slice.enabled = true;
+		data->slice.height_rows = rows;
+		break;
+	}
 	default:
 		k_mutex_unlock(&data->lock);
 		return -ENOTSUP;
@@ -772,6 +989,9 @@ static int jpeg_hantro_vc9000e_get_ctrl(const struct device *dev,
 	case VIDEO_CID_JPEG_CROP_CONFIG:
 		/* Get crop configuration */
 		*((const struct jpeg_crop_config **)value) = data->crop;
+		break;
+	case VIDEO_CID_JPEG_SLICE_HEIGHT:
+		*(uint32_t *)value = data->slice.height_rows;
 		break;
 	default:
 		k_mutex_unlock(&data->lock);
@@ -912,10 +1132,27 @@ static void jpeg_hantro_vc9000e_isr(const struct device *dev)
 	}
 
 	if (status & JPEG_FRAME_RDY_STATUS) {
-		data->encoding_size = jpeg_read_reg(dev, JPEG_SWREG9_OFFSET) +
+		if (data->slice.enabled) {
+			if (data->current_buf != NULL &&
+			    data->slice.current < data->slice.total) {
+				uint32_t s9 = jpeg_read_reg(dev, JPEG_SWREG9_OFFSET);
+
+				data->current_buf->bytesused = s9 +
+					(data->slice.current == 0 ?
+					 data->header_size : 0);
+				data->slice.current++;
+				data->encoding_error = 0;
+				k_sem_give(&data->encode_sem);
+			} else {
+				LOG_ERR("Slice Overflow");
+			}
+		} else {
+			data->encoding_size =
+				jpeg_read_reg(dev, JPEG_SWREG9_OFFSET) +
 				      data->header_size;
 		data->encoding_error = 0;
 		k_sem_give(&data->encode_sem);
+		}
 	}
 
 	if (status & JPEG_BUS_ERROR_STATUS) {
@@ -990,6 +1227,9 @@ static int jpeg_hantro_vc9000e_init(const struct device *dev)
 	data->header_size = 0;
 	data->thumbnail = NULL;
 	data->crop = NULL;
+	data->slice.enabled = false;
+	data->slice.height_rows = 0;
+	data->slice.current = 0;
 
 	ret = jpeg_hw_init(dev);
 	if (ret != 0) {
