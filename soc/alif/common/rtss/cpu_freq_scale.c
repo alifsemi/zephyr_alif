@@ -9,10 +9,12 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/clock_control/clock_control_alif.h>
 #include <zephyr/drivers/timer/system_timer.h>
+#include <zephyr/init.h>
 #include <zephyr/irq.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device.h>
+#include <zephyr/sys/util.h>
 #include <se_service.h>
 
 #if defined(CONFIG_SOC_FAMILY_BALLETTO)
@@ -325,3 +327,56 @@ int cpu_freq_pstate_set(const struct pstate *state)
 		buses_move);
 	return 0;
 }
+
+/*
+ * Boot AIPM (PRE_KERNEL_1, SE_SERVICE_INIT_PRIORITY) applies
+ * aipm_run_default but does not drop the clock-driver Hertz cache
+ * or retune SysTick. Console UART (SERIAL_INIT_PRIORITY) programs
+ * baud from get_rate(); SysTick starts PRE_KERNEL_2 at the Kconfig
+ * Hertz. SYS_INIT prio is UTIL_INC(...) so it stays after SE / the
+ * timer when those values change (e.g. B1). Kconfig cannot do + 1.
+ */
+static uint32_t boot_cpu_hz(void)
+{
+	uint32_t hz = 0;
+	int err;
+
+#if defined(CONFIG_RTSS_HP)
+	err = se_service_clock_setting_get(CLOCK_SETTING_EXTSYS0_FREQ, &hz);
+#else
+	err = se_service_clock_setting_get(CLOCK_SETTING_EXTSYS1_FREQ, &hz);
+#endif
+	if ((err == 0) && (hz != 0U)) {
+		return hz;
+	}
+
+	return ALIF_PSTATE_CPU_HZ(RUN_DEF);
+}
+
+static int alif_cpu_freq_boot_cache(void)
+{
+	alif_clock_sys_clk_cache_invalidate();
+	return 0;
+}
+
+static int alif_cpu_freq_boot_systick(void)
+{
+	uint32_t hz = boot_cpu_hz();
+
+	if (hz != 0U) {
+		z_sys_clock_hw_cycles_per_sec_update(hz);
+	}
+
+	return 0;
+}
+
+#if defined(CONFIG_SERIAL_INIT_PRIORITY)
+BUILD_ASSERT(UTIL_INC(CONFIG_SE_SERVICE_INIT_PRIORITY) <
+	     CONFIG_SERIAL_INIT_PRIORITY,
+	     "boot cache SYS_INIT must run before UART get_rate()");
+#endif
+
+SYS_INIT(alif_cpu_freq_boot_cache, PRE_KERNEL_1,
+	 UTIL_INC(CONFIG_SE_SERVICE_INIT_PRIORITY));
+SYS_INIT(alif_cpu_freq_boot_systick, PRE_KERNEL_2,
+	 UTIL_INC(CONFIG_SYSTEM_CLOCK_INIT_PRIORITY));
