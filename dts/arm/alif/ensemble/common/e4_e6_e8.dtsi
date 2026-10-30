@@ -5,10 +5,6 @@
 
 #include "e3_e5_e7.dtsi"
 
-&mipi_dsi {
-	cam-disp-mux-gpios = <&gpio14 2 GPIO_ACTIVE_HIGH>;
-};
-
 &i2c0 {
 	clocks = <&clockctrl ALIF_I2C0_GATED_CLK>;
 };

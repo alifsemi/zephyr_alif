@@ -1889,21 +1889,6 @@
 		crc-recv-en;
 		frame-ack-en;
 		status = "disabled";
-
-		mw405: mw405@0 {
-			status = "okay";
-			compatible = "focuslcds,mw405";
-			reg = <0>;
-			reset-gpios = <&lpgpio 5 GPIO_ACTIVE_HIGH>;
-			bl-gpios = <&gpio6 1 GPIO_ACTIVE_HIGH>;
-			data-lanes = <2>;
-			width = <480>;
-			height = <800>;
-			video-mode = "burst";
-			command-tx-mode = "high-speed";
-			pixel-format = <MIPI_DSI_PIXFMT_RGB888>;
-			status = "okay";
-		};
 	};
 
 	dphy: d-phy@4903f000{
@@ -2019,12 +2004,10 @@
 
 	aliases {
 		mipi-dsi = &mipi_dsi;
-		panel = &mw405;
 	};
 
 	chosen {
 		zephyr,entropy = &rng;
 		zephyr,flash-controller = &mram_flash;
-		zephyr,display = &cdc200;
 	};
 };
