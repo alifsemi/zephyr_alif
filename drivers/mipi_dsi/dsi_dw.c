@@ -748,6 +748,7 @@ int dsi_dw_set_mode(const struct device *dev,
 	} else {
 		/* Setup the DSI as Command mode. */
 		sys_write32(DSI_MODE_CFG_CMD_MODE, regs + DSI_MODE_CFG);
+		data->curr_mode = DSI_DW_COMMAND_MODE;
 	}
 	dsi_dw_pwr_up(regs);
 	return 0;
@@ -952,7 +953,8 @@ int dsi_dw_write_hdr(uintptr_t regs, uint32_t header)
 		if ((tmp & mask) == mask)
 			break;
 
-		k_usleep(1000);
+		/* this poll runs on the idle thread during PM suspend. */
+		k_busy_wait(1000);
 	} while (j-- > 0);
 
 	if ((mask & sys_read32(regs + DSI_CMD_PKT_STATUS)) != mask) {
@@ -978,7 +980,7 @@ int dsi_dw_send_max_return_packet_size(uintptr_t regs, uint8_t channel,
 		DSI_CMD_PKT_STATUS_GEN_PLD_W_EMPTY;
 	for (int j = 0; (j < 100) &&
 		(mask & sys_read32(regs + DSI_CMD_PKT_STATUS)) != mask; j++)
-		k_usleep(1000);
+		k_busy_wait(1000);
 
 	if ((mask & sys_read32(regs + DSI_CMD_PKT_STATUS)) != mask) {
 		LOG_ERR("Failed to write command FIFO.");
@@ -1005,7 +1007,7 @@ static ssize_t dsi_dw_transfer(const struct device *dev,
 	mask = DSI_CMD_PKT_STATUS_GEN_CMD_FULL;
 	for (int j = 0; (j < 100) &&
 		((mask & sys_read32(regs + DSI_CMD_PKT_STATUS)) != 0); j++)
-		k_usleep(1000);
+		k_busy_wait(1000);
 
 	if ((mask & sys_read32(regs + DSI_CMD_PKT_STATUS)) != 0) {
 		LOG_ERR("Timed-out waiting get available Command-FIFO.");
