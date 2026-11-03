@@ -90,7 +90,7 @@ pipeline {
                         withCredentials([usernamePassword(credentialsId: job_config.github_creds_id,
                             usernameVariable: 'GITHUB_TOKEN_USR', passwordVariable: 'GITHUB_TOKEN')]) {
                                 for (String label : pr_labels) {
-                                    echo "remove existing build label [$label]"
+                                    echo "remove existing build label [$label] for repo ${job_config.repo}"
                                     job_config.label = label
                                     utils.github.removeLabel(job_config)
                                 }
@@ -335,7 +335,7 @@ pipeline {
                         usernameVariable: 'GITHUB_TOKEN_USR', passwordVariable: 'GITHUB_TOKEN')]) {
                             job_config.repo  = job_config.pr_repo
                             job_config.label = pr_labels[3]
-                            echo "Add labels => ${job_config.label}"
+                            echo "Add labels for repo ${job_config.repo} => ${job_config.label}"
                             utils.github.addLabel(job_config)
                     }
                 }
@@ -351,7 +351,7 @@ pipeline {
                                 echo "🟢 UPDATING CORRESPONDING SHA/COMMIT-ID IN MANIFEST FILE OF ALIF_SDK 🟢"
                                 job_config.repo  = job_config.pr_repo
                                 job_config.label = pr_labels[0]
-                                echo "Add labels =>  ${job_config.label}"
+                                echo "Add labels for repo ${job_config.repo} =>  ${job_config.label}"
                                 utils.github.addLabel(job_config)
 
                                 job_config.comment = commentMsg
@@ -360,7 +360,7 @@ pipeline {
                                 echo "Manifest PR exist, waiting for build result"
                                 job_config.repo  = job_config.pr_repo
                                 job_config.label = pr_labels[4]
-                                echo "Add labels =>  ${job_config.label}"
+                                echo "Add labels for repo ${job_config.repo} =>  ${job_config.label}"
                                 utils.github.addLabel(job_config)
                             }
                         }
