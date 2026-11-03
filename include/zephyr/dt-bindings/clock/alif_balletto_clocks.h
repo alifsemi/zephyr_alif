@@ -212,4 +212,8 @@
 /* SPI Clock */
 #define ALIF_SPI_CLK		ALIF_CLK(2)
 
+/* System timer timebases (no clock-enable bit) */
+#define ALIF_SYSREF_CLK		ALIF_CLK(3U)
+#define ALIF_S32K_CLK		ALIF_CLK(4U)
+
 #endif /* ZEPHYR_INCLUDE_ZEPHYR_DT_BINDINGS_CLOCK_ALIF_BALLETTO_CLOCKS_H_ */
