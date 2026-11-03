@@ -235,6 +235,17 @@ static int alif_pd_init(const struct device *dev)
 	return pm_device_driver_init(dev, alif_pd_pm_action);
 }
 
+/* SE+2: after AIPM and after the RTSS boot Hertz-cache drop (SE+1). */
+#define ALIF_PD_INIT_PRIORITY \
+	UTIL_INC(UTIL_INC(CONFIG_SE_SERVICE_INIT_PRIORITY))
+
+BUILD_ASSERT(ALIF_PD_INIT_PRIORITY > CONFIG_SE_SERVICE_INIT_PRIORITY,
+	     "power domain must init after SE services");
+#if defined(CONFIG_SERIAL_INIT_PRIORITY)
+BUILD_ASSERT(ALIF_PD_INIT_PRIORITY < CONFIG_SERIAL_INIT_PRIORITY,
+	     "power domain must init before UART and other peripherals");
+#endif
+
 /* Macro to define one power domain device instance */
 #define ALIF_POWER_DOMAIN_DEVICE(inst)						\
 	static const struct alif_pd_config alif_pd_config_##inst = {		\
@@ -251,7 +262,7 @@ static int alif_pd_init(const struct device *dev)
 			      &alif_pd_data_##inst,				\
 			      &alif_pd_config_##inst,				\
 			      PRE_KERNEL_1,					\
-			      CONFIG_POWER_DOMAIN_ALIF_INIT_PRIORITY,		\
+			      ALIF_PD_INIT_PRIORITY,				\
 			      NULL);
 
 /* Create one device instance per DT node */
