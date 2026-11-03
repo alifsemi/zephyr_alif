@@ -15,3 +15,22 @@ properties:
   clock-frequency:
     type: int
     description: clock frequency information for Timer
+
+  dma-trig:
+    type: boolean
+    description: |
+      Use this timer as a DMA request source (LPTIMERn_DMA_REQ).
+      Unmasks the timeout so the pending output can raise the request.
+      CPU IRQ is not enabled. The ISR does not EOI; the caller must
+      EOI and re-arm (counter_set_top_value() with no callback).
+      Omit this property for the CPU alarm IRQ path.
+
+  dmas:
+    type: phandle-array
+    description: |
+      Overlay DMA mux. This driver does not start DMA.
+      dmas = <&evtrtrN ALIF_DMA_ENCODE(channel, group, handshake) periph>;
+
+  dma-names:
+    type: string-array
+    description: Names for the dmas entries.
