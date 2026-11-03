@@ -1,0 +1,27 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <arm64/armv8-a.dtsi>
+#include <alif/common/alif_common.dtsi>
+#include <zephyr/dt-bindings/interrupt-controller/arm-gic.h>
+
+/ {
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a32";
+			reg = <0x0>;
+		};
+	};
+
+	se_service: se_service {
+		compatible = "alif,secure-enclave-services";
+		mhuv2-send-node = <&apss_se_mhu0_s>;
+		mhuv2-recv-node = <&se_apss_mhu0_r>;
+		status = "okay";
+	};
+};

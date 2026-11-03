@@ -1,0 +1,79 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <arm64/armv8-a.dtsi>
+#include <zephyr/dt-bindings/interrupt-controller/arm-gic.h>
+#include <alif/ensemble/common/e3_e5_e7_peripherals.dtsi>
+
+&{/soc} {
+	interrupt-parent = <&gic>;
+
+	gic: interrupt-controller@1c010000 {
+		compatible = "arm,gic-v2", "arm,gic";
+		reg = <0x1c010000 0x1000>,
+		      <0x1c02f000 0x2000>;
+		interrupt-controller;
+		#interrupt-cells = <4>;
+		label = "gic";
+		status = "okay";
+	};
+
+	arch_timer: timer@1a230000 {
+		compatible = "arm,armv8-timer";
+		reg = <0x1a230000 0x1000>;
+		interrupt-parent = <&gic>;
+		interrupts = <GIC_PPI 13 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+			     <GIC_PPI 14 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+			     <GIC_PPI 11 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+			     <GIC_PPI 10 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+		label = "arch_timer";
+		status = "okay";
+	};
+};
+
+/*
+ * Keep interrupt-driven devices that do not have a GIC mapping yet disabled
+ * so that the APSS device tree remains valid.
+ */
+
+&hwsem0 { status = "disabled"; };
+&hwsem1 { status = "disabled"; };
+&hwsem2 { status = "disabled"; };
+&hwsem3 { status = "disabled"; };
+&hwsem4 { status = "disabled"; };
+&hwsem5 { status = "disabled"; };
+&hwsem6 { status = "disabled"; };
+&hwsem7 { status = "disabled"; };
+&hwsem8 { status = "disabled"; };
+&hwsem9 { status = "disabled"; };
+&hwsem10 { status = "disabled"; };
+&hwsem11 { status = "disabled"; };
+&hwsem12 { status = "disabled"; };
+&hwsem13 { status = "disabled"; };
+&hwsem14 { status = "disabled"; };
+&hwsem15 { status = "disabled"; };
+
+&cdc200 { status = "disabled"; };
+
+/*
+ * GIC interrupt mappings for E3/E5/E7-specific peripherals.
+ *
+ * TODO: complete and adjust these using the Alif datasheet.
+ * E1 peripheral mappings are in e1_apss.dtsi.
+ */
+
+#include <arm/alif/ensemble/common/e1_gic.dtsi>
+
+&uart6 {
+	interrupt-parent = <&gic>;
+	interrupts = <GIC_SPI 119 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+};
+
+&uart7 {
+	interrupt-parent = <&gic>;
+	interrupts = <GIC_SPI 120 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+};
+
+// TODO add gic interrupts for all other peripheries
