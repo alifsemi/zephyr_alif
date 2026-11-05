@@ -22,6 +22,7 @@
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/util_macro.h>
+#include <zephyr/init.h>
 #include <zephyr/kernel.h>
 
 #include <zephyr/settings/settings.h>
@@ -92,12 +93,43 @@ enum {
 	SHELL_ADV_OPT_NUM,
 };
 
-static ATOMIC_DEFINE(adv_opt, SHELL_ADV_OPT_NUM);
 #if defined(CONFIG_BT_EXT_ADV)
 uint8_t selected_adv;
 struct bt_le_ext_adv *adv_sets[CONFIG_BT_EXT_ADV_MAX_ADV_SET];
 static ATOMIC_DEFINE(adv_set_opt, SHELL_ADV_OPT_NUM)[CONFIG_BT_EXT_ADV_MAX_ADV_SET];
 #endif /* CONFIG_BT_EXT_ADV */
+
+struct shell_adv_cfg {
+	ATOMIC_DEFINE(opt, SHELL_ADV_OPT_NUM);
+	struct bt_le_adv_param param;
+	bool with_name;
+	bool name_in_ad;
+	bool name_in_sd;
+};
+
+/* Last legacy advertiser successfully started with `bt advertise`. Connectable
+ * advertising stops when a central connects, so this is reused to start it
+ * again on disconnect. shell_adv_active is only set while `bt advertise` owns
+ * the legacy advertiser.
+ */
+static struct shell_adv_cfg shell_adv;
+static bool shell_adv_active;
+
+/* Serializes the automatic restart with shell commands that start or stop the
+ * legacy advertiser, update the state above, create or delete advertising sets
+ * (the host allocates them without locking), or use ad_init() (static buffers).
+ */
+static K_MUTEX_DEFINE(shell_adv_lock);
+
+enum {
+	SHELL_ADV_RESTART_IDLE,
+	SHELL_ADV_RESTART_REQUESTED,
+	SHELL_ADV_RESTART_WAIT_RESOURCES,
+};
+
+static atomic_t shell_adv_restart_state;
+
+static int shell_le_adv_start(const struct shell_adv_cfg *cfg);
 #endif /* CONFIG_BT_BROADCASTER */
 
 #if defined(CONFIG_BT_OBSERVER) || defined(CONFIG_BT_USER_PHY_UPDATE)
@@ -807,6 +839,123 @@ static void disconnected_set_new_default_conn_cb(struct bt_conn *conn, void *use
 	}
 }
 
+#if defined(CONFIG_BT_BROADCASTER)
+/* The restart must not run on the system workqueue. That queue sends the
+ * pending HCI commands, while the restart can block waiting for a free HCI
+ * command buffer or for shell_adv_lock held by a shell command doing HCI.
+ */
+#define SHELL_ADV_RESTART_STACK_SIZE 2048
+
+static K_THREAD_STACK_DEFINE(shell_adv_restart_stack, SHELL_ADV_RESTART_STACK_SIZE);
+static struct k_work_q shell_adv_restart_wq;
+
+static void shell_adv_restart_handler(struct k_work *work);
+
+static K_WORK_DEFINE(shell_adv_restart_work, shell_adv_restart_handler);
+
+/* Set when a connection object or an advertising set is released. The restart
+ * spends the start attempt in the IDLE state, so the release can be reported
+ * before WAIT_RESOURCES is entered.
+ */
+static atomic_t shell_adv_restart_resources_freed;
+
+static int shell_adv_restart_init(void)
+{
+	const struct k_work_queue_config cfg = {
+		.name = "bt_shell_adv",
+	};
+
+	k_work_queue_start(&shell_adv_restart_wq, shell_adv_restart_stack,
+			   K_THREAD_STACK_SIZEOF(shell_adv_restart_stack),
+			   K_LOWEST_APPLICATION_THREAD_PRIO, &cfg);
+
+	return 0;
+}
+
+SYS_INIT(shell_adv_restart_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+
+static void shell_adv_restart_submit(void)
+{
+	(void)k_work_submit_to_queue(&shell_adv_restart_wq, &shell_adv_restart_work);
+}
+
+static void shell_adv_restart_handler(struct k_work *work)
+{
+	int err;
+
+	ARG_UNUSED(work);
+
+	k_mutex_lock(&shell_adv_lock, K_FOREVER);
+
+	if (!atomic_cas(&shell_adv_restart_state, SHELL_ADV_RESTART_REQUESTED,
+			SHELL_ADV_RESTART_IDLE) ||
+	    !shell_adv_active ||
+	    !atomic_test_bit(shell_adv.opt, SHELL_ADV_OPT_CONNECTABLE)) {
+		k_mutex_unlock(&shell_adv_lock);
+		return;
+	}
+
+	err = shell_le_adv_start(&shell_adv);
+	if (err == -EALREADY) {
+		/* The legacy advertiser was started again after the connection
+		 * was made, by `bt advertise` or by other code. It cannot be
+		 * told apart from ours, so leave it running.
+		 */
+		bt_shell_warn("Advertising not restarted, legacy advertiser in use");
+	} else if (err == -ENOMEM) {
+		/* Either every connection object is in use, as the disconnected
+		 * one is only released after the disconnected callback returns,
+		 * or every advertising set is in use. The release can be
+		 * reported during the start attempt, while the state is IDLE.
+		 */
+		(void)atomic_cas(&shell_adv_restart_state, SHELL_ADV_RESTART_IDLE,
+				 SHELL_ADV_RESTART_WAIT_RESOURCES);
+		if (atomic_cas(&shell_adv_restart_resources_freed, 1, 0) &&
+		    atomic_cas(&shell_adv_restart_state, SHELL_ADV_RESTART_WAIT_RESOURCES,
+			       SHELL_ADV_RESTART_REQUESTED)) {
+			shell_adv_restart_submit();
+		}
+	} else if (err == 0) {
+		bt_shell_print("Advertising restarted");
+	} else {
+		bt_shell_error("Failed to restart advertising (err %d)", err);
+	}
+
+	k_mutex_unlock(&shell_adv_lock);
+}
+
+static void shell_adv_conn_disconnected(struct bt_conn *conn)
+{
+	struct bt_conn_info info;
+
+	/* Only an LE peripheral connection can have stopped the advertiser. */
+	if (bt_conn_get_info(conn, &info) != 0 ||
+	    info.type != BT_CONN_TYPE_LE ||
+	    info.role != BT_CONN_ROLE_PERIPHERAL) {
+		return;
+	}
+
+	atomic_set(&shell_adv_restart_state, SHELL_ADV_RESTART_REQUESTED);
+	shell_adv_restart_submit();
+}
+
+/* A connection object or an advertising set was released. */
+static void shell_adv_restart_resume(void)
+{
+	atomic_set(&shell_adv_restart_resources_freed, 1);
+
+	if (atomic_cas(&shell_adv_restart_state, SHELL_ADV_RESTART_WAIT_RESOURCES,
+		       SHELL_ADV_RESTART_REQUESTED)) {
+		shell_adv_restart_submit();
+	}
+}
+
+static void recycled(void)
+{
+	shell_adv_restart_resume();
+}
+#endif /* CONFIG_BT_BROADCASTER */
+
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -821,6 +970,10 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 		/* If we are connected to other devices, set one of them as default */
 		bt_conn_foreach(BT_CONN_TYPE_LE, disconnected_set_new_default_conn_cb, NULL);
 	}
+
+#if defined(CONFIG_BT_BROADCASTER)
+	shell_adv_conn_disconnected(conn);
+#endif /* CONFIG_BT_BROADCASTER */
 }
 
 static bool le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
@@ -1129,6 +1282,9 @@ static void le_cs_config_removed(struct bt_conn *conn, uint8_t config_id)
 static struct bt_conn_cb conn_callbacks = {
 	.connected = connected,
 	.disconnected = disconnected,
+#if defined(CONFIG_BT_BROADCASTER)
+	.recycled = recycled,
+#endif
 	.le_param_req = le_param_req,
 	.le_param_updated = le_param_updated,
 #if defined(CONFIG_BT_SMP)
@@ -1351,7 +1507,24 @@ static int cmd_init(const struct shell *sh, size_t argc, char *argv[])
 
 static int cmd_disable(const struct shell *sh, size_t argc, char *argv[])
 {
-	return bt_disable();
+	int err;
+
+#if defined(CONFIG_BT_BROADCASTER)
+	k_mutex_lock(&shell_adv_lock, K_FOREVER);
+#endif /* CONFIG_BT_BROADCASTER */
+
+	err = bt_disable();
+
+#if defined(CONFIG_BT_BROADCASTER)
+	if (err == 0) {
+		shell_adv_active = false;
+		atomic_set(&shell_adv_restart_state, SHELL_ADV_RESTART_IDLE);
+	}
+
+	k_mutex_unlock(&shell_adv_lock);
+#endif /* CONFIG_BT_BROADCASTER */
+
+	return err;
 }
 
 #ifdef CONFIG_SETTINGS
@@ -1977,28 +2150,59 @@ void set_ad_device_name_complete(struct bt_data *ad)
 	set_ad_name_complete(ad, name);
 }
 
-static int cmd_advertise(const struct shell *sh, size_t argc, char *argv[])
+static int shell_le_adv_start(const struct shell_adv_cfg *cfg)
 {
-	struct bt_le_adv_param param = {};
 	struct bt_data ad[4];
 	struct bt_data sd[4];
-	bool discoverable = true;
-	bool appearance = false;
 	ssize_t ad_len = 0;
 	ssize_t sd_len = 0;
+	int err;
+
+	if (cfg->name_in_ad && cfg->with_name) {
+		set_ad_device_name_complete(&ad[0]);
+		ad_len++;
+	}
+
+	if (cfg->name_in_sd && cfg->with_name) {
+		set_ad_device_name_complete(&sd[0]);
+		sd_len++;
+	}
+
+	err = ad_init(&ad[ad_len], ARRAY_SIZE(ad) - ad_len, cfg->opt);
+	if (err < 0) {
+		return -ENOEXEC;
+	}
+	ad_len += err;
+
+	return bt_le_adv_start(&cfg->param, ad_len > 0 ? ad : NULL, ad_len,
+			       sd_len > 0 ? sd : NULL, sd_len);
+}
+
+static int cmd_advertise(const struct shell *sh, size_t argc, char *argv[])
+{
+	struct shell_adv_cfg cfg = {};
+	struct bt_le_adv_param param = {};
+	bool discoverable = true;
+	bool appearance = false;
 	int err;
 	bool with_name = true;
 	bool name_ad = false;
 	bool name_sd = true;
 
 	if (!strcmp(argv[1], "off")) {
+		k_mutex_lock(&shell_adv_lock, K_FOREVER);
+
 		if (bt_le_adv_stop() < 0) {
+			k_mutex_unlock(&shell_adv_lock);
 			shell_error(sh, "Failed to stop advertising");
 			return -ENOEXEC;
-		} else {
-			shell_print(sh, "Advertising stopped");
 		}
 
+		shell_adv_active = false;
+		atomic_set(&shell_adv_restart_state, SHELL_ADV_RESTART_IDLE);
+		k_mutex_unlock(&shell_adv_lock);
+
+		shell_print(sh, "Advertising stopped");
 		return 0;
 	}
 
@@ -2048,36 +2252,36 @@ static int cmd_advertise(const struct shell *sh, size_t argc, char *argv[])
 		}
 	}
 
-	if (name_ad && with_name) {
-		set_ad_device_name_complete(&ad[0]);
-		ad_len++;
-	}
-
-	if (name_sd && with_name) {
-		set_ad_device_name_complete(&sd[0]);
-		sd_len++;
-	}
-
-	atomic_clear(adv_opt);
-	atomic_set_bit_to(adv_opt, SHELL_ADV_OPT_CONNECTABLE,
+	atomic_set_bit_to(cfg.opt, SHELL_ADV_OPT_CONNECTABLE,
 			  (param.options & BT_LE_ADV_OPT_CONN) > 0);
-	atomic_set_bit_to(adv_opt, SHELL_ADV_OPT_DISCOVERABLE, discoverable);
-	atomic_set_bit_to(adv_opt, SHELL_ADV_OPT_APPEARANCE, appearance);
+	atomic_set_bit_to(cfg.opt, SHELL_ADV_OPT_DISCOVERABLE, discoverable);
+	atomic_set_bit_to(cfg.opt, SHELL_ADV_OPT_APPEARANCE, appearance);
 
-	err = ad_init(&ad[ad_len], ARRAY_SIZE(ad) - ad_len, adv_opt);
-	if (err < 0) {
-		return -ENOEXEC;
-	}
-	ad_len += err;
+	cfg.param = param;
+	cfg.with_name = with_name;
+	cfg.name_in_ad = name_ad;
+	cfg.name_in_sd = name_sd;
 
-	err = bt_le_adv_start(&param, ad_len > 0 ? ad : NULL, ad_len, sd_len > 0 ? sd : NULL,
-			      sd_len);
+	k_mutex_lock(&shell_adv_lock, K_FOREVER);
+
+	err = shell_le_adv_start(&cfg);
 	if (err < 0) {
+		k_mutex_unlock(&shell_adv_lock);
 		shell_error(sh, "Failed to start advertising (err %d)", err);
 		return err;
-	} else {
-		shell_print(sh, "Advertising started");
 	}
+
+	shell_adv = cfg;
+	shell_adv_active = true;
+	/* A central can connect to the new advertiser and disconnect before
+	 * this point, so keep REQUESTED. WAIT_RESOURCES is only set with the lock
+	 * held, so it was left by the previous advertiser.
+	 */
+	(void)atomic_cas(&shell_adv_restart_state, SHELL_ADV_RESTART_WAIT_RESOURCES,
+			 SHELL_ADV_RESTART_IDLE);
+	k_mutex_unlock(&shell_adv_lock);
+
+	shell_print(sh, "Advertising started");
 
 	return 0;
 
@@ -2124,13 +2328,21 @@ static int cmd_directed_adv(const struct shell *sh,
 		}
 	}
 
+	k_mutex_lock(&shell_adv_lock, K_FOREVER);
+
 	err = bt_le_adv_start(&param, NULL, 0, NULL, 0);
 	if (err) {
+		k_mutex_unlock(&shell_adv_lock);
 		shell_error(sh, "Failed to start directed advertising (%d)", err);
 		return -ENOEXEC;
-	} else {
-		shell_print(sh, "Started directed advertising");
 	}
+
+	/* Directed advertising now owns the legacy advertiser. */
+	shell_adv_active = false;
+	atomic_set(&shell_adv_restart_state, SHELL_ADV_RESTART_IDLE);
+	k_mutex_unlock(&shell_adv_lock);
+
+	shell_print(sh, "Started directed advertising");
 
 	return 0;
 }
@@ -2233,7 +2445,9 @@ static int cmd_adv_create(const struct shell *sh, size_t argc, char *argv[])
 		return -ENOEXEC;
 	}
 
+	k_mutex_lock(&shell_adv_lock, K_FOREVER);
 	err = bt_le_ext_adv_create(&param, &adv_callbacks, &adv);
+	k_mutex_unlock(&shell_adv_lock);
 	if (err) {
 		shell_error(sh, "Failed to create advertiser set (%d)", err);
 		return -ENOEXEC;
@@ -2392,8 +2606,11 @@ static int cmd_adv_data(const struct shell *sh, size_t argc, char *argv[])
 	atomic_set_bit_to(adv_set_opt[selected_adv], SHELL_ADV_OPT_DISCOVERABLE, discoverable);
 	atomic_set_bit_to(adv_set_opt[selected_adv], SHELL_ADV_OPT_APPEARANCE, appearance);
 
+	k_mutex_lock(&shell_adv_lock, K_FOREVER);
+
 	len = ad_init(&data[*data_len], AD_SIZE - *data_len, adv_set_opt[selected_adv]);
 	if (len < 0) {
+		k_mutex_unlock(&shell_adv_lock);
 		shell_error(sh, "Failed to initialize stack advertising data");
 
 		return -ENOEXEC;
@@ -2407,6 +2624,7 @@ static int cmd_adv_data(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_le_ext_adv_set_data(adv, ad_len > 0 ? ad : NULL, ad_len,
 					  sd_len > 0 ? sd : NULL, sd_len);
+	k_mutex_unlock(&shell_adv_lock);
 	if (err) {
 		shell_print(sh, "Failed to set advertising set data (%d)", err);
 		return -ENOEXEC;
@@ -2495,13 +2713,20 @@ static int cmd_adv_delete(const struct shell *sh, size_t argc, char *argv[])
 		return -EINVAL;
 	}
 
+	k_mutex_lock(&shell_adv_lock, K_FOREVER);
 	err = bt_le_ext_adv_delete(adv);
+	k_mutex_unlock(&shell_adv_lock);
 	if (err) {
 		shell_error(sh, "Failed to delete advertiser set");
 		return err;
 	}
 
 	adv_sets[selected_adv] = NULL;
+
+#if defined(CONFIG_BT_CONN)
+	shell_adv_restart_resume();
+#endif /* CONFIG_BT_CONN */
+
 	return 0;
 }
 
