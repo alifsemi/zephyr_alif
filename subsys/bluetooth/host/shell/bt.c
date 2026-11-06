@@ -93,6 +93,16 @@ enum {
 };
 
 static ATOMIC_DEFINE(adv_opt, SHELL_ADV_OPT_NUM);
+
+/* Last legacy "advertise" request, replayed when a connection is recycled. */
+static struct {
+	bool enabled;
+	struct bt_le_adv_param param;
+	struct bt_data ad[4];
+	struct bt_data sd[4];
+	size_t ad_len;
+	size_t sd_len;
+} adv_restart;
 #if defined(CONFIG_BT_EXT_ADV)
 uint8_t selected_adv;
 struct bt_le_ext_adv *adv_sets[CONFIG_BT_EXT_ADV_MAX_ADV_SET];
@@ -1126,9 +1136,42 @@ static void le_cs_config_removed(struct bt_conn *conn, uint8_t config_id)
 }
 #endif
 
+#if defined(CONFIG_BT_PERIPHERAL)
+static void adv_restart_handler(struct k_work *work)
+{
+	int err;
+
+	if (!adv_restart.enabled) {
+		return;
+	}
+
+	err = bt_le_adv_start(&adv_restart.param,
+			      adv_restart.ad_len > 0 ? adv_restart.ad : NULL, adv_restart.ad_len,
+			      adv_restart.sd_len > 0 ? adv_restart.sd : NULL, adv_restart.sd_len);
+	if (err == 0) {
+		bt_shell_print("Advertising restarted");
+	} else if (err != -EALREADY) {
+		bt_shell_error("Failed to restart advertising (err %d)", err);
+	}
+}
+
+static K_WORK_DEFINE(adv_restart_work, adv_restart_handler);
+
+static void recycled(void)
+{
+	/* Runs from bt_conn_unref(), so defer the restart to the system workqueue. */
+	if (adv_restart.enabled) {
+		k_work_submit(&adv_restart_work);
+	}
+}
+#endif /* CONFIG_BT_PERIPHERAL */
+
 static struct bt_conn_cb conn_callbacks = {
 	.connected = connected,
 	.disconnected = disconnected,
+#if defined(CONFIG_BT_PERIPHERAL)
+	.recycled = recycled,
+#endif
 	.le_param_req = le_param_req,
 	.le_param_updated = le_param_updated,
 #if defined(CONFIG_BT_SMP)
@@ -1992,6 +2035,7 @@ static int cmd_advertise(const struct shell *sh, size_t argc, char *argv[])
 	bool name_sd = true;
 
 	if (!strcmp(argv[1], "off")) {
+		adv_restart.enabled = false;
 		if (bt_le_adv_stop() < 0) {
 			shell_error(sh, "Failed to stop advertising");
 			return -ENOEXEC;
@@ -2078,6 +2122,13 @@ static int cmd_advertise(const struct shell *sh, size_t argc, char *argv[])
 	} else {
 		shell_print(sh, "Advertising started");
 	}
+
+	adv_restart.param = param;
+	memcpy(adv_restart.ad, ad, sizeof(ad));
+	memcpy(adv_restart.sd, sd, sizeof(sd));
+	adv_restart.ad_len = ad_len;
+	adv_restart.sd_len = sd_len;
+	adv_restart.enabled = true;
 
 	return 0;
 
