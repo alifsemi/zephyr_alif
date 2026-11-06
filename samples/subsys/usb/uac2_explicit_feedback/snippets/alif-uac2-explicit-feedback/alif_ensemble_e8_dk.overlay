@@ -1,0 +1,55 @@
+/*
+ * Copyright (c) 2026 Alif Semiconductor.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+
+#include <dt-bindings/misc/alif_aipm_common.h>
+
+
+&aipm_run_default {
+	phy-pwr-gating = <ALIF_PHY_GATE_USB_MASK>;
+};
+
+
+ns: &ns {
+	status = "okay";
+};
+
+zephyr_udc0: &usb {
+	status = "okay";
+};
+
+&i2c1 {
+	status = "okay";
+
+	audio_codec: wm8904@1a {
+		compatible = "cirrus,wm8904";
+		reg = <0x1a>;
+		status = "okay";
+	};
+};
+
+i2s_tx: &i2s3 {
+	status = "okay";
+};
+
+&uac2_headphones {
+	high-speed;
+};
+
+/ {
+	aliases {
+		/*
+		 * Used by:
+		 * DT_ALIAS(audio_codec)
+		 */
+		audio-codec = &audio_codec;
+
+		/*
+		 * E8 DK codec I2S interface.
+		 */
+		i2s-codec-tx = &i2s3;
+	};
+};
