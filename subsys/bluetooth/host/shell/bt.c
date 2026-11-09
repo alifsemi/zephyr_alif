@@ -103,6 +103,12 @@ static struct {
 	size_t ad_len;
 	size_t sd_len;
 } adv_restart;
+
+/* Keep track of the connection that stopped the advertiser. */
+static struct bt_conn *adv_restart_conn;
+/* Keep track of the pending restart. */
+static bool adv_restart_pending;
+
 #if defined(CONFIG_BT_EXT_ADV)
 uint8_t selected_adv;
 struct bt_le_ext_adv *adv_sets[CONFIG_BT_EXT_ADV_MAX_ADV_SET];
@@ -773,6 +779,12 @@ static void connected(struct bt_conn *conn, uint8_t err)
 		goto done;
 	}
 
+#if defined(CONFIG_BT_PERIPHERAL)
+	if (!err && adv_restart.enabled && info.role == BT_CONN_ROLE_PERIPHERAL) {
+		adv_restart_conn = conn;
+	}
+#endif
+
 	if (info.role == BT_CONN_ROLE_CENTRAL) {
 		if (default_conn != NULL) {
 			bt_conn_unref(default_conn);
@@ -823,6 +835,13 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
 	conn_addr_str(conn, addr, sizeof(addr));
 	bt_shell_print("Disconnected: %s (reason 0x%02x)", addr, reason);
+
+#if defined(CONFIG_BT_PERIPHERAL)
+	if (conn == adv_restart_conn) {
+		adv_restart_conn = NULL;
+		adv_restart_pending = true;
+	}
+#endif
 
 	if (default_conn == conn) {
 		bt_conn_unref(default_conn);
@@ -1159,7 +1178,13 @@ static K_WORK_DEFINE(adv_restart_work, adv_restart_handler);
 
 static void recycled(void)
 {
-	/* Runs from bt_conn_unref(), so defer the restart to the system workqueue. */
+	if (!adv_restart_pending) {
+		return;
+	}
+
+	adv_restart_pending = false;
+
+	/* Queued so `bt advertise off` can cancel a restart that has not run yet. */
 	if (adv_restart.enabled) {
 		k_work_submit(&adv_restart_work);
 	}
@@ -2033,9 +2058,18 @@ static int cmd_advertise(const struct shell *sh, size_t argc, char *argv[])
 	bool with_name = true;
 	bool name_ad = false;
 	bool name_sd = true;
+	bool restart = false;
 
 	if (!strcmp(argv[1], "off")) {
+#if defined(CONFIG_BT_PERIPHERAL)
+		struct k_work_sync sync;
+
+		/* Let a handler that already saw the flag finish, then stop wins. */
+		(void)k_work_cancel_sync(&adv_restart_work, &sync);
+#endif
 		adv_restart.enabled = false;
+		adv_restart_conn = NULL;
+		adv_restart_pending = false;
 		if (bt_le_adv_stop() < 0) {
 			shell_error(sh, "Failed to stop advertising");
 			return -ENOEXEC;
@@ -2087,6 +2121,8 @@ static int cmd_advertise(const struct shell *sh, size_t argc, char *argv[])
 			param.options |= BT_LE_ADV_OPT_DISABLE_CHAN_38;
 		} else if (!strcmp(arg, "disable-39")) {
 			param.options |= BT_LE_ADV_OPT_DISABLE_CHAN_39;
+		} else if (!strcmp(arg, "restart")) {
+			restart = true;
 		} else {
 			goto fail;
 		}
@@ -2123,12 +2159,18 @@ static int cmd_advertise(const struct shell *sh, size_t argc, char *argv[])
 		shell_print(sh, "Advertising started");
 	}
 
-	adv_restart.param = param;
-	memcpy(adv_restart.ad, ad, sizeof(ad));
-	memcpy(adv_restart.sd, sd, sizeof(sd));
-	adv_restart.ad_len = ad_len;
-	adv_restart.sd_len = sd_len;
-	adv_restart.enabled = true;
+	if (restart && (param.options & BT_LE_ADV_OPT_CONN)) {
+		adv_restart.param = param;
+		memcpy(adv_restart.ad, ad, ad_len * sizeof(ad[0]));
+		memcpy(adv_restart.sd, sd, sd_len * sizeof(sd[0]));
+		adv_restart.ad_len = ad_len;
+		adv_restart.sd_len = sd_len;
+		adv_restart.enabled = true;
+	} else {
+		adv_restart.enabled = false;
+		adv_restart_conn = NULL;
+		adv_restart_pending = false;
+	}
 
 	return 0;
 
@@ -2174,6 +2216,11 @@ static int cmd_directed_adv(const struct shell *sh,
 			return -ENOEXEC;
 		}
 	}
+
+	/* Directed advertising reuses the legacy set, so drop the saved undirected request. */
+	adv_restart.enabled = false;
+	adv_restart_conn = NULL;
+	adv_restart_pending = false;
 
 	err = bt_le_adv_start(&param, NULL, 0, NULL, 0);
 	if (err) {
@@ -5053,9 +5100,9 @@ SHELL_STATIC_SUBCMD_SET_CREATE(bt_cmds,
 	SHELL_CMD_ARG(advertise, NULL,
 		      "<type: off, on, nconn> [mode: discov, non_discov] "
 		      "[filter-accept-list: fal, fal-scan, fal-conn] [identity] [no-name] "
-		      "[name-ad] [appearance] "
+		      "[name-ad] [appearance] [restart] "
 		      "[disable-37] [disable-38] [disable-39]",
-		      cmd_advertise, 2, 8),
+		      cmd_advertise, 2, 9),
 #if defined(CONFIG_BT_PERIPHERAL)
 	SHELL_CMD_ARG(directed-adv, NULL, HELP_ADDR_LE " [mode: low] "
 		      "[identity] [dir-rpa]",
