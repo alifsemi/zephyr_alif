@@ -233,6 +233,25 @@ static inline void hw_cam_soft_reset(uintptr_t regs)
 	sys_write32(0, regs + CAM_CTRL);
 }
 
+/*
+ * Wait until the CPI no longer accesses the video buffer. When it only
+ * forwards to the ISP, BUSY stays set until the soft reset, so there is
+ * nothing to wait for.
+ */
+static void hw_cam_wait_idle(const struct device *dev)
+{
+	const struct video_cam_config *config = dev->config;
+	uintptr_t regs = DEVICE_MMIO_GET(dev);
+
+	if (IS_ENABLED(CONFIG_VIDEO_ALIF_CAM_EXTENDED) && !config->axi_bus_ep) {
+		return;
+	}
+
+	for (int i = 0; (i < 1000) && (sys_read32(regs + CAM_CTRL) & CAM_CTRL_BUSY); i++) {
+		k_msleep(1);
+	}
+}
+
 static inline void hw_cam_start_video_capture(const struct device *dev)
 {
 	const struct video_cam_config *config = dev->config;
@@ -569,7 +588,6 @@ static int alif_cam_stream_stop(const struct device *dev)
 	const struct video_cam_config *config = dev->config;
 	struct video_cam_data *data = dev->data;
 	uintptr_t regs = DEVICE_MMIO_GET(dev);
-	uint32_t mask;
 	int ret;
 
 	if (!data->is_streaming) {
@@ -593,14 +611,7 @@ static int alif_cam_stream_stop(const struct device *dev)
 	/* Set the Current buffer state to NULL */
 	data->curr_vid_buf = 0;
 
-	/*
-	 * Poll on Busy flag of CPI to find out when the video buffer
-	 * is no longer accessed.
-	 */
-	mask = CAM_CTRL_BUSY;
-	for (int i = 0; (i < 1000) && (sys_read32(regs + CAM_CTRL) & mask) == mask; i++) {
-		k_msleep(1);
-	}
+	hw_cam_wait_idle(dev);
 
 	/* Apply soft reset to clear BUSY flag and leave CPI in clean state */
 	hw_cam_soft_reset(regs);
@@ -629,7 +640,6 @@ static int alif_cam_flush(const struct device *dev, enum video_endpoint_id ep, b
 	struct video_cam_data *data = dev->data;
 	uintptr_t regs = DEVICE_MMIO_GET(dev);
 	struct video_buffer *vbuf = NULL;
-	uint32_t mask;
 
 	if (!cancel) {
 		if (!data->curr_vid_buf) {
@@ -656,14 +666,7 @@ static int alif_cam_flush(const struct device *dev, enum video_endpoint_id ep, b
 		/* Stop Video capture. */
 		sys_write32(0, regs + CAM_CTRL);
 
-		/*
-		 * Poll on Busy flag of CPI to find out when the video buffer
-		 * is no longer accessed.
-		 */
-		mask = CAM_CTRL_BUSY;
-		for (int i = 0; (i < 1000) && (sys_read32(regs + CAM_CTRL) & mask) == mask; i++) {
-			k_msleep(1);
-		}
+		hw_cam_wait_idle(dev);
 
 		/* Apply soft reset to clear BUSY flag and leave CPI in clean state */
 		hw_cam_soft_reset(regs);

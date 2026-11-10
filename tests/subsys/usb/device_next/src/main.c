@@ -5,6 +5,7 @@
  */
 
 #include <zephyr/ztest.h>
+#include <zephyr/drivers/usb/udc.h>
 #include <zephyr/usb/usbd.h>
 #include <zephyr/usb/usbh.h>
 
@@ -16,6 +17,31 @@ LOG_MODULE_REGISTER(usb_test, LOG_LEVEL_INF);
 
 #define TEST_DEFAULT_INTERFACE		0
 #define TEST_DEFAULT_ALTERNATE		1
+#define TEST_COMPLETIONS		(CONFIG_USBD_MAX_UDC_MSG + 2)
+
+NET_BUF_POOL_FIXED_DEFINE(completion_pool, TEST_COMPLETIONS, 8, sizeof(struct udc_buf_info), NULL);
+static K_SEM_DEFINE(completion_sem, 0, TEST_COMPLETIONS);
+static atomic_t completion_errors;
+
+static int test_completion_request(struct usbd_class_data *c_data, struct net_buf *buf, int err)
+{
+	if (err != -ECONNABORTED) {
+		atomic_inc(&completion_errors);
+	}
+
+	net_buf_unref(buf);
+	k_sem_give(&completion_sem);
+	return 0;
+}
+
+static const struct usbd_class_api completion_api = {
+	.request = test_completion_request,
+};
+
+static struct usbd_class_data completion_class = {
+	.name = "completion_test",
+	.api = &completion_api,
+};
 
 USBD_CONFIGURATION_DEFINE(test_fs_config,
 			  USB_SCD_SELF_POWERED | USB_SCD_REMOTE_WAKEUP,
@@ -36,6 +62,47 @@ USBD_DEVICE_DEFINE(test_usbd,
 		   0x2fe3, 0xffff);
 
 USBH_CONTROLLER_DEFINE(uhs_ctx, DEVICE_DT_GET(DT_NODELABEL(zephyr_uhc0)));
+
+ZTEST(device_next, test_completions_survive_full_event_queue)
+{
+	const struct device *dev = test_usbd.dev;
+	struct udc_data *udc = dev->data;
+	struct net_buf *bufs[TEST_COMPLETIONS];
+	int queue_full = 0;
+
+	for (int i = 0; i < TEST_COMPLETIONS; i++) {
+		struct udc_buf_info *bi;
+
+		bufs[i] = net_buf_alloc(&completion_pool, K_NO_WAIT);
+		zassert_not_null(bufs[i]);
+		bi = udc_get_buf_info(bufs[i]);
+		memset(bi, 0, sizeof(*bi));
+		bi->ep = 0x81;
+		bi->owner = &completion_class;
+		bi->err = -ECONNABORTED;
+	}
+
+	k_sched_lock();
+	for (int i = 0; i < TEST_COMPLETIONS; i++) {
+		struct udc_event event = {
+			.type = UDC_EVT_EP_REQUEST,
+			.dev = dev,
+			.buf = bufs[i],
+		};
+
+		if (udc->event_cb(dev, &event) != 0) {
+			queue_full++;
+		}
+	}
+	k_sched_unlock();
+
+	zassert_true(queue_full > 0, "Test did not fill the event queue");
+	for (int i = 0; i < TEST_COMPLETIONS; i++) {
+		zassert_ok(k_sem_take(&completion_sem, K_SECONDS(1)), "Completion %d was lost", i);
+	}
+
+	zassert_equal(atomic_get(&completion_errors), 0, "Unexpected completion status");
+}
 
 /* Get Configuration request test */
 ZTEST(device_next, test_get_configuration)

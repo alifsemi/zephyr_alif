@@ -37,15 +37,18 @@ static int test_udc_event_handler(const struct device *dev,
 
 static void event_ep_request(const struct device *dev, struct udc_event event)
 {
-	struct udc_buf_info *bi;
+	struct udc_buf_info bi;
 	int err;
 
-	bi = udc_get_buf_info(event.buf);
+	bi = *udc_get_buf_info(event.buf);
+	if (bi.err == -ECONNABORTED) {
+		zassert_is_null(event.buf->frags, "Cancelled requests must be reported separately");
+	}
 
 	err = udc_ep_buf_free(dev, event.buf);
 	zassert_ok(err, "Failed to free request buffer");
 
-	if (bi->err == -ECONNABORTED && bi->ep == last_used_ep) {
+	if (bi.err == -ECONNABORTED && bi.ep == last_used_ep) {
 		k_sem_give(&ep_queue_sem);
 	}
 }
