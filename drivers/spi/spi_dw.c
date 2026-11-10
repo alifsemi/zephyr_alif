@@ -47,6 +47,7 @@ LOG_MODULE_REGISTER(spi_dw);
 #endif
 
 #ifdef CONFIG_SPI_DW_USE_DMA
+#include <zephyr/cache.h>
 #include <zephyr/drivers/dma.h>
 #define SPI_DW_DMA_FULL_DUPLEX 2
 #define SPI_DW_DMA_SEMAPHORE_COUNT SPI_DW_DMA_FULL_DUPLEX
@@ -270,6 +271,60 @@ static uint32_t spi_dw_dma_calculate_burst_length(uint32_t default_burst, size_t
 	return burst_length;
 }
 
+/*
+ * The CPU node carries d-cache-line-size even when the cache is off, so the
+ * line-sized dummy is used only when maintenance actually runs. Size comes
+ * from a non-zero DCACHE_LINE_SIZE, otherwise from that property. The Kconfig
+ * int is absent when DCACHE_LINE_SIZE_DETECT is selected.
+ */
+#if defined(CONFIG_DCACHE) && defined(CONFIG_CACHE_MANAGEMENT)
+#if defined(CONFIG_DCACHE_LINE_SIZE) && (CONFIG_DCACHE_LINE_SIZE != 0)
+#define SPI_DW_DMA_CACHE_LINE CONFIG_DCACHE_LINE_SIZE
+#elif DT_NODE_HAS_PROP(DT_PATH(cpus, cpu_0), d_cache_line_size) && \
+	(DT_PROP(DT_PATH(cpus, cpu_0), d_cache_line_size) != 0)
+#define SPI_DW_DMA_CACHE_LINE DT_PROP(DT_PATH(cpus, cpu_0), d_cache_line_size)
+#else
+#error "SPI DW DMA needs DCACHE_LINE_SIZE or the cpu@0 d-cache-line-size property"
+#endif
+#endif
+
+#ifdef SPI_DW_DMA_CACHE_LINE
+/* One configured line, so a NULL sink does not share that line. */
+static __aligned(SPI_DW_DMA_CACHE_LINE) uint8_t spi_dw_dma_dummy_tx[SPI_DW_DMA_CACHE_LINE] = {
+	0xFF,
+};
+static __aligned(SPI_DW_DMA_CACHE_LINE) uint8_t spi_dw_dma_dummy_rx[SPI_DW_DMA_CACHE_LINE];
+#define SPI_DW_DMA_DUMMY_TX_PTR ((void *)spi_dw_dma_dummy_tx)
+#define SPI_DW_DMA_DUMMY_RX_PTR ((void *)spi_dw_dma_dummy_rx)
+#define SPI_DW_DMA_DUMMY_SIZE   ((size_t)SPI_DW_DMA_CACHE_LINE)
+#else
+static uint32_t spi_dw_dma_dummy_tx = 0xFF;
+static uint32_t spi_dw_dma_dummy_rx;
+#define SPI_DW_DMA_DUMMY_TX_PTR ((void *)&spi_dw_dma_dummy_tx)
+#define SPI_DW_DMA_DUMMY_RX_PTR ((void *)&spi_dw_dma_dummy_rx)
+#define SPI_DW_DMA_DUMMY_SIZE   sizeof(spi_dw_dma_dummy_tx)
+#endif
+
+static void spi_dw_dma_cache_flush(const void *buf, size_t len)
+{
+#if defined(CONFIG_DCACHE) && defined(CONFIG_CACHE_MANAGEMENT)
+	sys_cache_data_flush_range((void *)buf, len);
+#else
+	ARG_UNUSED(buf);
+	ARG_UNUSED(len);
+#endif
+}
+
+static void spi_dw_dma_cache_invd(void *buf, size_t len)
+{
+#if defined(CONFIG_DCACHE) && defined(CONFIG_CACHE_MANAGEMENT)
+	sys_cache_data_invd_range(buf, len);
+#else
+	ARG_UNUSED(buf);
+	ARG_UNUSED(len);
+#endif
+}
+
 /**
  * Check if there's more data to transfer
  */
@@ -287,11 +342,10 @@ static int spi_dw_dma_setup_rx_channel(const struct device *dev,
 				       void *rx_ptr, size_t chunk)
 {
 	const struct spi_dw_config *info = dev->config;
-	static uint32_t dummy_rx;
 	uint32_t burstlen;
 	int ret;
 
-	if (rx_ptr == &dummy_rx) {
+	if (rx_ptr == SPI_DW_DMA_DUMMY_RX_PTR) {
 		burstlen = 1;
 	} else {
 		uint32_t dw_spi_rxftlr_dflt = (info->fifo_depth * 1) / 2;
@@ -306,7 +360,7 @@ static int spi_dw_dma_setup_rx_channel(const struct device *dev,
 	dma_cfg->dma_slot = info->dma_rx.periph;
 	dma_block_cfg->source_address = (mm_reg_t)DEVICE_MMIO_GET(dev) + DW_SPI_REG_DR;
 	dma_block_cfg->dest_address = (uintptr_t)rx_ptr;
-	dma_block_cfg->dest_addr_adj = (rx_ptr == &dummy_rx) ?
+	dma_block_cfg->dest_addr_adj = (rx_ptr == SPI_DW_DMA_DUMMY_RX_PTR) ?
 		DMA_ADDR_ADJ_NO_CHANGE : DMA_ADDR_ADJ_INCREMENT;
 	dma_block_cfg->source_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
 
@@ -334,7 +388,6 @@ static int spi_dw_dma_setup_tx_channel(const struct device *dev,
 				       const void *tx_ptr, size_t chunk)
 {
 	const struct spi_dw_config *info = dev->config;
-	static uint32_t dummy_tx = 0xFF;
 	uint32_t dw_spi_txftlr_dflt = (info->fifo_depth * 1) / 2;
 	uint32_t burst_length;
 	int ret;
@@ -343,7 +396,7 @@ static int spi_dw_dma_setup_tx_channel(const struct device *dev,
 	dma_cfg->channel_direction = MEMORY_TO_PERIPHERAL;
 	dma_cfg->dma_slot = info->dma_tx.periph;
 
-	if (tx_ptr == &dummy_tx) {
+	if (tx_ptr == SPI_DW_DMA_DUMMY_TX_PTR) {
 		dma_cfg->source_burst_length = dma_cfg->dest_burst_length = 1;
 	} else {
 		burst_length = spi_dw_dma_calculate_burst_length(dw_spi_txftlr_dflt, chunk);
@@ -355,7 +408,7 @@ static int spi_dw_dma_setup_tx_channel(const struct device *dev,
 	dma_block_cfg->source_address = (uintptr_t)tx_ptr;
 	dma_block_cfg->dest_address = (mm_reg_t)DEVICE_MMIO_GET(dev) + DW_SPI_REG_DR;
 	dma_block_cfg->dest_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
-	dma_block_cfg->source_addr_adj = (tx_ptr == &dummy_tx) ?
+	dma_block_cfg->source_addr_adj = (tx_ptr == SPI_DW_DMA_DUMMY_TX_PTR) ?
 		DMA_ADDR_ADJ_NO_CHANGE : DMA_ADDR_ADJ_INCREMENT;
 
 	ret = dma_config(info->dma_dev, info->dma_tx.ch, dma_cfg);
@@ -401,7 +454,8 @@ static int spi_dw_dma_wait_completion(const struct device *dev,
 /**
  * Clean up DMA resources on error
  */
-static void spi_dw_dma_cleanup(const struct device *dev, int error)
+static void spi_dw_dma_cleanup(const struct device *dev, int error,
+			       void *rx_buf, size_t rx_len)
 {
 	const struct spi_dw_config *info = dev->config;
 	struct spi_dw_data *spi = dev->data;
@@ -412,6 +466,13 @@ static void spi_dw_dma_cleanup(const struct device *dev, int error)
 		}
 		if (info->dma_tx.enabled) {
 			dma_stop(info->dma_dev, info->dma_tx.ch);
+		}
+		/*
+		 * The channel is idle now. Drop a stale line before the
+		 * caller reads. Do not flush.
+		 */
+		if (rx_buf != NULL && rx_len != 0U) {
+			spi_dw_dma_cache_invd(rx_buf, rx_len);
 		}
 	}
 
@@ -426,8 +487,9 @@ static int spi_dw_dma_transceive(const struct device *dev,
 	const struct spi_dw_config *info = dev->config;
 	struct spi_dw_data *spi = dev->data;
 	struct spi_dw_dma_state *state = &spi->dma_state;
+	void *rx_to_invd = NULL;
+	size_t rx_to_invd_len = 0U;
 	int ret = 0;
-	static uint32_t dummy_tx = 0xFF, dummy_rx;
 
 	/* Initialize transfer state in device data */
 	state->tx_idx = 0;
@@ -477,9 +539,14 @@ static int spi_dw_dma_transceive(const struct device *dev,
 		}
 
 		const void *tx_ptr = (txb && txb->buf) ?
-					(uint8_t *)txb->buf + state->tx_off : (uint8_t *)&dummy_tx;
+					(uint8_t *)txb->buf + state->tx_off :
+					SPI_DW_DMA_DUMMY_TX_PTR;
 		void *rx_ptr = (rxb && rxb->buf) ?
-					(uint8_t *)rxb->buf + state->rx_off : (uint8_t *)&dummy_rx;
+					(uint8_t *)rxb->buf + state->rx_off :
+					SPI_DW_DMA_DUMMY_RX_PTR;
+		const bool rx_is_dummy = (rx_ptr == SPI_DW_DMA_DUMMY_RX_PTR);
+		const size_t chunk_bytes = chunk * spi->dfs;
+		bool rx_started = false;
 
 		/* Setup DMA for this chunk */
 		struct dma_config dma_cfg = { 0 };
@@ -491,28 +558,52 @@ static int spi_dw_dma_transceive(const struct device *dev,
 		dma_cfg.user_data = (void *)dev;
 		dma_cfg.head_block = &dma_block_cfg;
 		dma_cfg.source_data_size = dma_cfg.dest_data_size = spi->dfs;
-		dma_block_cfg.block_size = chunk * spi->dfs;
+		dma_block_cfg.block_size = chunk_bytes;
 
 		if (info->dma_rx.enabled && state->is_rx_req) {
+			/*
+			 * Drop a dirty line before the DMA engine stores. A dummy sink
+			 * is one exclusive line, not the whole chunk.
+			 */
+			spi_dw_dma_cache_invd(rx_ptr, rx_is_dummy ?
+					      SPI_DW_DMA_DUMMY_SIZE : chunk_bytes);
 			ret = spi_dw_dma_setup_rx_channel(dev, &dma_cfg,
 							 &dma_block_cfg, rx_ptr, chunk);
 			if (ret < 0) {
 				goto dma_out;
 			}
+			rx_started = true;
 		}
 
 		if (info->dma_tx.enabled && state->is_tx_req) {
+			spi_dw_dma_cache_flush(tx_ptr, (tx_ptr == SPI_DW_DMA_DUMMY_TX_PTR) ?
+					       SPI_DW_DMA_DUMMY_SIZE : chunk_bytes);
 			ret = spi_dw_dma_setup_tx_channel(dev, &dma_cfg,
 							 &dma_block_cfg, tx_ptr, chunk);
 			if (ret < 0) {
-				goto dma_out;
+				goto dma_rx_sync;
 			}
 		}
 
 		/* Wait for DMA completion and check for errors */
 		ret = spi_dw_dma_wait_completion(dev, state);
+
+dma_rx_sync:
+		/*
+		 * On success the channel is already idle, so drop the stale
+		 * line here. On error, cleanup stops the channel and then
+		 * invalidates. Do not flush: a write-back would replace the
+		 * bytes the DMA engine stored. The dummy sink is not read.
+		 */
 		if (ret < 0) {
+			if (rx_started && !rx_is_dummy) {
+				rx_to_invd = rx_ptr;
+				rx_to_invd_len = chunk_bytes;
+			}
 			goto dma_out;
+		}
+		if (rx_started && !rx_is_dummy) {
+			spi_dw_dma_cache_invd(rx_ptr, chunk_bytes);
 		}
 
 		state->tx_off += chunk * spi->dfs;
@@ -537,7 +628,7 @@ static int spi_dw_dma_transceive(const struct device *dev,
 	}
 
 dma_out:
-	spi_dw_dma_cleanup(dev, ret);
+	spi_dw_dma_cleanup(dev, ret, rx_to_invd, rx_to_invd_len);
 	return ret;
 }
 #endif /* CONFIG_SPI_DW_USE_DMA */
