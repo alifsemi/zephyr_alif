@@ -9,6 +9,7 @@
 
 #include <zephyr/drivers/dma.h>
 #include <zephyr/drivers/clock_control.h>
+#include <zephyr/spinlock.h>
 
 #define DT_DRV_COMPAT arm_dma_pl330
 /*
@@ -202,11 +203,19 @@ struct dma_pl330_ch_config {
 	/*
 	 * Scatter-gather support fields
 	 *
-	 * head_block: Pointer to the first block in the scatter-gather chain
+	 * head_block:    Pointer to the first block in the scatter-gather chain.
 	 * current_block: Pointer to the block currently being transferred
+	 *                (used by the SW chaining path in the ISR).
+	 * use_hw_sg:     True when the channel uses HW scatter-gather (single
+	 *                microcode program covers the entire chain); false when
+	 *                using SW chaining (one program per block, ISR advances).
+	 * block_count:   Total number of blocks in the chain, cached at configure
+	 *                time. Used by the HW SG path for microcode generation.
 	 */
 	struct dma_block_config *head_block;
 	struct dma_block_config *current_block;
+	bool use_hw_sg;
+	uint32_t block_count;
 	/* Copy of the caller's block chain */
 	struct dma_block_config block_pool[CONFIG_DMA_PL330_MAX_BLOCK_COUNT];
 };
