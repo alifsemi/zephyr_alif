@@ -678,11 +678,27 @@ static int isp_stream_stop(const struct device *dev)
 {
 	const struct isp_config *config = dev->config;
 	struct isp_data *data = dev->data;
+	struct k_work_sync sync;
 	int ret;
 
+	/*
+	 * When the IN-FIFO runs dry the frame-end worker stops the camera
+	 * controller itself, after the buffer is already in the OUT-FIFO. Wait
+	 * for it so the controller and sensor are stopped when this returns.
+	 * The AE status callback runs in that worker, before its stop: a stop
+	 * from the callback must not wait for the worker that is calling it.
+	 */
+	if (k_current_get() != k_work_queue_thread_get(&data->cb_workq)) {
+		k_work_flush(&data->cb_work, &sync);
+	}
+
 	if (!data->is_streaming) {
+		/*
+		 * The worker does not report its stop result, so stop again: a
+		 * stopped controller returns 0 and a failed stop is retried.
+		 */
 		LOG_DBG("Already stopped streaming!");
-		return 0;
+		return video_stream_stop(config->controller);
 	}
 
 	ret = video_stream_stop(config->controller);
@@ -803,9 +819,7 @@ static int isp_flush(const struct device *dev, enum video_endpoint_id ep, bool c
 	data->curr_vid_buf = 0;
 	data->is_streaming = false;
 
-	video_flush(config->controller, ep, cancel);
-
-	return 0;
+	return video_flush(config->controller, ep, cancel);
 }
 
 static int isp_enqueue(const struct device *dev, enum video_endpoint_id ep,
