@@ -31,3 +31,38 @@ properties:
       * ALIF_UTIMER_COUNTER_DIRECTION_UP           - used as up counter.
       * ALIF_UTIMER_COUNTER_DIRECTION_DOWN         - used as down counter.
       * ALIF_UTIMER_COUNTER_DIRECTION_TRIANGLE     - used as triangle counter.
+
+  dma-trig:
+    type: boolean
+    description: |
+      Use this UTIMER as a DMA request source (UTn_T0 driver-A output).
+      On Ensemble/Balletto, EVTRTR maps UT0_T0 compare events to
+      DMA0_REQ (see SoC HRM DMA request / Event Router tables, e.g.
+      Table 12-29 on E7/E8). The driver output rising edge at compare
+      match (COMPARE_CTRL HIGH_AT_COMP_MATCH + COMPARE_TRIG_EN) is the
+      handshake; CHAN_INTERRUPT may latch but CPU IRQ stays off.
+      DMA_REQ is held low between alarms; cancel_alarm re-arms the
+      line. Use counter_set_channel_alarm() with a NULL callback
+      (CPU alarm callbacks are not supported in this mode). Both
+      compare channels are intended for DMA request use when enabled.
+      After counter_set_channel_alarm() the channel stays busy (dma_armed)
+      until counter_cancel_channel_alarm(), even after the compare match
+      and DMA transfer complete.       Application flow: dma_config, cancel_alarm() (re-arm REQ low),
+      counter_set_channel_alarm(NULL), dma_start (PL330 must wait before
+      the compare rising edge), wait for DMA completion, then cancel_alarm()
+      before the next period. Avoid relative ticks==0 (driver schedules only
+      the minimum lead time). A second set_channel_alarm
+      without cancel returns -EBUSY. Requires counter-direction up. Alarm
+      and top callbacks are not invoked in this mode.
+
+  dmas:
+    type: phandle-array
+    description: |
+      Overlay DMA mux. This driver does not start DMA.
+      Cell 0 is the event router with ALIF_DMA_ENCODE(channel, group,
+      handshake). Cell 1 is the peripheral request number.
+      dmas = <&evtrtrN ALIF_DMA_ENCODE(channel, group, handshake) periph>;
+
+  dma-names:
+    type: string-array
+    description: Names for the dmas entries.
