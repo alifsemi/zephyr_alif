@@ -1,0 +1,720 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* e1 NVIC interrupts */
+
+&ethosu0 {
+	interrupt-parent = <&nvic>;
+	interrupts = <55 0>;
+};
+
+&rtc0 {
+	interrupt-parent = <&nvic>;
+	interrupts = <58 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&sdhc {
+	interrupt-parent = <&nvic>;
+	interrupts = <102 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <103 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "sdmmc", "sdmmc_wakeup";
+};
+
+&seservice0r {
+	interrupt-parent = <&nvic>;
+	interrupts = < 37 ALIF_DEFAULT_IRQ_PRIORITY >;
+	interrupt-names = "rx";
+};
+
+&seservice0s {
+	interrupt-parent = <&nvic>;
+	interrupts = < 38 ALIF_DEFAULT_IRQ_PRIORITY >;
+	interrupt-names = "tx";
+};
+
+&seservice1r {
+	interrupt-parent = <&nvic>;
+	interrupts = < 39 ALIF_DEFAULT_IRQ_PRIORITY >;
+	interrupt-names = "rx";
+};
+
+&seservice1s {
+	interrupt-parent = <&nvic>;
+	interrupts = < 40 ALIF_DEFAULT_IRQ_PRIORITY >;
+	interrupt-names = "tx";
+};
+
+&rtsshp_rtsshe_mhu0_r {
+	interrupt-parent = <&nvic>;
+	interrupts = < 41 ALIF_DEFAULT_IRQ_PRIORITY >;
+	interrupt-names = "rx";
+};
+
+&rtsshe_rtsshp_mhu0_s {
+	interrupt-parent = <&nvic>;
+	interrupts = < 42 ALIF_DEFAULT_IRQ_PRIORITY >;
+	interrupt-names = "tx";
+};
+
+&rtsshp_rtsshe_mhu1_r {
+	interrupt-parent = <&nvic>;
+	interrupts = < 43 ALIF_DEFAULT_IRQ_PRIORITY >;
+	interrupt-names = "rx";
+};
+
+&rtsshe_rtsshp_mhu1_s {
+	interrupt-parent = <&nvic>;
+	interrupts = < 44 ALIF_DEFAULT_IRQ_PRIORITY >;
+	interrupt-names = "tx";
+};
+
+&usb {
+	interrupt-parent = <&nvic>;
+	interrupts = <101 3>;
+};
+
+&hwsem0 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 105 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem1 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 106 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem2 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 107 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem3 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 108 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem4 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 109 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem5 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 110 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem6 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 111 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem7 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 112 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem8 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 113 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem9 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 114 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem10 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 115 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem11 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 116 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem12 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 117 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem13 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 118 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem14 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 119 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&hwsem15 {
+	interrupt-parent = <&nvic>;
+	interrupts = < 120 ALIF_DEFAULT_IRQ_PRIORITY >;
+};
+
+&uart0 {
+	interrupt-parent = <&nvic>;
+	interrupts = <124 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&uart1 {
+	interrupt-parent = <&nvic>;
+	interrupts = <125 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&uart2 {
+	interrupt-parent = <&nvic>;
+	interrupts = <126 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&uart3 {
+	interrupt-parent = <&nvic>;
+	interrupts = <127 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&uart4 {
+	interrupt-parent = <&nvic>;
+	interrupts = <128 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&uart5 {
+	interrupt-parent = <&nvic>;
+	interrupts = <129 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&spi0 {
+	interrupt-parent = <&nvic>;
+	interrupts = <137 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&spi1 {
+	interrupt-parent = <&nvic>;
+	interrupts = <138 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&spi2 {
+	interrupt-parent = <&nvic>;
+	interrupts = <139 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&spi3 {
+	interrupt-parent = <&nvic>;
+	interrupts = <140 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&dma0 {
+	interrupt-parent = <&nvic>;
+	interrupts = <299 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <300 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <301 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <302 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <303 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <304 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <305 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <306 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <331 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "channel0", "channel1",
+			"channel2", "channel3",
+			"channel4", "channel5",
+			"channel6", "channel7",
+			"abort";
+};
+
+&timer0 {
+	interrupt-parent = <&nvic>;
+	interrupts = <60 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&timer1 {
+	interrupt-parent = <&nvic>;
+	interrupts = <61 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&timer2 {
+	interrupt-parent = <&nvic>;
+	interrupts = <62 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&timer3 {
+	interrupt-parent = <&nvic>;
+	interrupts = <63 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&utimer0 {
+	interrupt-parent = <&nvic>;
+	interrupts = <377 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <378 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <379 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <380 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <381 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <382 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <383 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <384 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "comp_capt_a", "comp_capt_b",
+			"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+			"comp_b_buf2", "underflow", "overflow";
+};
+
+&utimer1 {
+	interrupt-parent = <&nvic>;
+	interrupts = <385 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <386 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <387 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <388 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <389 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <390 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <391 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <392 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "comp_capt_a", "comp_capt_b",
+			"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+			"comp_b_buf2", "underflow", "overflow";
+};
+
+&utimer2 {
+	interrupt-parent = <&nvic>;
+	interrupts = <393 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <394 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <395 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <396 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <397 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <398 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <399 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <400 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "comp_capt_a", "comp_capt_b",
+			"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+			"comp_b_buf2", "underflow", "overflow";
+};
+
+&utimer3 {
+	interrupt-parent = <&nvic>;
+	interrupts = <401 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <402 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <403 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <404 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <405 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <406 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <407 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <408 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "comp_capt_a", "comp_capt_b",
+			"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+			"comp_b_buf2", "underflow", "overflow";
+};
+
+&utimer4 {
+	interrupt-parent = <&nvic>;
+	interrupts = <409 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <410 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <411 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <412 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <413 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <414 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <415 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <416 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "comp_capt_a", "comp_capt_b",
+			"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+			"comp_b_buf2", "underflow", "overflow";
+};
+
+&utimer5 {
+	interrupt-parent = <&nvic>;
+	interrupts = <417 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <418 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <419 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <420 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <421 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <422 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <423 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <424 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "comp_capt_a", "comp_capt_b",
+			"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+			"comp_b_buf2", "underflow", "overflow";
+};
+
+&utimer6 {
+	interrupt-parent = <&nvic>;
+	interrupts = <425 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <426 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <427 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <428 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <429 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <430 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <431 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <432 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "comp_capt_a", "comp_capt_b",
+			"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+			"comp_b_buf2", "underflow", "overflow";
+};
+
+&utimer7 {
+	interrupt-parent = <&nvic>;
+	interrupts = <433 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <434 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <435 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <436 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <437 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <438 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <439 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <440 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "comp_capt_a", "comp_capt_b",
+			"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+			"comp_b_buf2", "underflow", "overflow";
+};
+
+&utimer8 {
+	interrupt-parent = <&nvic>;
+	interrupts = <441 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <442 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <443 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <444 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <445 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <446 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <447 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <448 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "comp_capt_a", "comp_capt_b",
+			"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+			"comp_b_buf2", "underflow", "overflow";
+};
+
+&utimer9 {
+	interrupt-parent = <&nvic>;
+	interrupts = <449 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <450 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <451 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <452 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <453 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <454 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <455 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <456 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "comp_capt_a", "comp_capt_b",
+			"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+			"comp_b_buf2", "underflow", "overflow";
+};
+
+&utimer10 {
+	interrupt-parent = <&nvic>;
+	interrupts = <457 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <458 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <459 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <460 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <461 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <462 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <463 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <464 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "comp_capt_a", "comp_capt_b",
+			"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+			"comp_b_buf2", "underflow", "overflow";
+};
+
+&utimer11 {
+	interrupt-parent = <&nvic>;
+	interrupts = <465 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <466 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <467 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <468 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <469 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <470 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <471 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <472 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "comp_capt_a", "comp_capt_b",
+			"comp_a_buf1", "comp_a_buf2", "comp_b_buf1",
+			"comp_b_buf2", "underflow", "overflow";
+};
+
+&gpio0 {
+	interrupt-parent = <&nvic>;
+	interrupts = <179 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <180 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <181 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <182 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <183 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <184 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <185 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <186 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&gpio1 {
+	interrupt-parent = <&nvic>;
+	interrupts = <187 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <188 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <189 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <190 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <191 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <192 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <193 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <194 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&gpio2 {
+	interrupt-parent = <&nvic>;
+	interrupts = <195 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <196 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <197 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <198 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <199 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <200 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <201 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <202 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&gpio3 {
+	interrupt-parent = <&nvic>;
+	interrupts = <203 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <204 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <205 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <206 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <207 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <208 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <209 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <210 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&gpio4 {
+	interrupt-parent = <&nvic>;
+	interrupts = <211 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <212 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <213 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <214 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <215 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <216 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <217 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <218 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&gpio5 {
+	interrupt-parent = <&nvic>;
+	interrupts = <219 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <220 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <221 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <222 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <223 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <224 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <225 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <226 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&gpio6 {
+	interrupt-parent = <&nvic>;
+	interrupts = <227 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <228 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <229 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <230 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <231 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <232 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <233 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <234 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&gpio7 {
+	interrupt-parent = <&nvic>;
+	interrupts = <235 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <236 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <237 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <238 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <239 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <240 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <241 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <242 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&gpio8 {
+	interrupt-parent = <&nvic>;
+	interrupts = <243 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <244 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <245 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <246 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <247 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <248 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <249 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <250 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&gpio9 {
+	interrupt-parent = <&nvic>;
+	interrupts = <251 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <252 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <253 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <254 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <255 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <256 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <257 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <258 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&lpgpio {
+	interrupt-parent = <&nvic>;
+	interrupts = <171 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <172 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <173 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <174 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <175 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <176 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <177 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <178 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&pdm {
+	interrupt-parent = <&nvic>;
+	interrupts = <145 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <146 ALIF_DEFAULT_IRQ_PRIORITY>,
+		     <147 ALIF_DEFAULT_IRQ_PRIORITY>;
+	interrupt-names = "warning_intr",
+			  "error_intr",
+			  "audio_det_intr";
+};
+
+&adc0 {
+	interrupt-parent = <&nvic>;
+	interrupts		= <151 0>,
+				  <154 0>,
+				  <157 0>,
+				  <160 0>;
+	interrupt-names         = "done0",
+				  "done1",
+				  "comp_a",
+				  "comp_b";
+};
+
+&adc1 {
+	interrupt-parent = <&nvic>;
+	interrupts		= <152 0>,
+				  <155 0>,
+				  <158 0>,
+				  <161 0>;
+	interrupt-names		= "done0",
+				  "done1",
+				  "comp_a",
+				  "comp_b";
+};
+
+&adc2 {
+	interrupt-parent = <&nvic>;
+	interrupts		= <153 0>,
+				  <156 0>,
+				  <159 0>,
+				  <162 0>;
+	interrupt-names		= "done0",
+				  "done1",
+				  "comp_a",
+				  "comp_b";
+};
+
+&adc24 {
+	interrupt-parent = <&nvic>;
+	interrupts		= <163 3>,
+				  <164 3>,
+				  <165 3>,
+				  <166 3>;
+	interrupt-names		= "done0",
+				  "done1",
+				  "comp_a",
+				  "comp_b";
+};
+
+&cmp0 {
+	interrupt-parent = <&nvic>;
+	interrupts	 = <167 0>;
+};
+
+&cmp1 {
+	interrupt-parent = <&nvic>;
+	interrupts	 = <168 0>;
+};
+
+&cmp2 {
+	interrupt-parent = <&nvic>;
+	interrupts	 = <169 0>;
+};
+
+&cmp3 {
+	interrupt-parent = <&nvic>;
+	interrupts	 = <170 0>;
+};
+
+&i2c0 {
+	interrupt-parent = <&nvic>;
+	interrupts = <132 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&i2c1 {
+	interrupt-parent = <&nvic>;
+	interrupts = <133 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&lpi2c0 {
+	interrupt-parent = <&nvic>;
+	interrupts = <47 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&i3c0 {
+	interrupt-parent = <&nvic>;
+	interrupts      = <136 0>;
+};
+
+&can0 {
+	interrupt-parent = <&nvic>;
+	interrupts      = <104 0>;
+	interrupt-names = "can_interrupt";
+};
+
+&i2s0 {
+	interrupt-parent = <&nvic>;
+	interrupts = <141 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&i2s1 {
+	interrupt-parent = <&nvic>;
+	interrupts = <142 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&i2s4 {
+	interrupt-parent = <&nvic>;
+	interrupts = <48 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&ospi0 {
+	interrupt-parent = <&nvic>;
+	interrupts = <96 ALIF_DEFAULT_IRQ_PRIORITY>;
+};
+
+&ethernet {
+	interrupt-parent = <&nvic>;
+	interrupts = <148 3>;
+};
+
+&cdc200 {
+	interrupt-parent = <&nvic>;
+	interrupts =	<333 0>,
+			<334 0>,
+			<335 0>,
+			<336 0>,
+			<337 0>,
+			<338 0>,
+			<339 0>,
+			<340 0>,
+			<341 0>,
+			<342 0>;
+	interrupt-names = "scanline_0",
+			  "scanline_1",
+			  "fifo_warning_0",
+			  "fifo_warning_1",
+			  "fifo_underrun_0",
+			  "fifo_underrun_1",
+			  "bus_error_0",
+			  "bus_error_1",
+			  "reg_reload_0",
+			  "reg_reload_1";
+};
+
+&mipi_dsi {
+	interrupt-parent = <&nvic>;
+	interrupts = <343 0>;
+};
+
+/* lpcmp is RTSS-only; e4/e6/e8 override this node. */
+&lpcmp {
+	interrupt-parent = <&nvic>;
+	interrupts = <56 0>;
+};
