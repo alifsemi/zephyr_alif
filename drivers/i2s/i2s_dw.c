@@ -885,6 +885,17 @@ static int i2s_dw_configure(const struct device *dev, enum i2s_dir dir,
 		return -EINVAL;
 	}
 
+	/*
+	 * TCR/RCR WLEN supports only 12, 16, 20, 24, and 32 bits.
+	 * Reject unsupported sizes before modifying the stream.
+	 * frame_clk_freq 0 does not program WLEN.
+	 */
+	if (i2s_cfg->frame_clk_freq != 0U &&
+	    i2s_dw_word_size_to_wlen(i2s_cfg->word_size) == I2S_DW_WLEN_IGNORE) {
+		LOG_ERR("Unsupported word size: %u", i2s_cfg->word_size);
+		return -EINVAL;
+	}
+
 	stream->master = true;
 	if (i2s_cfg->options & I2S_OPT_FRAME_CLK_SLAVE ||
 	    i2s_cfg->options & I2S_OPT_BIT_CLK_SLAVE) {
