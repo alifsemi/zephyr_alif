@@ -168,6 +168,33 @@ static int32_t read_status_reg(const struct device *dev, uint8_t command, uint8_
 	return ret;
 }
 
+/*
+ * Poll flash status with a sleep between busy responses.
+ */
+static int flash_ospi_wait_ready(const struct device *dev, k_timeout_t poll_delay)
+{
+	uint8_t val;
+	int ret;
+
+	do {
+		ret = read_status_reg(dev, CMD_READ_FLAG_STATUS, &val);
+		if (ret != 0) {
+			return ret;
+		}
+
+		if ((val & FLAG_STATUS_ERROR) != 0U) {
+			LOG_ERR("Flash status error [0x%02x]", val);
+			return -EIO;
+		}
+
+		if ((val & FLAG_STATUS_BUSY) != 0U) {
+			return 0;
+		}
+
+		k_sleep(poll_delay);
+	} while (true);
+}
+
 static int set_write_enable(const struct device *dev, int dfs)
 {
 	uint32_t cmd_buf, event;
@@ -476,9 +503,8 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 				 size_t length)
 {
 	const uint8_t *data_ptr;
-	int32_t status, ret;
+	int32_t ret;
 	uint32_t event, data_cnt, index, i, cnt, data_i = 0;
-	uint8_t val;
 
 	const struct alif_flash_ospi_config *dev_cfg = dev->config;
 	const struct flash_parameters *f_param = &dev_cfg->flash_param;
@@ -603,20 +629,10 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		}
 
 		/* Wait for flash to complete programming */
-		do {
-			status = read_status_reg(dev, CMD_READ_FLAG_STATUS,
-						 &val);
-			if (status != 0) {
-				ret = status;
-				goto out;
-			}
-			if ((val & FLAG_STATUS_ERROR) != 0U) {
-				LOG_ERR("F-Write: Read Flash status [%d]",
-					 val);
-				ret = -EIO;
-				goto out;
-			}
-		} while ((val & FLAG_STATUS_BUSY) == 0);
+		ret = flash_ospi_wait_ready(dev, K_USEC(OSPI_PROGRAM_POLL_INTERVAL_US));
+		if (ret != 0) {
+			goto out;
+		}
 
 		address += prefix;
 		data_ptr += prefix;
@@ -726,19 +742,7 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		}
 
 		/* Read status until device ready */
-		do {
-			status = read_status_reg(dev, CMD_READ_FLAG_STATUS, &val);
-			if (status != 0) {
-				ret = status;
-				break;
-			}
-
-			if ((val & FLAG_STATUS_ERROR) != 0U) {
-				LOG_ERR("F-Write: Read Flash status [%d]", val);
-				ret = -EIO;
-				break;
-			}
-		} while ((val & FLAG_STATUS_BUSY) == 0);
+		ret = flash_ospi_wait_ready(dev, K_USEC(OSPI_PROGRAM_POLL_INTERVAL_US));
 
 		if (ret != 0) {
 			break;
@@ -839,18 +843,10 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		}
 
 		/* Wait for flash to complete programming */
-		do {
-			status = read_status_reg(dev, CMD_READ_FLAG_STATUS, &val);
-			if (status != 0) {
-				ret = status;
-				goto out;
-			}
-			if ((val & FLAG_STATUS_ERROR) != 0U) {
-				LOG_ERR("F-Write: Read Flash status [%d]", val);
-				ret = -EIO;
-				goto out;
-			}
-		} while ((val & FLAG_STATUS_BUSY) == 0);
+		ret = flash_ospi_wait_ready(dev, K_USEC(OSPI_PROGRAM_POLL_INTERVAL_US));
+		if (ret != 0) {
+			goto out;
+		}
 	}
 
 out:
@@ -937,7 +933,6 @@ static int erase_sector(const struct device *dev, uint32_t addr)
 static int flash_is25wx_ospi_erase(const struct device *dev, off_t addr, size_t len)
 {
 	int ret;
-	uint8_t val;
 	uint32_t event;
 
 	struct alif_flash_ospi_dev_data *dev_data = dev->data;
@@ -1013,23 +1008,7 @@ static int flash_is25wx_ospi_erase(const struct device *dev, off_t addr, size_t 
 			break;
 		}
 
-		do {
-			ret = read_status_reg(dev, CMD_READ_FLAG_STATUS, &val);
-			if (ret != 0) {
-				break;
-			}
-
-			/* Check Program and Erase bits */
-			if ((val & FLAG_STATUS_ERROR) != 0U) {
-				LOG_ERR("F-Erase: Read Flash status [%d]", val);
-				ret = set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
-				if (ret != 0) {
-					break;
-				}
-				ret = -EIO;
-				break;
-			}
-		} while ((val & FLAG_STATUS_BUSY) == 0);
+		ret = flash_ospi_wait_ready(dev, K_USEC(OSPI_ERASE_POLL_INTERVAL_US));
 
 		if (ret != 0) {
 			break;
