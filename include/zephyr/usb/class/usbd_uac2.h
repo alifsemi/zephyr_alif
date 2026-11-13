@@ -198,6 +198,16 @@ int usbd_uac2_send(const struct device *dev, uint8_t terminal,
 		   void *data, uint16_t size);
 
 /**
+ * @brief True when another microphone packet can be queued
+ *
+ * @param dev USB Audio 2 device
+ * @param terminal Output Terminal ID linked to the IN AudioStreaming interface
+ *
+ * @return true if @ref usbd_uac2_send can accept a buffer
+ */
+bool usbd_uac2_can_send(const struct device *dev, uint8_t terminal);
+
+/**
  * @}
  */
 

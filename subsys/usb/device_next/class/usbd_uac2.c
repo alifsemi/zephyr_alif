@@ -25,18 +25,25 @@ LOG_MODULE_REGISTER(usbd_uac2, CONFIG_USBD_UAC2_LOG_LEVEL);
 
 #define DT_DRV_COMPAT zephyr_uac2
 
+#define UAC2_ISO_IN_DEPTH CONFIG_USBD_UAC2_ISO_IN_DEPTH
+#define UAC2_ISO_OUT_DEPTH CONFIG_USBD_UAC2_ISO_OUT_DEPTH
+/* Keep several feedback packets linked before the controller fetches them.
+ * One packet ends the DWC3 transfer, and the host then sends no audio.
+ * Implicit feedback does not use this depth. The TRB ring holds 8.
+ */
+#define UAC2_EXPLICIT_FB_DEPTH 4U
 #define COUNT_UAC2_AS_ENDPOINT_BUFFERS(node)					\
 	IF_ENABLED(DT_NODE_HAS_COMPAT(node, zephyr_uac2_audio_streaming), (	\
 		+ AS_HAS_ISOCHRONOUS_DATA_ENDPOINT(node) +			\
-		+ AS_IS_USB_ISO_IN(node) /* ISO IN double buffering */ +	\
-		AS_HAS_EXPLICIT_FEEDBACK_ENDPOINT(node)))
+		+ (UAC2_ISO_IN_DEPTH - 1) * AS_IS_USB_ISO_IN(node) +		\
+		(UAC2_EXPLICIT_FB_DEPTH) * AS_HAS_EXPLICIT_FEEDBACK_ENDPOINT(node)))
 #define COUNT_UAC2_EP_BUFFERS(i)						\
 	+ DT_PROP(DT_DRV_INST(i), interrupt_endpoint)				\
 	DT_INST_FOREACH_CHILD(i, COUNT_UAC2_AS_ENDPOINT_BUFFERS)
-#define UAC2_ISO_OUT_DEPTH 4U
 #define COUNT_UAC2_OUT_EXTRA(node) \
 	IF_ENABLED(DT_NODE_HAS_COMPAT(node, zephyr_uac2_audio_streaming), ( \
-		+ 3 * (AS_HAS_ISOCHRONOUS_DATA_ENDPOINT(node) - AS_IS_USB_ISO_IN(node))))
+		+ (UAC2_ISO_OUT_DEPTH - 1) *					\
+		(AS_HAS_ISOCHRONOUS_DATA_ENDPOINT(node) - AS_IS_USB_ISO_IN(node))))
 #define COUNT_UAC2_OUT_EXTRA_INST(i) DT_INST_FOREACH_CHILD(i, COUNT_UAC2_OUT_EXTRA)
 #define UAC2_NUM_EP_BUFFERS (DT_INST_FOREACH_STATUS_OKAY(COUNT_UAC2_EP_BUFFERS) \
 	DT_INST_FOREACH_STATUS_OKAY(COUNT_UAC2_OUT_EXTRA_INST))
@@ -91,10 +98,13 @@ struct uac2_ctx {
 	 * alternate setting active.
 	 */
 	atomic_t as_active;
-	atomic_t as_queued;
-	atomic_t as_double;
+	atomic_t in_queued[32];
 	atomic_t out_queued[32];
-	uint32_t fb_queued;
+	/* Outstanding explicit-feedback packets per AudioStreaming interface.
+	 * Several stay linked, the same way implicit capture stays linked.
+	 * Implicit feedback does not use this count.
+	 */
+	uint8_t fb_queued_count[32];
 };
 
 /* UAC2 device constant data */
@@ -300,7 +310,6 @@ int usbd_uac2_send(const struct device *dev, uint8_t terminal,
 	struct uac2_ctx *ctx = dev->data;
 	struct net_buf *buf;
 	const struct usb_ep_descriptor *desc;
-	atomic_t *queued_bits = &ctx->as_queued;
 	uint8_t ep = 0;
 	int as_idx = terminal_to_as_interface(dev, terminal);
 	int ret;
@@ -321,11 +330,14 @@ int usbd_uac2_send(const struct device *dev, uint8_t terminal,
 		return 0;
 	}
 
-	if (atomic_test_and_set_bit(queued_bits, as_idx)) {
-		queued_bits = &ctx->as_double;
-		if (atomic_test_and_set_bit(queued_bits, as_idx)) {
-			LOG_DBG("Already double queued on 0x%02x", ep);
+	for (;;) {
+		atomic_val_t current = atomic_get(&ctx->in_queued[as_idx]);
+
+		if (current >= UAC2_ISO_IN_DEPTH) {
 			return -EAGAIN;
+		}
+		if (atomic_cas(&ctx->in_queued[as_idx], current, current + 1)) {
+			break;
 		}
 	}
 
@@ -335,7 +347,7 @@ int usbd_uac2_send(const struct device *dev, uint8_t terminal,
 		 * enough, but if it does all we loose is just single packet.
 		 */
 		LOG_ERR("No netbuf for send");
-		atomic_clear_bit(queued_bits, as_idx);
+		atomic_dec(&ctx->in_queued[as_idx]);
 		return -ENOMEM;
 	}
 
@@ -343,10 +355,27 @@ int usbd_uac2_send(const struct device *dev, uint8_t terminal,
 	if (ret) {
 		LOG_ERR("Failed to enqueue net_buf for 0x%02x", ep);
 		net_buf_unref(buf);
-		atomic_clear_bit(queued_bits, as_idx);
+		atomic_dec(&ctx->in_queued[as_idx]);
 	}
 
 	return ret;
+}
+
+bool usbd_uac2_can_send(const struct device *dev, uint8_t terminal)
+{
+	const struct uac2_cfg *cfg = dev->config;
+	struct uac2_ctx *ctx = dev->data;
+	int as_idx = terminal_to_as_interface(dev, terminal);
+
+	if (as_idx < 0 || as_idx >= cfg->num_ifaces) {
+		return false;
+	}
+
+	if (!atomic_test_bit(&ctx->as_active, as_idx)) {
+		return false;
+	}
+
+	return atomic_get(&ctx->in_queued[as_idx]) < UAC2_ISO_IN_DEPTH;
 }
 
 static void schedule_iso_out_read(struct usbd_class_data *const c_data,
@@ -428,6 +457,10 @@ static void write_explicit_feedback(struct usbd_class_data *const c_data,
 
 	__ASSERT_NO_MSG(as_idx >= 0);
 
+	if (ctx->fb_queued_count[as_idx] >= UAC2_EXPLICIT_FB_DEPTH) {
+		return;
+	}
+
 	buf = net_buf_alloc(&uac2_pool, K_NO_WAIT);
 	if (!buf) {
 		LOG_ERR("No buf for feedback");
@@ -450,7 +483,7 @@ static void write_explicit_feedback(struct usbd_class_data *const c_data,
 		LOG_ERR("Failed to enqueue net_buf for 0x%02x", ep);
 		net_buf_unref(buf);
 	} else {
-		ctx->fb_queued |= BIT(as_idx);
+		ctx->fb_queued_count[as_idx]++;
 	}
 }
 
@@ -522,8 +555,11 @@ void uac2_update(struct usbd_class_data *const c_data,
 
 		fb_ep = get_as_feedback_ep(c_data, as_idx);
 		if (fb_ep) {
-			write_explicit_feedback(c_data, fb_ep->bEndpointAddress,
-						cfg->as_terminals[as_idx]);
+			for (unsigned int n = 0; n < UAC2_EXPLICIT_FB_DEPTH; n++) {
+				write_explicit_feedback(c_data,
+							fb_ep->bEndpointAddress,
+							cfg->as_terminals[as_idx]);
+			}
 		}
 	}
 }
@@ -824,34 +860,23 @@ static int uac2_request(struct usbd_class_data *const c_data, struct net_buf *bu
 	terminal = cfg->as_terminals[as_idx];
 
 	if (is_feedback) {
-		ctx->fb_queued &= ~BIT(as_idx);
-	} else if (USB_EP_DIR_IS_OUT(ep)) {
-		struct net_buf *frag = buf;
-
-		/*
-		 * Each fragment represents a separately queued OUT request.
-		 */
-		while (frag != NULL) {
-			struct net_buf *next = frag->frags;
-
-			atomic_dec(&ctx->out_queued[as_idx]);
-			ctx->ops->data_recv_cb(dev, terminal,
-					       frag->__buf, frag->len,
-					       ctx->user_data);
-			frag = next;
+		if (ctx->fb_queued_count[as_idx] > 0U) {
+			ctx->fb_queued_count[as_idx]--;
 		}
-	} else if (!atomic_test_and_clear_bit(&ctx->as_queued, as_idx) ||
-		   buf->frags) {
-		atomic_clear_bit(&ctx->as_double, as_idx);
+	} else if (USB_EP_DIR_IS_OUT(ep)) {
+		atomic_dec(&ctx->out_queued[as_idx]);
+	} else {
+		atomic_dec(&ctx->in_queued[as_idx]);
 	}
 
-	if (!USB_EP_DIR_IS_OUT(ep) && !is_feedback) {
-		ctx->ops->buf_release_cb(dev, terminal, buf->__buf,
-					 ctx->user_data);
+	if (USB_EP_DIR_IS_OUT(ep)) {
+		ctx->ops->data_recv_cb(dev, terminal, buf->__buf, buf->len,
+				       ctx->user_data);
+	} else if (!is_feedback) {
+		ctx->ops->buf_release_cb(dev, terminal, buf->__buf, ctx->user_data);
 	}
 
 	usbd_ep_buf_free(uds_ctx, buf);
-
 	if (err) {
 		return 0;
 	}
@@ -899,25 +924,25 @@ static void uac2_sof(struct usbd_class_data *const c_data)
 			continue;
 		}
 
-		/* We didn't get feedback write request callback yet, skip it
-		 * for now to allow faster recovery (i.e. reduce workload to be
-		 * done during this frame).
-		 */
-		if (ctx->fb_queued & BIT(as_idx)) {
-			continue;
-		}
-
 		/* Only send feedback if host has enabled alternate interface */
 		if (!atomic_test_bit(&ctx->as_active, as_idx)) {
 			continue;
 		}
 
-		/* Make feedback available on every frame (value "sent" in
-		 * previous SOF is "gone" even if USB host did not attempt to
-		 * read it).
+		/* Keep two feedback packets queued. A single packet lets the
+		 * isochronous transfer end, and an async host then sends no
+		 * headphone data.
 		 */
-		write_explicit_feedback(c_data, feedback_ep->bEndpointAddress,
-					cfg->as_terminals[as_idx]);
+		while (ctx->fb_queued_count[as_idx] < UAC2_EXPLICIT_FB_DEPTH) {
+			uint8_t queued = ctx->fb_queued_count[as_idx];
+
+			write_explicit_feedback(c_data,
+						feedback_ep->bEndpointAddress,
+						cfg->as_terminals[as_idx]);
+			if (ctx->fb_queued_count[as_idx] == queued) {
+				break;
+			}
+		}
 	}
 }
 
