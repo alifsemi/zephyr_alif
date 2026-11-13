@@ -960,7 +960,7 @@ static int flash_is25wx_ospi_erase(const struct device *dev, off_t addr, size_t 
 		return -EINVAL;
 	}
 
-	ret = k_sem_take(&dev_data->sem, K_NO_WAIT);
+	ret = k_sem_take(&dev_data->sem, K_MSEC(MAX_SEM_TIMEOUT));
 	if (ret != 0) {
 		return ret;
 	}
@@ -1339,6 +1339,51 @@ static int flash_is25wx_ospi_pm_action(const struct device *dev,
 	return ret;
 }
 #endif /* CONFIG_PM_DEVICE */
+
+
+/*
+ * Acquire exclusive access and enable memory-mapped XiP reads at runtime.
+ */
+int flash_ospi_is25wx_xip_lock(const struct device *dev)
+{
+	struct alif_flash_ospi_dev_data *dev_data = dev->data;
+	int ret;
+
+	if ((dev_data->ISSI_Flags & FLASH_POWER) == 0U) {
+		return -ENODEV;
+	}
+
+	ret = k_sem_take(&dev_data->sem, K_MSEC(XIP_LOCK_ACQUIRE_TIMEOUT_MS));
+	if (ret != 0) {
+		return ret;
+	}
+
+	ret = alif_hal_ospi_xip_enable(dev_data->ospi_handle);
+	if (ret != 0) {
+		ret = err_map_alif_hal_to_zephyr(ret);
+		k_sem_give(&dev_data->sem);
+	}
+
+	return ret;
+}
+
+/*
+ * Disable memory-mapped XiP access at runtime and release exclusive access.
+ */
+int flash_ospi_is25wx_xip_unlock(const struct device *dev)
+{
+	struct alif_flash_ospi_dev_data *dev_data = dev->data;
+	int ret;
+
+	ret = alif_hal_ospi_xip_disable(dev_data->ospi_handle);
+	if (ret != 0) {
+		ret = err_map_alif_hal_to_zephyr(ret);
+		return ret;
+	}
+
+	k_sem_give(&dev_data->sem);
+	return 0;
+}
 
 #ifdef CONFIG_FLASH_PAGE_LAYOUT
 void flash_alif_ospi_page_layout(const struct device *dev,

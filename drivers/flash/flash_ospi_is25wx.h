@@ -10,7 +10,8 @@
 #include <zephyr/device.h>
 #include <ospi_hal.h>
 
-#define MAX_SEM_TIMEOUT   100
+#define MAX_SEM_TIMEOUT              100
+#define XIP_LOCK_ACQUIRE_TIMEOUT_MS  1000
 
 #define OSPI_MAX_RX_COUNT 256
 
@@ -80,5 +81,18 @@ struct alif_flash_ospi_dev_data {
 	struct ospi_trans_config trans_conf;  /* Transfer Configs */
 	uint32_t cmd_buf[OSPI_FLASH_CMD_BUF]; /* CMD + DATA Buffer */
 };
+
+/**
+ * Acquire exclusive access and enable memory-mapped XiP reads at runtime.
+ * Pair each successful lock with one unlock to serialize mapped reads
+ * with indirect flash operations in this driver instance.
+ */
+int flash_ospi_is25wx_xip_lock(const struct device *dev);
+
+/**
+ * Disable memory-mapped XiP access at runtime and release exclusive access.
+ * Call once per successful lock, after all mapped reads have completed.
+ */
+int flash_ospi_is25wx_xip_unlock(const struct device *dev);
 
 #endif /* __FLASH_ALIF_OSPI_H__ */
