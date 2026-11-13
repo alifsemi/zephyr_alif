@@ -1,0 +1,60 @@
+/*
+ * Copyright (c) 2026 Alif Semiconductor.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <dt-bindings/misc/alif_aipm_common.h>
+
+&aipm_run_default {
+	phy-pwr-gating = <ALIF_PHY_GATE_USB_MASK>;
+};
+
+ns: &ns {
+	status = "okay";
+};
+
+zephyr_udc0: &usb {
+	status = "okay";
+};
+
+&i2c1 {
+	status = "okay";
+
+	audio_codec: wm8904@1a {
+		compatible = "cirrus,wm8904";
+		reg = <0x1a>;
+		status = "okay";
+	};
+};
+
+i2s_rxtx: &i2s3 {
+	status = "okay";
+	/*
+	 * High-Speed packets carry 5 to 7 stereo frames. The default
+	 * watermark of 8 leaves the TX-empty interrupt asserted after one
+	 * packet, so the ISR drains the queue and latches ERROR.
+	 */
+	tx-fifo-watermark = <2>;
+};
+
+&uac2_headset {
+	high-speed;
+};
+
+/ {
+	aliases {
+		audio-codec = &audio_codec;
+		i2s-codec-tx = &i2s3;
+	};
+};
+
+
+&pdm {
+	status = "okay";
+};
+
+/ {
+	aliases {
+		pdm-audio = &pdm;
+	};
+};
