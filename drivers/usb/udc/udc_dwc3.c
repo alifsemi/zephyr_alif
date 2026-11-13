@@ -138,7 +138,12 @@ static int32_t udc_dwc3_send_ep_cmd(udc_dwc3_driver_t *drv, uint8_t phy_ep, uint
 
 	/* Check usb2phy config before issuing DEPCMD  */
 	udc_dwc3_disable_phy_suspend(drv);
-	if (USB_DEPCMD_CMD(cmd) == USB_DEPCMD_UPDATETRANSFER) {
+	/* Non-isochronous Update Transfer must not set CMDACT. Isochronous
+	 * Update Transfer must set it, or the controller does not fetch a TRB
+	 * that received HWO after the ring was first walked.
+	 */
+	if ((USB_DEPCMD_CMD(cmd) == USB_DEPCMD_UPDATETRANSFER) &&
+	    (drv->eps[phy_ep].ep_type != USB_ISOCRONOUS_EP)) {
 		CLEAR_BIT(cmd, USB_DEPCMD_CMDIOC | USB_DEPCMD_CMDACT);
 	} else {
 		SET_BIT(cmd, USB_DEPCMD_CMDACT);
@@ -409,6 +414,35 @@ static int32_t udc_dwc3_stop_transfer(udc_dwc3_driver_t *drv, uint8_t ep_num,
 	return ret;
 }
 
+/* HS feedback is 4 bytes and FS feedback is 3. Microphone packets are larger. */
+static bool udc_dwc3_isoc_is_feedback(uint8_t phy_ep, uint32_t slot)
+{
+	return isoc_length[phy_ep][slot] <= 4U;
+}
+
+/* Publish TRBs that were queued before STARTTRANSFER was accepted.
+ * The feedback start TRB must stay without HWO or the host sends no audio.
+ * A microphone start TRB must be owned or the controller stops on it.
+ */
+static void udc_dwc3_isoc_arm_queued(udc_dwc3_ep_t *ept, uint8_t phy_ep)
+{
+	uint32_t i;
+	uint32_t start = 0U;
+
+	if (udc_dwc3_isoc_is_feedback(phy_ep, ept->trb_dequeue)) {
+		start = 1U;
+	}
+
+	for (i = start; i < isoc_queued[phy_ep]; i++) {
+		uint32_t slot = (ept->trb_dequeue + i) % NO_OF_TRB_PER_EP;
+		udc_dwc3_trb_t *queued_trb = &ept->ep_trb[slot];
+
+		queued_trb->ctrl |= USB_TRB_CTRL_HWO | USB_TRB_CTRL_IOC |
+			USB_TRB_CTRL_ISP_IMI;
+		sys_cache_data_flush_range(queued_trb, sizeof(*queued_trb));
+	}
+}
+
 static int32_t udc_dwc3_isoc_start_from_xnr(udc_dwc3_driver_t *drv,
 		udc_dwc3_ep_t *ept, uint8_t phy_ep, uint16_t xnr_uframe)
 {
@@ -418,7 +452,7 @@ static int32_t udc_dwc3_isoc_start_from_xnr(udc_dwc3_driver_t *drv,
 	uint32_t cmd;
 	int32_t ret;
 
-	/* The oldest queued TRB is the first TRB of this transfer. */
+	/* Leave HWO clear until STARTTRANSFER has been accepted. */
 	trb_ptr = &ept->ep_trb[ept->trb_dequeue];
 
 	/* Keep the XNR 16-bit microframe time domain. Retry Bus Expiry
@@ -453,6 +487,22 @@ static int32_t udc_dwc3_isoc_start_from_xnr(udc_dwc3_driver_t *drv,
 		drv, ept->ep_index, ept->ep_dir);
 	SET_BIT(ept->ep_status, USB_EP_BUSY);
 	isoc_waiting_xnr[phy_ep] = false;
+
+	/* Feedback keeps its start TRB without HWO. A microphone ring is
+	 * published, including that first TRB, before the start frame.
+	 */
+	if (isoc_queued[phy_ep] > 1U) {
+		udc_dwc3_ep_params_t upd = {0};
+		uint32_t upd_cmd;
+
+		udc_dwc3_isoc_arm_queued(ept, phy_ep);
+		upd_cmd = USB_DEPCMD_UPDATETRANSFER |
+			USB_DEPCMD_PARAM(ept->ep_resource_index);
+		ret = udc_dwc3_send_ep_cmd(drv, phy_ep, upd_cmd, upd);
+		if (ret < USB_SUCCESS) {
+			LOG_ERR("ISO START update failed ep=%u ret=%d", phy_ep, ret);
+		}
+	}
 
 	return USB_SUCCESS;
 }
@@ -530,18 +580,43 @@ static int32_t udc_dwc3_isoc_send(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 	/* Sync microframe number from DSTS to ensure drv->micro_frame_number is current */
 	usbd_isoc_micro_frame_update(drv, USB_DSTS_SOFFN(drv->regs->DSTS));
 
+	/* Leave HWO clear until STARTTRANSFER or UPDATETRANSFER. */
+	sys_cache_data_flush_range(trb_ptr, sizeof(*trb_ptr));
+
 	if ((ept->ep_status & USB_EP_BUSY) != 0U) {
 		cmd  = USB_DEPCMD_UPDATETRANSFER;
 		cmd |= USB_DEPCMD_PARAM(ept->ep_resource_index);
 
 		SET_BIT(trb_ptr->ctrl, USB_TRB_CTRL_HWO | USB_TRB_CTRL_IOC | USB_TRB_CTRL_ISP_IMI);
 		sys_cache_data_flush_range(trb_ptr, sizeof(*trb_ptr));
+
+		/* Do not set HWO on an earlier feedback TRB. That is the
+		 * descriptor STARTTRANSFER already owns, and owning it here
+		 * stops headphone audio. Microphone TRBs still need it.
+		 */
+		if (buf_len > 4U) {
+			for (uint32_t i = 0U; i < isoc_queued[phy_ep]; i++) {
+				uint32_t slot = (ept->trb_dequeue + i) % NO_OF_TRB_PER_EP;
+				udc_dwc3_trb_t *queued_trb = &ept->ep_trb[slot];
+
+				if ((queued_trb->ctrl & USB_TRB_CTRL_HWO) != 0U) {
+					continue;
+				}
+				queued_trb->ctrl |= USB_TRB_CTRL_HWO | USB_TRB_CTRL_IOC |
+					USB_TRB_CTRL_ISP_IMI;
+				sys_cache_data_flush_range(queued_trb, sizeof(*queued_trb));
+			}
+		}
+
 		params.param1 = (uint32_t) trb_ptr;
 
 		ret = udc_dwc3_send_ep_cmd(drv, phy_ep, cmd, params);
 		if (ret < USB_SUCCESS) {
+			/* HWO is already set. Dropping this TRB leaves the
+			 * feedback endpoint with one packet, and the host then
+			 * sends no headphone data.
+			 */
 			LOG_ERR("ISO IN UPDATE failed ep=%u ret=%d", phy_ep, ret);
-			goto fail;
 		}
 		isoc_queued[phy_ep]++;
 		return USB_SUCCESS;
@@ -552,15 +627,6 @@ static int32_t udc_dwc3_isoc_send(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_
 	isoc_waiting_xnr[phy_ep] = true;
 	LOG_INF("ISO IN ep=%u TRB ready, waiting for XNR", phy_ep);
 	return USB_SUCCESS;
-
-fail:
-	if (ept->trb_enqueue == 0U) {
-		ept->trb_enqueue = NO_OF_TRB_PER_EP - 1U;
-	} else {
-		ept->trb_enqueue--;
-	}
-	trb_ptr->ctrl = 0U;
-	return ret;
 }
 static int32_t udc_dwc3_isoc_recv(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t dir,
 		uint8_t *bufferptr, uint32_t buf_len)
@@ -860,8 +926,7 @@ static void udc_dwc3_ep_xfer_complete(udc_dwc3_driver_t *drv, uint8_t endp_numbe
 	 * XferNotReady supplies the frame number for a new STARTTRANSFER.
 	 */
 	if ((trb_status == USB_TRBSTS_MISSED_ISOC) &&
-	    (ept->ep_type == USB_ISOCRONOUS_EP) &&
-	    (dir == USB_DIR_OUT)) {
+	    (ept->ep_type == USB_ISOCRONOUS_EP)) {
 		udc_dwc3_ep_params_t end_params = {0};
 		uint32_t end_cmd;
 		int32_t end_ret;
@@ -896,13 +961,15 @@ static void udc_dwc3_ep_xfer_complete(udc_dwc3_driver_t *drv, uint8_t endp_numbe
 			isoc_queued[endp_number]--;
 			ept->trb_dequeue = (ept->trb_dequeue + 1U) % NO_OF_TRB_PER_EP;
 			drv->num_bytes = 0U;
-			if (drv->udc_dwc3_data_out_cb != NULL) {
+			if ((dir == USB_DIR_IN) && (drv->udc_dwc3_data_in_cb != NULL)) {
+				drv->udc_dwc3_data_in_cb(drv, ept->ep_index | USB_REQUEST_IN);
+			} else if (drv->udc_dwc3_data_out_cb != NULL) {
 				drv->udc_dwc3_data_out_cb(drv, ept->ep_index);
 			}
 		}
 		/* ENDTRANSFER may relinquish HWO on later TRBs in the ring.
-		 * They still belong to queued UAC2 requests: restore their sizes
-		 * before handing the next transfer back to the controller.
+		 * Restore the size and leave HWO clear. The next XferNotReady
+		 * sets it immediately before STARTTRANSFER.
 		 */
 		for (uint32_t i = 0U; i < isoc_queued[endp_number]; i++) {
 			uint32_t slot = (ept->trb_dequeue + i) % NO_OF_TRB_PER_EP;
@@ -910,8 +977,7 @@ static void udc_dwc3_ep_xfer_complete(udc_dwc3_driver_t *drv, uint8_t endp_numbe
 
 			sys_cache_data_invd_range(queued_trb, sizeof(*queued_trb));
 			queued_trb->size = USB_TRB_SIZE_LENGTH(isoc_length[endp_number][slot]);
-			queued_trb->ctrl = USB_TRBCTL_ISOCHRONOUS_FIRST |
-				USB_TRB_CTRL_HWO | USB_TRB_CTRL_IOC | USB_TRB_CTRL_ISP_IMI;
+			queued_trb->ctrl = USB_TRBCTL_ISOCHRONOUS_FIRST;
 			sys_cache_data_flush_range(queued_trb, sizeof(*queued_trb));
 		}
 
@@ -1262,9 +1328,6 @@ static void udc_dwc3_depevt_handler(udc_dwc3_driver_t *drv, uint32_t reg)
 
 				isoc_xnr_uframe[endp_number] = xnr_uframe;
 
-				/* EP3 reported XferActive (status=1) while software busy=0,
-				 * so do not issue a second initial STARTTRANSFER for EP3 yet.
-				 */
 				if (isoc_waiting_xnr[endp_number] &&
 				    !(ept->ep_status & USB_EP_BUSY)) {
 					int32_t start_ret;

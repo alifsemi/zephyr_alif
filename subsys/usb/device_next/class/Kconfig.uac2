@@ -13,4 +13,20 @@ module = USBD_UAC2
 module-str = usbd uac2
 source "subsys/logging/Kconfig.template.log_config"
 
+config USBD_UAC2_ISO_IN_DEPTH
+	int "Queued isochronous IN packets"
+	default 2
+	range 1 8
+	help
+	  How many microphone packets may be armed at once. High-Speed
+	  sends one packet every 125 us, so 8 packets cover one millisecond
+	  when the host polls every microframe. Full-Speed keeps 2.
+
+config USBD_UAC2_ISO_OUT_DEPTH
+	int "Queued isochronous OUT packets"
+	default 4
+	range 1 16
+	help
+	  How many headphone packets may be armed at once.
+
 endif
