@@ -30,6 +30,8 @@ struct udc_dwc3_data {
 	struct k_thread thread_data;
 	struct k_msgq dwc3_msgq_data;
 	enum udc_bus_speed speed;
+	/* Per physical endpoint, bumped when a dequeue ends its transfer */
+	uint8_t ep_gen[USB_NUM_OF_EPS];
 };
 
 struct udc_dwc3_config {
@@ -52,6 +54,8 @@ struct udc_dwc3_msg {
 	uint8_t ep;
 	uint16_t recv_bytes;
 	struct usb_setup_packet setup;
+	/* ep_gen of the endpoint when the completion was reported */
+	uint8_t gen;
 };
 
 enum udc_dwc3_msg_type {
@@ -76,6 +80,8 @@ static uint16_t isoc_xnr_uframe[USB_NUM_OF_EPS];
 
 #define USB_ENDPOINT_NUMBER_MASK      0xF
 #define EP_NUM(ep_addr)               (ep_addr & USB_ENDPOINT_NUMBER_MASK)
+#define EP_PHY(ep_addr)               USB_GET_PHYSICAL_EP(EP_NUM(ep_addr),                 \
+					(((ep_addr) & USB_EP_DIR_MASK) ? USB_DIR_IN : USB_DIR_OUT))
 #define DWC3DATA(drv) CONTAINER_OF(drv, struct udc_dwc3_data, drv)
 
 static udc_dwc3_event_buffer_t udc_dwc3_evt_buf;
@@ -847,6 +853,17 @@ static void udc_dwc3_ep_xfer_complete(udc_dwc3_driver_t *drv, uint8_t endp_numbe
 	dir = ept->ep_dir;
 	trb_ptr = &ept->ep_trb[ept->trb_dequeue];
 	sys_cache_data_invd_range(trb_ptr, sizeof(*trb_ptr));
+
+	/*
+	 * The controller hands a completed TRB back with HWO cleared. A TRB it
+	 * still owns, or one cleared by udc_dwc3_end_transfer(), means the event
+	 * belongs to a transfer that has since been ended.
+	 */
+	if (ept->ep_type != USB_ISOCRONOUS_EP &&
+	    (trb_ptr->ctrl == 0U || (trb_ptr->ctrl & USB_TRB_CTRL_HWO))) {
+		LOG_DBG("ep%u: stale transfer event discarded", endp_number);
+		return;
+	}
 
 	trb_status = USB_TRB_SIZE_TRBSTS(trb_ptr->size);
 
@@ -2320,6 +2337,7 @@ void dwc3_data_in_cb(udc_dwc3_driver_t *drv, uint8_t ep_num)
 	struct udc_dwc3_msg msg = {
 		.type = UDC_DWC3_MSG_DATA_IN,
 		.ep = ep_num,
+		.gen = priv->ep_gen[EP_PHY(ep_num)],
 	};
 	int err;
 
@@ -2336,6 +2354,7 @@ void dwc3_data_out_cb(udc_dwc3_driver_t *drv, uint8_t ep_num)
 		.type = UDC_DWC3_MSG_DATA_OUT,
 		.ep = ep_num,
 		.recv_bytes = ep_num ? drv->num_bytes : drv->actual_length,
+		.gen = priv->ep_gen[EP_PHY(ep_num)],
 	};
 	int err;
 
@@ -2670,8 +2689,54 @@ static int udc_dwc3_ep_enqueue(const struct device *dev, struct udc_ep_config *e
 	return ret;
 }
 
+/*
+ * End the transfer running on a bulk or interrupt endpoint, so that the controller no
+ * longer accesses the queued buffers, and restart its TRB ring from the first
+ * TRB as when the endpoint is enabled. The link TRB is kept.
+ */
+static int32_t udc_dwc3_end_transfer(udc_dwc3_driver_t *drv, uint8_t ep_num, uint8_t dir)
+{
+	udc_dwc3_ep_params_t params = {0};
+	udc_dwc3_ep_t *ept;
+	uint8_t phy_ep;
+	uint32_t cmd;
+	int32_t ret;
+
+	phy_ep = USB_GET_PHYSICAL_EP(ep_num, dir);
+	ept = &drv->eps[phy_ep];
+
+	if ((ept->ep_status & USB_EP_BUSY) == 0U || ept->ep_resource_index == 0U) {
+		return USB_SUCCESS;
+	}
+
+	cmd = USB_DEPCMD_ENDTRANSFER | USB_DEPCMD_HIPRI_FORCERM | USB_DEPCMD_CMDIOC;
+	cmd |= USB_DEPCMD_PARAM(ept->ep_resource_index);
+	ret = udc_dwc3_send_ep_cmd(drv, phy_ep, cmd, params);
+	if (ret < 0) {
+		LOG_ERR("Failed to end the transfer on ep%u: %d", phy_ep, ret);
+		return ret;
+	}
+
+	/*
+	 * The data book asks for 100 us after End Transfer before the TRBs and
+	 * buffers are reused; a TRB writeback may still land until then.
+	 */
+	k_busy_wait(100);
+
+	ept->ep_resource_index = 0U;
+	CLEAR_BIT(ept->ep_status, USB_EP_BUSY);
+	ept->trb_enqueue = 0U;
+	ept->trb_dequeue = 0U;
+	memset(ept->ep_trb, 0x0, NO_OF_TRB_PER_EP * sizeof(ept->ep_trb[0]));
+	sys_cache_data_flush_range(ept->ep_trb, NO_OF_TRB_PER_EP * sizeof(ept->ep_trb[0]));
+
+	return USB_SUCCESS;
+}
+
 static int udc_dwc3_ep_dequeue(const struct device *dev, struct udc_ep_config *epcfg)
 {
+	struct udc_dwc3_data *priv = udc_get_private(dev);
+	uint8_t ep_num = EP_NUM(epcfg->addr);
 	struct net_buf *buf;
 
 	if ((epcfg->attributes & USB_EP_TRANSFER_TYPE_MASK) == USB_ISOCRONOUS_EP) {
@@ -2679,6 +2744,28 @@ static int udc_dwc3_ep_dequeue(const struct device *dev, struct udc_ep_config *e
 			udc_submit_ep_event(dev, buf, -ECONNABORTED);
 		}
 	} else {
+		if (ep_num != 0U) {
+			uint8_t ep_dir = USB_EP_DIR_IS_IN(epcfg->addr) ? USB_DIR_IN : USB_DIR_OUT;
+			unsigned int lock_key;
+			int32_t ret;
+
+			/*
+			 * Keep interrupts locked while the transfer ends, so the ISR
+			 * never reports a TRB of the ended transfer as completed.
+			 */
+			lock_key = irq_lock();
+			ret = udc_dwc3_end_transfer(&priv->drv, ep_num, ep_dir);
+			if (ret >= 0) {
+				/* Pending completions refer to the buffers returned below */
+				priv->ep_gen[EP_PHY(epcfg->addr)]++;
+			}
+			irq_unlock(lock_key);
+			if (ret < 0) {
+				/* The controller may still access the buffers: keep them queued */
+				return -EIO;
+			}
+		}
+
 		buf = udc_buf_get_all(dev, epcfg->addr);
 		if (buf != NULL) {
 			udc_submit_ep_event(dev, buf, -ECONNABORTED);
@@ -2886,10 +2973,18 @@ static void udc_dwc3_thread_handler(void *const arg)
 			handle_setup_pkt(priv, &msg);
 			break;
 		case UDC_DWC3_MSG_DATA_IN:
-			handle_data_in(priv, msg.ep);
-			break;
 		case UDC_DWC3_MSG_DATA_OUT:
-			handle_data_out(priv, msg.ep, msg.recv_bytes);
+			/* Serialized with ep_enqueue and ep_dequeue */
+			udc_lock_internal(dev, K_FOREVER);
+			if (msg.gen != priv->ep_gen[EP_PHY(msg.ep)]) {
+				/* Reported before a dequeue ended the transfer */
+				LOG_DBG("ep 0x%02x: stale completion discarded", msg.ep);
+			} else if (msg.type == UDC_DWC3_MSG_DATA_IN) {
+				handle_data_in(priv, msg.ep);
+			} else {
+				handle_data_out(priv, msg.ep, msg.recv_bytes);
+			}
+			udc_unlock_internal(dev);
 			break;
 		}
 	}

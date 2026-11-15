@@ -1252,24 +1252,35 @@ static int uvc_request(struct usbd_class_data *const c_data, struct net_buf *con
 	struct uvc_buf_info bi = *(struct uvc_buf_info *)udc_get_buf_info(buf);
 	struct uvc_data *data = dev->data;
 
-	net_buf_unref(buf);
+	if (bi.udc.ep != uvc_get_bulk_in(dev)) {
+		LOG_WRN("Request on unknown endpoint 0x%02x", bi.udc.ep);
+		net_buf_unref(buf);
+		return 0;
+	}
 
-	if (bi.udc.ep == uvc_get_bulk_in(dev)) {
-		LOG_DBG("Request completed for USB buffer %p, video buffer %p", buf, bi.vbuf);
-		if (bi.vbuf != NULL) {
-			k_fifo_put(&data->fifo_out, bi.vbuf);
+	/*
+	 * A cancelled endpoint returns all its queued transfers chained as
+	 * fragments of the first one, so the video buffer completed by the
+	 * last transfer of a frame may be on any fragment.
+	 */
+	for (struct net_buf *frag = buf; frag != NULL; frag = frag->frags) {
+		struct uvc_buf_info *fbi = (struct uvc_buf_info *)udc_get_buf_info(frag);
+
+		LOG_DBG("Request completed for USB buffer %p, video buffer %p", frag, fbi->vbuf);
+		if (fbi->vbuf != NULL) {
+			k_fifo_put(&data->fifo_out, fbi->vbuf);
 
 			if (IS_ENABLED(CONFIG_POLL) && data->video_sig != NULL) {
 				LOG_DBG("Raising VIDEO_BUF_DONE signal");
 				k_poll_signal_raise(data->video_sig, VIDEO_BUF_DONE);
 			}
 		}
-
-		/* There is now one more net_buf buffer available */
-		uvc_flush_queue(dev);
-	} else {
-		LOG_WRN("Request on unknown endpoint 0x%02x", bi.udc.ep);
 	}
+
+	net_buf_unref(buf);
+
+	/* There are now more net_buf buffers available */
+	uvc_flush_queue(dev);
 
 	return 0;
 }
