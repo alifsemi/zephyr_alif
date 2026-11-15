@@ -15,6 +15,13 @@
 
 #define OSPI_PROGRAM_POLL_INTERVAL_US 100
 #define OSPI_ERASE_POLL_INTERVAL_US   1000
+#define OSPI_STATUS_POLL_INTERVAL_US  100
+#define OSPI_STATUS_TIMEOUT_MS        1
+
+/* Program timeout includes margin over IS25WX256/128 maximum timing. */
+#define OSPI_PROGRAM_TIMEOUT_MS      10
+/* Chip-erase timeout: 3 minutes. */
+#define OSPI_ERASE_TIMEOUT_MS        180000
 
 #define OSPI_MAX_RX_COUNT 256
 
@@ -25,26 +32,27 @@
 #define OSPI_FLASH_CMD_READ_STATUS_ERR (0x02)
 
 /* SPI Data Flash Commands */
-#define CMD_WRITE_VOL_CONFIG (0x81U)
-#define CMD_READ_DATA        (0x7CU)
-#define CMD_READ_STATUS      (0x05U)
-#define CMD_WRITE_ENABLE     (0x06U)
-#define CMD_PAGE_PROGRAM     (0x84U)
-#define CMD_READ_FLAG_STATUS (0x70U)
-#define CMD_SECTOR_ERASE     (0x21U)
-#define CMD_BULK_ERASE       (0xC7U)
-#define CMD_READ_DEV_ID      (0x9EU)
+#define CMD_WRITE_VOL_CONFIG    (0x81U)
+#define CMD_READ_DATA           (0x7CU)
+#define CMD_READ_STATUS         (0x05U)
+#define CMD_WRITE_ENABLE        (0x06U)
+#define CMD_PAGE_PROGRAM        (0x84U)
+#define CMD_READ_FLAG_STATUS    (0x70U)
+#define CMD_CLEAR_FLAG_STATUS   (0x50U)
+#define CMD_SECTOR_ERASE        (0x21U)
+#define CMD_BULK_ERASE          (0xC7U)
+#define CMD_READ_DEV_ID         (0x9EU)
 
 #define IO_MODE_ADDRESS    0x00000000U
 #define WAIT_CYCLE_ADDRESS 0x00000001U
 
-#define OCTAL_DDR_WO_DQS    (0xC7U)
-#define OCTAL_DDR           (0xE7U)
-#define DEFAULT_WAIT_CYCLES (0x10U)
+#define OCTAL_DDR_WO_DQS        (0xC7U)
+#define OCTAL_DDR               (0xE7U)
+#define DEFAULT_WAIT_CYCLES     (0x10U)
 
 /* Flash Driver Status */
-#define FLAG_STATUS_BUSY  0x80U
-#define FLAG_STATUS_ERROR 0x30U
+#define FLAG_STATUS_READY	0x80U
+#define FLAG_STATUS_ERROR	0x30U
 
 /* Flash Driver ISSI_Flags */
 #define FLASH_INIT  (0x01U)
@@ -66,8 +74,8 @@ typedef void (*irq_config_func_t)(const struct device *dev);
 /**Device Configruation */
 struct alif_flash_ospi_config {
 	irq_config_func_t irq_config;
-	uint32_t *regs;                        /* OSPI Reg */
-	uint32_t *aes_regs;                    /* AES Reg* */
+	uint32_t *regs;                       /* OSPI Reg */
+	uint32_t *aes_regs;                   /* AES Reg* */
 	struct flash_parameters flash_param;   /* Flash Parameter */
 	struct flash_pages_layout       flash_layout;
 	const struct pinctrl_dev_config *pcfg; /* PINCTRL */
