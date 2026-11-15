@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: Copyright Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  ARM memory-mapped Generic Timer frame (CNTBaseN).
+
+  Must be a child of an arm,armv7-timer-mem node. Provides the Zephyr
+  counter API for one physical compare/IRQ (CNTP_*).
+
+compatible: "arm,armv7-timer-mem-frame"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+
+  interrupts:
+    required: true
+
+  frame-number:
+    type: int
+    required: true
+    enum: [0, 1, 2, 3, 4, 5, 6, 7]
+    description: Timer frame index N in CNTBaseN (0-7).
