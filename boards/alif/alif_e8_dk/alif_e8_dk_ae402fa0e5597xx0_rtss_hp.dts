@@ -22,6 +22,7 @@
 		zephyr,console = &uart4;
 		zephyr,shell-uart = &uart4;
 		zephyr,uart-mcumgr = &uart4;
+		zephyr,display = &cdc200;
 	};
 
 	aliases {
@@ -32,6 +33,7 @@
 		rtsshemhu0s = &rtsshe_rtsshp_mhu0_s;
 		rtsshemhu1r = &rtsshp_rtsshe_mhu1_r;
 		rtsshemhu1s = &rtsshe_rtsshp_mhu1_s;
+		panel = &mw405;
 	};
 
 	leds {
@@ -95,5 +97,23 @@
 			write-block-size = <2>;
 		};
 		status = "disabled";
+	};
+};
+
+&mipi_dsi {
+	cam-disp-mux-gpios = <&gpio14 2 GPIO_ACTIVE_HIGH>;
+
+	mw405: mw405@0 {
+		status = "okay";
+		compatible = "focuslcds,mw405";
+		reg = <0>;
+		reset-gpios = <&lpgpio 5 GPIO_ACTIVE_HIGH>;
+		bl-gpios = <&gpio6 1 GPIO_ACTIVE_HIGH>;
+		data-lanes = <2>;
+		width = <480>;
+		height = <800>;
+		video-mode = "burst";
+		command-tx-mode = "high-speed";
+		pixel-format = <MIPI_DSI_PIXFMT_RGB888>;
 	};
 };

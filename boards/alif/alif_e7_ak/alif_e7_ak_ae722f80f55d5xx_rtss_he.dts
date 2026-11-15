@@ -20,9 +20,11 @@
 		zephyr,sram = &dtcm;
 		zephyr,console = &uart2;
 		zephyr,shell-uart = &uart2;
+		zephyr,display = &cdc200;
 	};
 
 	aliases {
+		panel = &mw405;
 		led0 = &aled0;
 		sw0 = &button0;
 		watchdog0 = &wdog0;
@@ -78,5 +80,21 @@
 			write-block-size = <2>;
 		};
 		status = "disabled";
+	};
+};
+
+&mipi_dsi {
+	mw405: mw405@0 {
+		status = "okay";
+		compatible = "focuslcds,mw405";
+		reg = <0>;
+		reset-gpios = <&lpgpio 5 GPIO_ACTIVE_HIGH>;
+		bl-gpios = <&gpio6 1 GPIO_ACTIVE_HIGH>;
+		data-lanes = <2>;
+		width = <480>;
+		height = <800>;
+		video-mode = "burst";
+		command-tx-mode = "high-speed";
+		pixel-format = <MIPI_DSI_PIXFMT_RGB888>;
 	};
 };
