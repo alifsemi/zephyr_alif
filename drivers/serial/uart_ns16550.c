@@ -1049,18 +1049,31 @@ static void uart_ns16550_poll_out(const struct device *dev,
 {
 	struct uart_ns16550_dev_data *data = dev->data;
 	const struct uart_ns16550_dev_config * const dev_cfg = dev->config;
-	k_spinlock_key_t key = k_spin_lock(&data->lock);
+	k_spinlock_key_t key;
 
-	while ((ns16550_inbyte(dev_cfg, LSR(dev)) & LSR_THRE) == 0) {
-	}
+	/*
+	 * Wait for the transmitter with interrupts enabled. Taking the lock
+	 * first held BASEPRI - every interrupt in the system - for up to one
+	 * character time on every byte after the first two of a polled write
+	 * (87 us at 115200 baud). The lock now covers only a re-check of THRE
+	 * and the write; a writer that slips in between costs this caller one
+	 * more wait.
+	 */
+	for (;;) {
+		while ((ns16550_inbyte(dev_cfg, LSR(dev)) & LSR_THRE) == 0) {
+		}
 
-	ns16550_outbyte(dev_cfg, THR(dev), c);
-
+		key = k_spin_lock(&data->lock);
+		if (ns16550_inbyte(dev_cfg, LSR(dev)) & LSR_THRE) {
+			ns16550_outbyte(dev_cfg, THR(dev), c);
 #ifdef CONFIG_UART_NS16550_WA_TX_FIFO_EMPTY_INTERRUPT
-	data->sw_tx_irq = 0; /**< clean up */
+			data->sw_tx_irq = 0; /**< clean up */
 #endif
-
-	k_spin_unlock(&data->lock, key);
+			k_spin_unlock(&data->lock, key);
+			return;
+		}
+		k_spin_unlock(&data->lock, key);
+	}
 }
 
 /**
