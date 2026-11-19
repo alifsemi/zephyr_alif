@@ -1,0 +1,24 @@
+/* Copyright (c) 2026 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * WLCSP120 (Package Type H) does not bond port 8.
+ * GPIO[0-7] and the LPGPIO pins stay. GPIO8 is FBGA-only.
+ *
+ * b1.dtsi uses GPIO8 for the ILI9488 reset and backlight.
+ * Remove those two properties first, then delete GPIO8.
+ */
+
+&ili9488 {
+	/delete-property/ reset-gpios;
+	/delete-property/ bl-gpios;
+};
+
+&gpio8 {
+	/delete-property/ pinctrl-0;
+	/delete-property/ pinctrl-names;
+};
+
+/delete-node/ &gpio8;
