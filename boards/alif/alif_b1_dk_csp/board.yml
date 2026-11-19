@@ -1,0 +1,6 @@
+board:
+  name: alif_b1_dk_csp
+  full_name: Alif B1 DK CSP HPA
+  vendor: alif
+  socs:
+  - name: ab1c1f4m51820hh0
