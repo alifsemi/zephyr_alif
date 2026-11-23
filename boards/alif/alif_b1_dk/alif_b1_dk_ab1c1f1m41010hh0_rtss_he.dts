@@ -7,6 +7,7 @@
 
 #include <alif/balletto/b1/ab1c1f1m41010hh0.dtsi>
 #include "../common/balletto-pinctrl.dtsi"
+#include "alif_b1_dk_ab1c1fxxxxxxxhh0_rtss_he.dts"
 #include "../common/balletto-sd-vsel.dtsi"
 
 / {

@@ -1,0 +1,50 @@
+/* Copyright (c) 2026 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * WLCSP120 (Package Type H) does not bond port 8.
+ * Include this after balletto-pinctrl.dtsi.
+ * Drop the DevKit groups that use P8_0..P8_7.
+ * Delete the references first, then the groups.
+ * UART2 stays the console. CAN on this board is can1 (P1_3..P1_5).
+ */
+
+&uart0 {
+	/delete-property/ pinctrl-0;
+	/delete-property/ pinctrl-1;
+	/delete-property/ pinctrl-names;
+};
+
+&uart3 {
+	/delete-property/ pinctrl-0;
+	/delete-property/ pinctrl-1;
+	/delete-property/ pinctrl-names;
+};
+
+&spi1 {
+	/delete-property/ pinctrl-0;
+	/delete-property/ pinctrl-1;
+	/delete-property/ pinctrl-names;
+};
+
+&can0 {
+	/delete-property/ pinctrl-0;
+	/delete-property/ pinctrl-names;
+};
+
+&lpcam {
+	/delete-property/ pinctrl-0;
+	/delete-property/ pinctrl-names;
+};
+
+/delete-node/ &pinctrl_uart0;
+/delete-node/ &pinctrl_uart0_sleep;
+/delete-node/ &pinctrl_uart3;
+/delete-node/ &pinctrl_uart3_sleep;
+/delete-node/ &pinctrl_spi1;
+/delete-node/ &pinctrl_spi1_sleep;
+/delete-node/ &pinctrl_can0;
+/delete-node/ &pinctrl_lpcam;
+/delete-node/ &pinctrl_gpio8;
