@@ -126,6 +126,9 @@ int isp_vsi_enqueue(struct isp_config_params *init_cfg,
 		struct video_buffer *buf);
 int isp_vsi_dequeue(struct isp_config_params *init_cfg,
 		struct video_buffer *buf);
+int isp_vsi_mi_irq(struct isp_config_params *init_cfg, uint32_t mi_mis);
+int isp_vsi_attach(struct isp_config_params *init_cfg,
+		struct video_buffer *buf);
 
 /**
  * @brief Set ISP module parameters on a live ISP port.
