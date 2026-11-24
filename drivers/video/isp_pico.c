@@ -153,48 +153,6 @@ static int find_format(struct video_format *fmt,
 	return -ENOTSUP;
 }
 
-static int isp_attach_buffer_to_hw(const struct device *dev, struct video_buffer *vbuf)
-{
-	uintptr_t regs = DEVICE_MMIO_GET(dev);
-	struct isp_data *data = dev->data;
-	uint32_t planes[3] = {};
-	size_t size_plane;
-	int num_planes;
-	int i;
-
-	struct channel_parameters *channel = &data->init_cfg.channel;
-
-	num_planes = fourcc_to_numplanes(channel->output_fmt.pixelformat);
-	if (num_planes == 0) {
-		LOG_ERR("Unsupported format!");
-		return -ENOTSUP;
-	}
-
-	for (i = 0; i < num_planes; i++) {
-		if (!i) {
-			planes[i] = POINTER_TO_UINT(local_to_global(vbuf->buffer));
-		} else {
-			size_plane = fourcc_to_plane_size(channel->output_fmt.pixelformat,
-					i - 1, vbuf->size);
-			if (size_plane == 0 || size_plane > vbuf->size) {
-				LOG_ERR("Unsupported format!");
-				return -ENOTSUP;
-			}
-
-			planes[i] = (planes[i-1] + size_plane);
-		}
-	}
-
-	LOG_DBG("planes: 0x%08x 0x%08x 0x%08x", planes[0], planes[1], planes[2]);
-	sys_write32(planes[0], regs + ISP_MI_MP_Y_BASE_AD_INIT);
-	sys_write32(planes[1], regs + ISP_MI_MP_CB_BASE_AD_INIT);
-	sys_write32(planes[2], regs + ISP_MI_MP_CR_BASE_AD_INIT);
-
-	sys_set_bits(regs + ISP_MI_INIT, MI_INIT_CFG_UPD);
-
-	return 0;
-}
-
 static void hw_disable_mi_interrupts(uintptr_t regs, uint32_t mask)
 {
 	sys_clear_bits(regs + ISP_MI_IMSC, mask);
@@ -206,12 +164,21 @@ static void isp_bottom_half(const struct device *dev)
 	const struct isp_config *config = dev->config;
 	struct isp_data *data = dev->data;
 	struct video_buffer *vbuf = NULL;
+	struct video_buffer done_buf;
 
 	int ret;
 
 	/* Do bottom half processing of all the modules at the end of frame. */
 	isp_vsi_bottom_half(dev, &data->init_cfg, data->mi_mis);
 
+	/* Let the library retire the buffer the hardware just finished. */
+	ret = isp_vsi_mi_irq(&data->init_cfg, MI_INTR_MP_FRAME_END);
+	if (ret) {
+		LOG_ERR("ISP library frame-end processing failed!");
+		data->is_streaming = false;
+		signal_status = VIDEO_BUF_ERROR;
+		goto isp_bottom_done;
+	}
 
 	vbuf = k_fifo_peek_head(&data->fifo_in);
 	if (vbuf == NULL) {
@@ -225,6 +192,25 @@ static void isp_bottom_half(const struct device *dev)
 		signal_status = VIDEO_BUF_ERROR;
 		data->is_streaming = false;
 		LOG_ERR("Unknown Video Buffer assigned to ISP.");
+		goto isp_bottom_done;
+	}
+
+	/* Get the finished buffer back from the library and cross-check it. */
+	ret = isp_vsi_dequeue(&data->init_cfg, &done_buf);
+	if (ret) {
+		LOG_ERR("Failed to dequeue finished buffer from ISP library!");
+		signal_status = VIDEO_BUF_ERROR;
+		data->is_streaming = false;
+		goto isp_bottom_done;
+	}
+
+	if (POINTER_TO_UINT(done_buf.buffer) !=
+	    POINTER_TO_UINT(local_to_global(vbuf->buffer))) {
+		LOG_ERR("Library returned unexpected buffer 0x%08x (expected 0x%08x)",
+			POINTER_TO_UINT(done_buf.buffer),
+			POINTER_TO_UINT(local_to_global(vbuf->buffer)));
+		signal_status = VIDEO_BUF_ERROR;
+		data->is_streaming = false;
 		goto isp_bottom_done;
 	}
 
@@ -251,7 +237,8 @@ static void isp_bottom_half(const struct device *dev)
 	}
 	data->curr_vid_buf = (uint32_t) vbuf->buffer;
 
-	ret = isp_attach_buffer_to_hw(dev, vbuf);
+	/* Queue to the library and have it load the buffer into the MI. */
+	ret = isp_vsi_attach(&data->init_cfg, vbuf);
 	if (ret) {
 		LOG_ERR("Failed to attach buffer to hardware!");
 		data->is_streaming = false;
