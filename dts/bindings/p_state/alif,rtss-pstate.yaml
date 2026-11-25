@@ -66,6 +66,13 @@ properties:
       Use ALIF_SCALED_FREQ_* constants from
       dt-bindings/misc/alif_aipm_common.h.
 
+      Must match cpu-clk-freq. RC 76.8/38.4 only with RC Active
+      (0-7). XO 38.4 only with XO LOW/HIGH (16-31). XO 76.8 may
+      use any XO value; the CPU clock stays 76.8 MHz. A PLL Mhz
+      enum (160, 80, 400, ...) may use RC Active or XO. EXTSYS
+      Hertz stays that PLL Mhz. clk-src=PLL with an RX/XO tap
+      still uses the tap divider. A mismatch fails at build time.
+
   dcdc-voltage:
     type: int
     description: |

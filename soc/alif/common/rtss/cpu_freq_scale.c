@@ -67,20 +67,71 @@ LOG_MODULE_REGISTER(cpu_freq_scale, CONFIG_SOC_LOG_LEVEL);
 	 (freq) == ALIF_CLOCK_FREQ_76_8_XO_MHZ ? 76800000U :			\
 	 (freq) == ALIF_CLOCK_FREQ_38_4_XO_MHZ ? 38400000U : 0U)
 
-#define ALIF_SCALED_CLK_HZ(freq)						\
-	((freq) == ALIF_SCALED_FREQ_RC_ACTIVE_76_8_MHZ ? 76800000U :	\
-	 (freq) == ALIF_SCALED_FREQ_RC_ACTIVE_38_4_MHZ ? 38400000U :	\
-	 (freq) == ALIF_SCALED_FREQ_RC_ACTIVE_19_2_MHZ ? 19200000U :	\
-	 (freq) == ALIF_SCALED_FREQ_RC_ACTIVE_9_6_MHZ  ? 9600000U :	\
-	 (freq) == ALIF_SCALED_FREQ_RC_ACTIVE_4_8_MHZ  ? 4800000U :	\
-	 (freq) == ALIF_SCALED_FREQ_RC_ACTIVE_2_4_MHZ  ? 2400000U :	\
-	 (freq) == ALIF_SCALED_FREQ_RC_ACTIVE_1_2_MHZ  ? 1200000U :	\
-	 (freq) == ALIF_SCALED_FREQ_RC_ACTIVE_0_6_MHZ  ? 600000U :	\
-	 (freq) == ALIF_SCALED_FREQ_XO_LOW_DIV_38_4_MHZ ? 38400000U :	\
-	 (freq) == ALIF_SCALED_FREQ_XO_LOW_DIV_19_2_MHZ ? 19200000U :	\
-	 (freq) == ALIF_SCALED_FREQ_XO_HIGH_DIV_38_4_MHZ ? 38400000U :	\
-	 (freq) == ALIF_SCALED_FREQ_XO_HIGH_DIV_19_2_MHZ ? 19200000U :	\
+#define ALIF_CPU_IS_RC(cpu)							\
+	((cpu) == ALIF_CLOCK_FREQ_76_8_RC_MHZ ||				\
+	 (cpu) == ALIF_CLOCK_FREQ_38_4_RC_MHZ)
+#define ALIF_CPU_IS_XO(cpu)							\
+	((cpu) == ALIF_CLOCK_FREQ_76_8_XO_MHZ ||				\
+	 (cpu) == ALIF_CLOCK_FREQ_38_4_XO_MHZ)
+#define ALIF_SCALED_IS_RC_ACTIVE(scaled)					\
+	((scaled) <= ALIF_SCALED_FREQ_RC_ACTIVE_0_6_MHZ)
+#define ALIF_SCALED_IS_XO(scaled)						\
+	((scaled) >= ALIF_SCALED_FREQ_XO_LOW_DIV_38_4_MHZ &&			\
+	 (scaled) <= ALIF_SCALED_FREQ_XO_HIGH_DIV_0_0375_MHZ)
+
+/* HFRC 1/X: RC Active 0..7 is a right-shift of the 76.8 or 38.4 tap. */
+#define ALIF_RC_SCALED_HZ(base, scaled)						\
+	(ALIF_SCALED_IS_RC_ACTIVE(scaled) ? ((base) >> (scaled)) : 0U)
+
+/* HFXO 1/Z: named CLKDIV outputs. RC/STANDBY/unknown → 0. */
+#define ALIF_XO_38_4_SCALED_HZ(scaled)						\
+	((scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_38_4_MHZ ? 38400000U :	\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_38_4_MHZ ? 38400000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_19_2_MHZ ? 19200000U :	\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_19_2_MHZ ? 19200000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_9_6_MHZ ? 9600000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_9_6_MHZ ? 9600000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_4_8_MHZ ? 4800000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_2_4_MHZ ? 2400000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_2_4_MHZ ? 2400000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_1_2_MHZ ? 1200000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_0_6_MHZ ? 600000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_0_6_MHZ ? 600000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_0_3_MHZ ? 300000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_0_3_MHZ ? 300000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_0_15_MHZ ? 150000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_0_0375_MHZ ? 37500U :		\
 	 0U)
+
+/*
+ * EXTSYS Hertz follows cpu-clk-freq, not clk-src.
+ * RC/XO taps: tap times that tap's divider. HFXO 76.8 stays 76.8.
+ * PLL MHz enums (160, 80, 400, ...): Hertz is that enum; scaled
+ * is not applied. clk-src=pll with an RC/XO tap still uses the
+ * tap divider.
+ */
+#define ALIF_RUN_CPU_HZ(cpu, scaled)						\
+	((cpu) == ALIF_CLOCK_FREQ_76_8_RC_MHZ ?					\
+		ALIF_RC_SCALED_HZ(76800000U, scaled) :				\
+	 (cpu) == ALIF_CLOCK_FREQ_38_4_RC_MHZ ?					\
+		ALIF_RC_SCALED_HZ(38400000U, scaled) :				\
+	 (cpu) == ALIF_CLOCK_FREQ_76_8_XO_MHZ ?					\
+		(ALIF_SCALED_IS_XO(scaled) ? 76800000U : 0U) :			\
+	 (cpu) == ALIF_CLOCK_FREQ_38_4_XO_MHZ ?					\
+		ALIF_XO_38_4_SCALED_HZ(scaled) :				\
+	 ALIF_CPU_CLK_HZ(cpu))
+
+#define ALIF_PSTATE_SCALE_OK(cpu, scaled)					\
+	(ALIF_CPU_IS_RC(cpu) ? ALIF_SCALED_IS_RC_ACTIVE(scaled) :		\
+	 ALIF_CPU_IS_XO(cpu) ? ALIF_SCALED_IS_XO(scaled) :			\
+	 (ALIF_SCALED_IS_RC_ACTIVE(scaled) || ALIF_SCALED_IS_XO(scaled)))
+
+BUILD_ASSERT(ALIF_PSTATE_SCALE_OK(DT_PROP(RUN_DEF, cpu_clk_freq),
+				  DT_PROP(RUN_DEF, scaled_clk_freq)),
+	     "aipm_run_default: cpu-clk-freq and scaled-clk-freq mismatch");
+BUILD_ASSERT(ALIF_RUN_CPU_HZ(DT_PROP(RUN_DEF, cpu_clk_freq),
+			     DT_PROP(RUN_DEF, scaled_clk_freq)) != 0,
+	     "aipm_run_default: unsupported EXTSYS Hertz");
 
 #if defined(CONFIG_SOC_FAMILY_BALLETTO)
 #define ALIF_CLKID_IS_CPU(id)							\
@@ -159,12 +210,9 @@ static const struct alif_clk_dep clk_deps[] = {
 		    (DT_PROP(node, scaled_clk_freq)),				\
 		    (DT_PROP(RUN_DEF, scaled_clk_freq)))
 
-/* HFRC/HFXO EXTSYS follows scaled-clk-freq. Enum 0 is 76.8 RC Active. */
 #define ALIF_PSTATE_CPU_HZ(node)						\
-	(((ALIF_PSTATE_RUN_CLK_SRC(node) != CLK_SRC_PLL) &&			\
-	  (ALIF_PSTATE_SCALED_FREQ(node) != 0)) ?				\
-	 ALIF_SCALED_CLK_HZ(ALIF_PSTATE_SCALED_FREQ(node)) :			\
-	 ALIF_CPU_CLK_HZ(DT_PROP(node, cpu_clk_freq)))
+	ALIF_RUN_CPU_HZ(DT_PROP(node, cpu_clk_freq),				\
+			ALIF_PSTATE_SCALED_FREQ(node))
 
 #define ALIF_PSTATE_PROFILE(node) {						\
 	.power_domains = DT_PROP(RUN_DEF, aipm_power_domains),			\
@@ -188,6 +236,12 @@ static const struct alif_clk_dep clk_deps[] = {
 }
 
 #define ALIF_DEFINE_PSTATE(node)						\
+	BUILD_ASSERT(ALIF_PSTATE_SCALE_OK(					\
+			     DT_PROP(node, cpu_clk_freq),			\
+			     ALIF_PSTATE_SCALED_FREQ(node)),			\
+		     "cpu-clk-freq and scaled-clk-freq family mismatch");	\
+	BUILD_ASSERT(ALIF_PSTATE_CPU_HZ(node) != 0,				\
+		     "unsupported cpu-clk-freq / scaled-clk-freq");		\
 	static const struct alif_pstate_cfg ALIF_PSTATE_CFG_SYM(node) = {	\
 		.profile = ALIF_PSTATE_PROFILE(node),				\
 		.cpu_hz = ALIF_PSTATE_CPU_HZ(node),				\
