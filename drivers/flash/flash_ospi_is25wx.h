@@ -10,18 +10,17 @@
 #include <zephyr/device.h>
 #include <ospi_hal.h>
 
-#define MAX_SEM_TIMEOUT              100
-#define XIP_LOCK_ACQUIRE_TIMEOUT_MS  1000
+/* Driver access timeout. */
+#define OSPI_LOCK_TIMEOUT_MS          1000
 
-#define OSPI_PROGRAM_POLL_INTERVAL_US 100
+/* Status polling intervals. */
+#define OSPI_POLL_INTERVAL_US         100
 #define OSPI_ERASE_POLL_INTERVAL_US   1000
-#define OSPI_STATUS_POLL_INTERVAL_US  100
-#define OSPI_STATUS_TIMEOUT_MS        1
 
-/* Program timeout includes margin over IS25WX256/128 maximum timing. */
-#define OSPI_PROGRAM_TIMEOUT_MS      10
-/* Chip-erase timeout: 3 minutes. */
-#define OSPI_ERASE_TIMEOUT_MS        180000
+/* Flash readiness and completion timeouts. */
+#define OSPI_READY_TIMEOUT_MS         1
+#define OSPI_PROGRAM_TIMEOUT_MS       10
+#define OSPI_ERASE_TIMEOUT_MS         180000
 
 #define OSPI_MAX_RX_COUNT 256
 

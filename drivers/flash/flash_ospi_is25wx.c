@@ -334,8 +334,8 @@ static int flash_ospi_prepare_write(const struct device *dev)
 	int ret;
 
 	dev_data->trans_conf.frame_size = OSPI_DFS_BITS_16;
-	ret = flash_ospi_poll_ready_status(dev, K_USEC(OSPI_STATUS_POLL_INTERVAL_US),
-					&val, OSPI_STATUS_TIMEOUT_MS);
+	ret = flash_ospi_poll_ready_status(dev, K_USEC(OSPI_POLL_INTERVAL_US),
+					&val, OSPI_READY_TIMEOUT_MS);
 	if (ret != 0) {
 		return ret;
 	}
@@ -346,8 +346,8 @@ static int flash_ospi_prepare_write(const struct device *dev)
 		return ret;
 	}
 
-	ret = flash_ospi_poll_ready_status(dev, K_USEC(OSPI_STATUS_POLL_INTERVAL_US),
-						&val, OSPI_STATUS_TIMEOUT_MS);
+	ret = flash_ospi_poll_ready_status(dev, K_USEC(OSPI_POLL_INTERVAL_US),
+						&val, OSPI_READY_TIMEOUT_MS);
 	if (ret != 0) {
 		return ret;
 	}
@@ -403,7 +403,7 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 	}
 
 	/* Lock */
-	ret = k_sem_take(&dev_data->sem, K_MSEC(MAX_SEM_TIMEOUT));
+	ret = k_sem_take(&dev_data->sem, K_MSEC(OSPI_LOCK_TIMEOUT_MS));
 	if (ret != 0) {
 		return ret;
 	}
@@ -411,8 +411,8 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 	/* Wait for flash readiness before accessing the array. */
 	dev_data->trans_conf.frame_size = OSPI_DFS_BITS_16;
 
-	ret = flash_ospi_poll_ready_status(dev, K_USEC(OSPI_STATUS_POLL_INTERVAL_US),
-					 &val, OSPI_STATUS_TIMEOUT_MS);
+	ret = flash_ospi_poll_ready_status(dev, K_USEC(OSPI_POLL_INTERVAL_US),
+					 &val, OSPI_READY_TIMEOUT_MS);
 	if (ret != 0) {
 		goto out;
 	}
@@ -636,7 +636,7 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		return -EINVAL;
 	}
 
-	ret = k_sem_take(&dev_data->sem, K_MSEC(MAX_SEM_TIMEOUT));
+	ret = k_sem_take(&dev_data->sem, K_MSEC(OSPI_LOCK_TIMEOUT_MS));
 	if (ret != 0) {
 		return ret;
 	}
@@ -746,7 +746,7 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		}
 
 		/* Wait for flash to complete programming */
-		ret = flash_ospi_wait_ready(dev, K_USEC(OSPI_PROGRAM_POLL_INTERVAL_US),
+		ret = flash_ospi_wait_ready(dev, K_USEC(OSPI_POLL_INTERVAL_US),
 					    OSPI_PROGRAM_TIMEOUT_MS);
 		if (ret != 0) {
 			goto out;
@@ -860,7 +860,7 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		}
 
 		/* Read status until device ready */
-		ret = flash_ospi_wait_ready(dev, K_USEC(OSPI_PROGRAM_POLL_INTERVAL_US),
+		ret = flash_ospi_wait_ready(dev, K_USEC(OSPI_POLL_INTERVAL_US),
 					    OSPI_PROGRAM_TIMEOUT_MS);
 
 		if (ret != 0) {
@@ -962,7 +962,7 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		}
 
 		/* Wait for flash to complete programming */
-		ret = flash_ospi_wait_ready(dev, K_USEC(OSPI_PROGRAM_POLL_INTERVAL_US),
+		ret = flash_ospi_wait_ready(dev, K_USEC(OSPI_POLL_INTERVAL_US),
 					    OSPI_PROGRAM_TIMEOUT_MS);
 		if (ret != 0) {
 			goto out;
@@ -1075,7 +1075,7 @@ static int flash_is25wx_ospi_erase(const struct device *dev, off_t addr, size_t 
 		return -EINVAL;
 	}
 
-	ret = k_sem_take(&dev_data->sem, K_MSEC(MAX_SEM_TIMEOUT));
+	ret = k_sem_take(&dev_data->sem, K_MSEC(OSPI_LOCK_TIMEOUT_MS));
 	if (ret != 0) {
 		return ret;
 	}
@@ -1453,7 +1453,7 @@ int flash_ospi_is25wx_xip_lock(const struct device *dev)
 		return -ENODEV;
 	}
 
-	ret = k_sem_take(&dev_data->sem, K_MSEC(XIP_LOCK_ACQUIRE_TIMEOUT_MS));
+	ret = k_sem_take(&dev_data->sem, K_MSEC(OSPI_LOCK_TIMEOUT_MS));
 	if (ret != 0) {
 		return ret;
 	}
