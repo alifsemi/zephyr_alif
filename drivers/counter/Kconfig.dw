@@ -9,3 +9,12 @@ config COUNTER_SNPS_DW
 	depends on DT_HAS_SNPS_DW_TIMERS_ENABLED
 	help
 	  Enable Timer driver
+
+config COUNTER_DW_DMA
+	bool "DesignWare timer DMA trigger"
+	depends on COUNTER_SNPS_DW && DMA
+	help
+	  Treat selected timer instances as DMA request sources: unmask the
+	  timeout, do not enable the CPU IRQ, and do not EOI. TIMER_INTR_MASK
+	  gates LPTIMERn_DMA_REQ. The caller EOI and re-arms. Mux (DMA
+	  instance, group, request) comes from the overlay dmas property.
