@@ -1,0 +1,63 @@
+/* Copyright (c) 2025 Alif Semiconductor
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * E1 APSS (GIC) interrupt mappings.
+ *
+ * TODO: complete the remaining E1 interrupt-driven peripherals using the
+ * Alif datasheet, then remove their status = "disabled" overrides from
+ * e3_e5_e7_apss.dtsi.
+ */
+#include <zephyr/dt-bindings/interrupt-controller/arm-gic.h>
+
+&uart0 {
+	interrupt-parent = <&gic>;
+	interrupts = <GIC_SPI 113 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+};
+
+&uart1 {
+	interrupt-parent = <&gic>;
+	interrupts = <GIC_SPI 114 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+};
+
+&uart2 {
+	interrupt-parent = <&gic>;
+	interrupts = <GIC_SPI 115 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+};
+
+&uart3 {
+	interrupt-parent = <&gic>;
+	interrupts = <GIC_SPI 116 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+};
+
+&uart4 {
+	interrupt-parent = <&gic>;
+	interrupts = <GIC_SPI 117 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+};
+
+&uart5 {
+	interrupt-parent = <&gic>;
+	interrupts = <GIC_SPI 118 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+};
+
+&se_apss_mhu0_r {
+	interrupts = <GIC_SPI 10 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+	interrupt-names = "rx";
+};
+
+&apss_se_mhu0_s {
+	interrupts = <GIC_SPI 9 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+	interrupt-names = "tx";
+};
+
+&se_apss_mhu1_r {
+	interrupts = <GIC_SPI 45 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+	interrupt-names = "rx";
+};
+
+&apss_se_mhu1_s {
+	interrupts = <GIC_SPI 44 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+	interrupt-names = "tx";
+};
