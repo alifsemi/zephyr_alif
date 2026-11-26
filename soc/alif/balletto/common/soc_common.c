@@ -7,6 +7,7 @@
 #include <soc_common.h>
 #include <zephyr/init.h>
 #include <zephyr/arch/cpu.h>
+#include <zephyr/cache.h>
 #include <zephyr/sys/reboot.h>
 
 #include <zephyr/logging/log.h>
@@ -203,6 +204,19 @@ static void soc_configure_he_dma_sel_lpspi(void)
 		     (sel_val << HE_DMA_SEL_LPSPI_Pos) & HE_DMA_SEL_LPSPI_Msk);
 }
 #endif /* lpspi0 with dmas */
+
+/**
+ * @brief Enable the CPU caches.
+ *        SystemInit() enables them from soc_reset_hook, but
+ *        z_arm_init_arch_hw_at_boot() (CONFIG_INIT_ARCH_HW_AT_BOOT, implied by
+ *        MCUboot) runs afterwards and disables them, and nothing else
+ *        enables them again.
+ */
+void soc_early_init_hook(void)
+{
+	sys_cache_instr_enable();
+	sys_cache_data_enable();
+}
 
 /**
  * @brief Perform common SoC initialization at boot

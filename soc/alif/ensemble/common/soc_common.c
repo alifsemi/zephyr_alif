@@ -5,6 +5,7 @@
 
 #include <zephyr/init.h>
 #include <zephyr/arch/cpu.h>
+#include <zephyr/cache.h>
 #include <soc_common.h>
 #include <zephyr/dt-bindings/dma/alif_dma_event_router.h>
 #if IS_ENABLED(CONFIG_PM)
@@ -300,6 +301,21 @@ static void soc_configure_he_dma_sel_lpspi(void)
 #endif /* spi4 with dmas - E-series */
 #endif /* CONFIG_SOC_SERIES_E1C */
 #endif /* CONFIG_RTSS_HE */
+
+#if defined(CONFIG_SOC_EARLY_INIT_HOOK)
+/**
+ * @brief Enable the CPU caches.
+ *        SystemInit() enables them from soc_reset_hook, but
+ *        z_arm_init_arch_hw_at_boot() (CONFIG_INIT_ARCH_HW_AT_BOOT, implied by
+ *        MCUboot) runs afterwards and disables them, and nothing else
+ *        enables them again.
+ */
+void soc_early_init_hook(void)
+{
+	sys_cache_instr_enable();
+	sys_cache_data_enable();
+}
+#endif /* CONFIG_SOC_EARLY_INIT_HOOK */
 
 /**
  * @brief Perform common SoC initialization at boot
