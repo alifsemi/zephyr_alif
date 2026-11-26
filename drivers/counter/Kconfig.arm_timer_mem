@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright Alif Semiconductor
+# SPDX-License-Identifier: Apache-2.0
+
+config COUNTER_ARM_TIMER_MEM
+	bool "ARM memory-mapped Generic Timer driver"
+	default y
+	depends on DT_HAS_ARM_ARMV7_TIMER_MEM_FRAME_ENABLED
+	depends on CLOCK_CONTROL
+	help
+	  Enable the Zephyr counter driver for ARM memory-mapped Generic
+	  Timer frames (CNTBaseN).
