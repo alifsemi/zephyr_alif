@@ -9,6 +9,8 @@ target_sources(app PRIVATE src/main.c)
 
 if (CONFIG_SOC_COMPATIBLE_NRF5340_CPUAPP)
 	target_sources(app PRIVATE src/feedback_nrf53.c)
+elseif (CONFIG_SOC_FAMILY_BALLETTO OR CONFIG_SOC_FAMILY_ENSEMBLE)
+	target_sources(app PRIVATE src/feedback_alif.c)
 else()
 	target_sources(app PRIVATE src/feedback_dummy.c)
 endif()

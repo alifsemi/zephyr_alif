@@ -111,6 +111,11 @@ extern   "C" {
 #define USB_EP_TRANSFER_DATA_COMPLETION                  2
 #define USB_EP_TRANSFER_STATUS_COMPLETION                3
 
+/* USB isochronous endpoint usage types */
+#define USB_EP_USAGE_TYPE_MASK       0x30U
+#define USB_EP_USAGE_TYPE_FEEDBACK   0x10U
+#define USB_EP_USAGE_TYPE_IMPLICIT   0x20U
+
 typedef enum udc_dwc3_device_state {
 	USB_DWC3_STATE_NOTATTACHED,
 	USB_DWC3_STATE_ATTACHED,
@@ -180,6 +185,7 @@ typedef struct udc_dwc3_ep {
 	uint32_t    unaligned_txed;
 	uint8_t     ep_interval;
 	uint32_t    interval_uframe;
+	uint8_t     isoc_feedback;
 } udc_dwc3_ep_t;
 
 /* USB setup packet structure */

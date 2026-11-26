@@ -522,6 +522,9 @@ typedef struct {     /*!< (@ 0x48200000) USB Structure */
 #define USB_DEPEVT_STREAMEVT                             0x06
 #define USB_DEPEVT_EPCMDCMPLT                            0x07
 
+/* XferNotReady status bit 3: the hardware transfer resource is still active. */
+#define USB_DEPEVT_STATUS_TRANSFER_ACTIVE                BIT(3)
+
 /* Control-only Status */
 #define USB_DEPEVT_STATUS_CONTROL_DATA                   1U
 #define USB_DEPEVT_STATUS_CONTROL_STATUS                 2U
