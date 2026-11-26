@@ -168,6 +168,101 @@ static int32_t read_status_reg(const struct device *dev, uint8_t command, uint8_
 	return ret;
 }
 
+/*
+ * Clear latched flash errors while the device is ready.
+ */
+static int flash_ospi_clear_flag_status(const struct device *dev)
+{
+	struct alif_flash_ospi_dev_data *dev_data = dev->data;
+	uint32_t cmd = CMD_CLEAR_FLAG_STATUS;
+	uint32_t event;
+	int ret, cs_ret;
+
+	dev_data->trans_conf.frame_size = OSPI_DFS_BITS_16;
+	dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_0_BITS;
+	dev_data->trans_conf.wait_cycles = 0;
+
+	ret = alif_hal_ospi_prepare_transfer(dev_data->ospi_handle, &dev_data->trans_conf);
+	if (ret != 0) {
+		ret = err_map_alif_hal_to_zephyr(ret);
+		return ret;
+	}
+
+	ret = set_cs_pin(dev_data->ospi_handle, SLAVE_ACTIVATE);
+	if (ret != 0) {
+		return ret;
+	}
+
+	k_event_clear(&dev_data->event_f, OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST);
+	ret = alif_hal_ospi_send(dev_data->ospi_handle, &cmd, 1U);
+	if (ret != 0) {
+		ret = err_map_alif_hal_to_zephyr(ret);
+		goto out;
+	}
+
+	event = flash_ospi_wait_event(dev,
+				    OSPI_EVENT_TRANSFER_COMPLETE | OSPI_EVENT_DATA_LOST);
+	if (!(event & OSPI_EVENT_TRANSFER_COMPLETE) || (event & OSPI_EVENT_DATA_LOST)) {
+		ret = -EIO;
+	}
+
+out:
+	cs_ret = set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
+	if (ret == 0) {
+		ret = cs_ret;
+	}
+	return ret;
+}
+
+/*
+ * Poll until ready or the elapsed-time limit expires.
+ */
+static int flash_ospi_poll_ready_status(const struct device *dev, k_timeout_t poll_delay,
+				      uint8_t *val, uint32_t timeout_ms)
+{
+	int64_t start = k_uptime_get();
+	int ret;
+
+	do {
+		ret = read_status_reg(dev, CMD_READ_FLAG_STATUS, val);
+		if (ret != 0) {
+			return ret;
+		}
+
+		if ((*val & FLAG_STATUS_READY) != 0U) {
+			return 0;
+		}
+
+		if (k_uptime_get() - start >= timeout_ms) {
+			return -ETIMEDOUT;
+		}
+
+		k_sleep(poll_delay);
+	} while (true);
+}
+
+/*
+ * Wait for completion and report program or erase errors.
+ */
+static int flash_ospi_wait_ready(const struct device *dev, k_timeout_t poll_delay,
+				 uint32_t timeout_ms)
+{
+	uint8_t val;
+	int ret;
+
+	ret = flash_ospi_poll_ready_status(dev, poll_delay, &val, timeout_ms);
+	if (ret != 0) {
+		return ret;
+	}
+
+	if ((val & FLAG_STATUS_ERROR) != 0U) {
+		LOG_ERR("Flash status error [0x%02x]", val);
+		return -EIO;
+	}
+
+	return 0;
+}
+
 static int set_write_enable(const struct device *dev, int dfs)
 {
 	uint32_t cmd_buf, event;
@@ -230,6 +325,45 @@ static int set_write_enable(const struct device *dev, int dfs)
 }
 
 /*
+ * Clear stale errors before enabling a new program or erase operation.
+ */
+static int flash_ospi_prepare_write(const struct device *dev)
+{
+	struct alif_flash_ospi_dev_data *dev_data = dev->data;
+	uint8_t val;
+	int ret;
+
+	dev_data->trans_conf.frame_size = OSPI_DFS_BITS_16;
+	ret = flash_ospi_poll_ready_status(dev, K_USEC(OSPI_POLL_INTERVAL_US),
+					&val, OSPI_READY_TIMEOUT_MS);
+	if (ret != 0) {
+		return ret;
+	}
+
+	/* Clear stale errors before checking for remaining error flags. */
+	ret = flash_ospi_clear_flag_status(dev);
+	if (ret != 0) {
+		return ret;
+	}
+
+	ret = flash_ospi_poll_ready_status(dev, K_USEC(OSPI_POLL_INTERVAL_US),
+						&val, OSPI_READY_TIMEOUT_MS);
+	if (ret != 0) {
+		return ret;
+	}
+
+	if ((val & FLAG_STATUS_ERROR) != 0U) {
+		return -EIO;
+	}
+
+	dev_data->trans_conf.addr_len = OSPI_ADDR_LENGTH_0_BITS;
+	dev_data->trans_conf.wait_cycles = 0;
+
+	ret = set_write_enable(dev, OSPI_DFS_BITS_16);
+	return ret;
+}
+
+/*
  * Octal DDR alignment requirements (from ISSI IS25WX datasheet):
  *
  * "When accessing cell array (Read/Program), minimum transferred data
@@ -254,6 +388,7 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 {
 	uint32_t cmd[4], data_cnt, event;
 	uint8_t *data_ptr;
+	uint8_t val;
 	int32_t ret;
 
 	const struct alif_flash_ospi_config *dev_cfg = dev->config;
@@ -268,9 +403,18 @@ static int flash_is25wx_ospi_read(const struct device *dev, off_t address, void 
 	}
 
 	/* Lock */
-	ret = k_sem_take(&dev_data->sem, K_MSEC(MAX_SEM_TIMEOUT));
+	ret = k_sem_take(&dev_data->sem, K_MSEC(OSPI_LOCK_TIMEOUT_MS));
 	if (ret != 0) {
 		return ret;
+	}
+
+	/* Wait for flash readiness before accessing the array. */
+	dev_data->trans_conf.frame_size = OSPI_DFS_BITS_16;
+
+	ret = flash_ospi_poll_ready_status(dev, K_USEC(OSPI_POLL_INTERVAL_US),
+					 &val, OSPI_READY_TIMEOUT_MS);
+	if (ret != 0) {
+		goto out;
 	}
 
 	LOG_DBG("read address %u length to read %d", (uint32_t) address, length);
@@ -476,9 +620,8 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 				 size_t length)
 {
 	const uint8_t *data_ptr;
-	int32_t status, ret;
+	int32_t ret;
 	uint32_t event, data_cnt, index, i, cnt, data_i = 0;
-	uint8_t val;
 
 	const struct alif_flash_ospi_config *dev_cfg = dev->config;
 	const struct flash_parameters *f_param = &dev_cfg->flash_param;
@@ -493,7 +636,7 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		return -EINVAL;
 	}
 
-	ret = k_sem_take(&dev_data->sem, K_MSEC(MAX_SEM_TIMEOUT));
+	ret = k_sem_take(&dev_data->sem, K_MSEC(OSPI_LOCK_TIMEOUT_MS));
 	if (ret != 0) {
 		return ret;
 	}
@@ -530,7 +673,7 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 			goto out;
 		}
 
-		ret = set_write_enable(dev, OSPI_DFS_BITS_16);
+		ret = flash_ospi_prepare_write(dev);
 		if (ret != 0) {
 			goto out;
 		}
@@ -603,20 +746,11 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		}
 
 		/* Wait for flash to complete programming */
-		do {
-			status = read_status_reg(dev, CMD_READ_FLAG_STATUS,
-						 &val);
-			if (status != 0) {
-				ret = status;
-				goto out;
-			}
-			if ((val & FLAG_STATUS_ERROR) != 0U) {
-				LOG_ERR("F-Write: Read Flash status [%d]",
-					 val);
-				ret = -EIO;
-				goto out;
-			}
-		} while ((val & FLAG_STATUS_BUSY) == 0);
+		ret = flash_ospi_wait_ready(dev, K_USEC(OSPI_POLL_INTERVAL_US),
+					    OSPI_PROGRAM_TIMEOUT_MS);
+		if (ret != 0) {
+			goto out;
+		}
 
 		address += prefix;
 		data_ptr += prefix;
@@ -639,7 +773,7 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 			break;
 		}
 
-		ret = set_write_enable(dev, OSPI_DFS_BITS_16);
+		ret = flash_ospi_prepare_write(dev);
 		if (ret != 0) {
 			break;
 		}
@@ -726,19 +860,8 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		}
 
 		/* Read status until device ready */
-		do {
-			status = read_status_reg(dev, CMD_READ_FLAG_STATUS, &val);
-			if (status != 0) {
-				ret = status;
-				break;
-			}
-
-			if ((val & FLAG_STATUS_ERROR) != 0U) {
-				LOG_ERR("F-Write: Read Flash status [%d]", val);
-				ret = -EIO;
-				break;
-			}
-		} while ((val & FLAG_STATUS_BUSY) == 0);
+		ret = flash_ospi_wait_ready(dev, K_USEC(OSPI_POLL_INTERVAL_US),
+					    OSPI_PROGRAM_TIMEOUT_MS);
 
 		if (ret != 0) {
 			break;
@@ -765,7 +888,7 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 			goto out;
 		}
 
-		ret = set_write_enable(dev, OSPI_DFS_BITS_16);
+		ret = flash_ospi_prepare_write(dev);
 		if (ret != 0) {
 			goto out;
 		}
@@ -839,18 +962,11 @@ static int flash_is25wx_ospi_write(const struct device *dev, off_t address, cons
 		}
 
 		/* Wait for flash to complete programming */
-		do {
-			status = read_status_reg(dev, CMD_READ_FLAG_STATUS, &val);
-			if (status != 0) {
-				ret = status;
-				goto out;
-			}
-			if ((val & FLAG_STATUS_ERROR) != 0U) {
-				LOG_ERR("F-Write: Read Flash status [%d]", val);
-				ret = -EIO;
-				goto out;
-			}
-		} while ((val & FLAG_STATUS_BUSY) == 0);
+		ret = flash_ospi_wait_ready(dev, K_USEC(OSPI_POLL_INTERVAL_US),
+					    OSPI_PROGRAM_TIMEOUT_MS);
+		if (ret != 0) {
+			goto out;
+		}
 	}
 
 out:
@@ -937,7 +1053,6 @@ static int erase_sector(const struct device *dev, uint32_t addr)
 static int flash_is25wx_ospi_erase(const struct device *dev, off_t addr, size_t len)
 {
 	int ret;
-	uint8_t val;
 	uint32_t event;
 
 	struct alif_flash_ospi_dev_data *dev_data = dev->data;
@@ -960,7 +1075,7 @@ static int flash_is25wx_ospi_erase(const struct device *dev, off_t addr, size_t 
 		return -EINVAL;
 	}
 
-	ret = k_sem_take(&dev_data->sem, K_NO_WAIT);
+	ret = k_sem_take(&dev_data->sem, K_MSEC(OSPI_LOCK_TIMEOUT_MS));
 	if (ret != 0) {
 		return ret;
 	}
@@ -977,7 +1092,7 @@ static int flash_is25wx_ospi_erase(const struct device *dev, off_t addr, size_t 
 			break;
 		}
 
-		ret = set_write_enable(dev, OSPI_DFS_BITS_16);
+		ret = flash_ospi_prepare_write(dev);
 		if (ret != 0) {
 			break;
 		}
@@ -1013,23 +1128,8 @@ static int flash_is25wx_ospi_erase(const struct device *dev, off_t addr, size_t 
 			break;
 		}
 
-		do {
-			ret = read_status_reg(dev, CMD_READ_FLAG_STATUS, &val);
-			if (ret != 0) {
-				break;
-			}
-
-			/* Check Program and Erase bits */
-			if ((val & FLAG_STATUS_ERROR) != 0U) {
-				LOG_ERR("F-Erase: Read Flash status [%d]", val);
-				ret = set_cs_pin(dev_data->ospi_handle, SLAVE_DE_ACTIVATE);
-				if (ret != 0) {
-					break;
-				}
-				ret = -EIO;
-				break;
-			}
-		} while ((val & FLAG_STATUS_BUSY) == 0);
+		ret = flash_ospi_wait_ready(dev, K_USEC(OSPI_ERASE_POLL_INTERVAL_US),
+					    OSPI_ERASE_TIMEOUT_MS);
 
 		if (ret != 0) {
 			break;
@@ -1339,6 +1439,51 @@ static int flash_is25wx_ospi_pm_action(const struct device *dev,
 	return ret;
 }
 #endif /* CONFIG_PM_DEVICE */
+
+
+/*
+ * Acquire exclusive access and enable memory-mapped XiP reads at runtime.
+ */
+int flash_ospi_is25wx_xip_lock(const struct device *dev)
+{
+	struct alif_flash_ospi_dev_data *dev_data = dev->data;
+	int ret;
+
+	if ((dev_data->ISSI_Flags & FLASH_POWER) == 0U) {
+		return -ENODEV;
+	}
+
+	ret = k_sem_take(&dev_data->sem, K_MSEC(OSPI_LOCK_TIMEOUT_MS));
+	if (ret != 0) {
+		return ret;
+	}
+
+	ret = alif_hal_ospi_xip_enable(dev_data->ospi_handle);
+	if (ret != 0) {
+		ret = err_map_alif_hal_to_zephyr(ret);
+		k_sem_give(&dev_data->sem);
+	}
+
+	return ret;
+}
+
+/*
+ * Disable memory-mapped XiP access at runtime and release exclusive access.
+ */
+int flash_ospi_is25wx_xip_unlock(const struct device *dev)
+{
+	struct alif_flash_ospi_dev_data *dev_data = dev->data;
+	int ret;
+
+	ret = alif_hal_ospi_xip_disable(dev_data->ospi_handle);
+	if (ret != 0) {
+		ret = err_map_alif_hal_to_zephyr(ret);
+		return ret;
+	}
+
+	k_sem_give(&dev_data->sem);
+	return 0;
+}
 
 #ifdef CONFIG_FLASH_PAGE_LAYOUT
 void flash_alif_ospi_page_layout(const struct device *dev,
