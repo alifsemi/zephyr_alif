@@ -24,6 +24,7 @@ extern "C" {
 #define JPEG_SWREG14_OFFSET     0x038
 #define JPEG_SWREG18_OFFSET     0x048
 #define JPEG_SWREG20_OFFSET     0x050
+#define JPEG_SWREG37_OFFSET     0x094
 #define JPEG_SWREG38_OFFSET     0x098
 #define JPEG_SWREG45_OFFSET     0x0B4
 #define JPEG_SWREG80_OFFSET     0x140
@@ -90,8 +91,15 @@ extern "C" {
 /* SWREG18 - JPEG Mode */
 #define JPEG_MODE_POS                   24
 #define JPEG_MODE_MASK                  BIT(JPEG_MODE_POS)
-#define JPEG_SLICE_MODE                 BIT(25)
 #define JPEG_MODE_420                   0
+#define JPEG_SLICE_MODE                 BIT(25)
+#define JPEG_RST_INT_POS                16
+#define JPEG_RST_INT_MASK               (0xFF << 16)
+#define JPEG_RST_INT(x)                 ((x << JPEG_RST_INT_POS) & JPEG_RST_INT_MASK)
+#define JPEG_RST_MARKER_MASK            (0xFFFF << 0)
+#define JPEG_RST_MARKER(x)              ((x) & JPEG_RST_MARKER_MASK)
+#define JPEG_RST_MARKER_0               0xFFD0
+#define JPEG_RST_MARKER_CYCLE_SIZE      8
 
 /* SWREG20 - Row Length and Format */
 #define JPEG_ROWLENGTH_POS              17
@@ -103,7 +111,13 @@ extern "C" {
 #define JPEG_CODING_MODE_MASK           (0x3UL << JPEG_CODING_MODE_POS)
 #define JPEG_CODING_MODE_420            0
 
-/* SWREG38 - Input Format and Rotation */
+/* SWREG37 - Chroma Base Offset */
+#define JPEG_CHROMA_BASE_OFFSET_POS     0
+#define JPEG_CHROMA_BASE_OFFSET_MASK    (0xFUL << JPEG_CHROMA_BASE_OFFSET_POS)
+
+/* SWREG38 - Input Format, Rotation, and Luma Base Offset */
+#define JPEG_LUMA_BASE_OFFSET_POS       20
+#define JPEG_LUMA_BASE_OFFSET_MASK      (0xFUL << JPEG_LUMA_BASE_OFFSET_POS)
 #define JPEG_INPUT_FORMAT_POS           28
 #define JPEG_INPUT_FORMAT_MASK          (0xFUL << JPEG_INPUT_FORMAT_POS)
 #define JPEG_INPUT_FORMAT_YUV420SP      1
