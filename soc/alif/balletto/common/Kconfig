@@ -135,4 +135,126 @@ config LPTIMER1_EXT_CLK_FREQ
 	  Provide lptimer 1 clock frequency for external clock source.
 endif # COUNTER_SNPS_DW
 
+menuconfig ALIF_PM_LINK_LAYER
+	bool "Alif link layer configuration"
+	default y if HAS_ALIF_BLE_802154_LINK_LAYER
+	depends on HAS_ALIF_POWER_MANAGER
+	depends on HAS_ALIF_SE_SERVICES
+
+if ALIF_PM_LINK_LAYER
+
+config ALIF_PM_LE_CODED_PHY_500
+	int "LE Coded PHY 500 Kbps selection"
+	default 0
+
+config ALIF_PM_DFT_SLAVE_MD
+	int "Default MD bit used by slave when sending a data packet on a BLE connection"
+	default 0
+
+config ALIF_PM_CH_CLASS_REP_INTV
+	int "Channel classification reporting interval (in ms) (0 if not used)"
+	default 0
+
+# config ALIF_PM_BD_ADDRESS
+# 	string "Local Bd Address"
+# 	default {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB}
+
+config ALIF_PM_ACTIVITY_MOVE_CONFIG
+	int "Activity Move Configuration (enables/disables activity move for BLE connections and BT (e)SCO links)"
+	default 1
+
+config ALIF_PM_SCAN_EXT_ADV
+	int "Enable/disable scanning for extended advertising PDUs"
+	default 1
+
+config ALIF_PM_RSSI_HIGH_THR
+	int "RSSI high threshold"
+	default -40
+
+config ALIF_PM_RSSI_LOW_THR
+	int "RSSI low threshold"
+	default -60
+
+config ALIF_PM_SLEEP_ENABLE
+	int "Enable sleep mode"
+	default 1
+
+config ALIF_PM_EXT_WAKEUP_ENABLE
+	int "Enable External Wakeup"
+	default 1
+
+config ALIF_PM_ENABLE_CH_ASSESSMENT
+	int "Enable/disable channel assessment for BLE"
+	default 1
+
+config ALIF_PM_RSSI_INTERF_THR
+	int "RSSI interference threshold"
+	default -70
+
+config ALIF_EXT_WAKEUP_TIME
+	int "External wakeup time needed (us)"
+	default 25000
+
+config ALIF_OSC_WAKEUP_TIME
+	int "Oscilator enable wakeup time needed (us)"
+	default 25000
+
+config ALIF_RM_WAKEUP_TIME
+	int "Radio wakeup time needed (us)"
+	default 625
+
+config ALIF_EXT_WARMBOOT_WAKEUP_TIME
+	int "Warmboot wakeup time. Time limit between light / deep sleep (us)"
+	default 32000
+
+config ALIF_MAX_SLEEP_CLOCK_DRIFT
+	int "Max drift of sleep clock in PPM"
+	default 250
+	range 20 65535
+
+config ALIF_MAX_ACTIVE_CLOCK_DRIFT
+	int "Max drift of active clock in PPM"
+	default 250
+	range 20 255
+
+config ALIF_HPA_MODE
+	bool "High Power Amplifier for Alif controller"
+
+config ALIF_TX_MAX
+	int
+	default 10 if ALIF_HPA_MODE
+	default 4
+
+config ALIF_TX_MIN
+	int
+	default -25 if ALIF_HPA_MODE
+	default -31
+
+config ALIF_TX_MAX_POWER
+	int "Set maximum allowed TX power in dBm"
+	default ALIF_TX_MAX
+	range ALIF_TX_MIN ALIF_TX_MAX
+
+config ALIF_EDGE_LIMIT_ON
+	bool # "Limit power on edge channels"
+	default y if (BOARD_ALIF_B1_DK && !ALIF_HPA_MODE)
+	default n
+
+config ALIF_EDGE_LOW_CHANNEL
+	int "First channel the edge limit is not applied"
+	default 0
+
+config ALIF_EDGE_HIGH_CHANNEL
+	int "Last channel the edge limit is not applied"
+	default 37 if (BOARD_ALIF_B1_DK && !ALIF_HPA_MODE)
+	default 39
+
+config ALIF_EDGE_CHANNEL_POWER_LIMIT
+	int "Set maximum allowed TX power in dBm for edges"
+	default 2 if (BOARD_ALIF_B1_DK && !ALIF_HPA_MODE)
+	default ALIF_TX_MAX_POWER
+	range ALIF_TX_MIN ALIF_TX_MAX_POWER
+
+endif # ALIF_PM_LINK_LAYER
+
 rsource "../../common/Kconfig"
