@@ -9,10 +9,12 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/clock_control/clock_control_alif.h>
 #include <zephyr/drivers/timer/system_timer.h>
+#include <zephyr/init.h>
 #include <zephyr/irq.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device.h>
+#include <zephyr/sys/util.h>
 #include <se_service.h>
 
 #if defined(CONFIG_SOC_FAMILY_BALLETTO)
@@ -65,20 +67,71 @@ LOG_MODULE_REGISTER(cpu_freq_scale, CONFIG_SOC_LOG_LEVEL);
 	 (freq) == ALIF_CLOCK_FREQ_76_8_XO_MHZ ? 76800000U :			\
 	 (freq) == ALIF_CLOCK_FREQ_38_4_XO_MHZ ? 38400000U : 0U)
 
-#define ALIF_SCALED_CLK_HZ(freq)						\
-	((freq) == ALIF_SCALED_FREQ_RC_ACTIVE_76_8_MHZ ? 76800000U :	\
-	 (freq) == ALIF_SCALED_FREQ_RC_ACTIVE_38_4_MHZ ? 38400000U :	\
-	 (freq) == ALIF_SCALED_FREQ_RC_ACTIVE_19_2_MHZ ? 19200000U :	\
-	 (freq) == ALIF_SCALED_FREQ_RC_ACTIVE_9_6_MHZ  ? 9600000U :	\
-	 (freq) == ALIF_SCALED_FREQ_RC_ACTIVE_4_8_MHZ  ? 4800000U :	\
-	 (freq) == ALIF_SCALED_FREQ_RC_ACTIVE_2_4_MHZ  ? 2400000U :	\
-	 (freq) == ALIF_SCALED_FREQ_RC_ACTIVE_1_2_MHZ  ? 1200000U :	\
-	 (freq) == ALIF_SCALED_FREQ_RC_ACTIVE_0_6_MHZ  ? 600000U :	\
-	 (freq) == ALIF_SCALED_FREQ_XO_LOW_DIV_38_4_MHZ ? 38400000U :	\
-	 (freq) == ALIF_SCALED_FREQ_XO_LOW_DIV_19_2_MHZ ? 19200000U :	\
-	 (freq) == ALIF_SCALED_FREQ_XO_HIGH_DIV_38_4_MHZ ? 38400000U :	\
-	 (freq) == ALIF_SCALED_FREQ_XO_HIGH_DIV_19_2_MHZ ? 19200000U :	\
+#define ALIF_CPU_IS_RC(cpu)							\
+	((cpu) == ALIF_CLOCK_FREQ_76_8_RC_MHZ ||				\
+	 (cpu) == ALIF_CLOCK_FREQ_38_4_RC_MHZ)
+#define ALIF_CPU_IS_XO(cpu)							\
+	((cpu) == ALIF_CLOCK_FREQ_76_8_XO_MHZ ||				\
+	 (cpu) == ALIF_CLOCK_FREQ_38_4_XO_MHZ)
+#define ALIF_SCALED_IS_RC_ACTIVE(scaled)					\
+	((scaled) <= ALIF_SCALED_FREQ_RC_ACTIVE_0_6_MHZ)
+#define ALIF_SCALED_IS_XO(scaled)						\
+	((scaled) >= ALIF_SCALED_FREQ_XO_LOW_DIV_38_4_MHZ &&			\
+	 (scaled) <= ALIF_SCALED_FREQ_XO_HIGH_DIV_0_0375_MHZ)
+
+/* HFRC 1/X: RC Active 0..7 is a right-shift of the 76.8 or 38.4 tap. */
+#define ALIF_RC_SCALED_HZ(base, scaled)						\
+	(ALIF_SCALED_IS_RC_ACTIVE(scaled) ? ((base) >> (scaled)) : 0U)
+
+/* HFXO 1/Z: named CLKDIV outputs. RC/STANDBY/unknown → 0. */
+#define ALIF_XO_38_4_SCALED_HZ(scaled)						\
+	((scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_38_4_MHZ ? 38400000U :	\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_38_4_MHZ ? 38400000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_19_2_MHZ ? 19200000U :	\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_19_2_MHZ ? 19200000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_9_6_MHZ ? 9600000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_9_6_MHZ ? 9600000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_4_8_MHZ ? 4800000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_2_4_MHZ ? 2400000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_2_4_MHZ ? 2400000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_1_2_MHZ ? 1200000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_0_6_MHZ ? 600000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_0_6_MHZ ? 600000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_0_3_MHZ ? 300000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_LOW_DIV_0_3_MHZ ? 300000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_0_15_MHZ ? 150000U :		\
+	 (scaled) == ALIF_SCALED_FREQ_XO_HIGH_DIV_0_0375_MHZ ? 37500U :		\
 	 0U)
+
+/*
+ * EXTSYS Hertz follows cpu-clk-freq, not clk-src.
+ * RC/XO taps: tap times that tap's divider. HFXO 76.8 stays 76.8.
+ * PLL MHz enums (160, 80, 400, ...): Hertz is that enum; scaled
+ * is not applied. clk-src=pll with an RC/XO tap still uses the
+ * tap divider.
+ */
+#define ALIF_RUN_CPU_HZ(cpu, scaled)						\
+	((cpu) == ALIF_CLOCK_FREQ_76_8_RC_MHZ ?					\
+		ALIF_RC_SCALED_HZ(76800000U, scaled) :				\
+	 (cpu) == ALIF_CLOCK_FREQ_38_4_RC_MHZ ?					\
+		ALIF_RC_SCALED_HZ(38400000U, scaled) :				\
+	 (cpu) == ALIF_CLOCK_FREQ_76_8_XO_MHZ ?					\
+		(ALIF_SCALED_IS_XO(scaled) ? 76800000U : 0U) :			\
+	 (cpu) == ALIF_CLOCK_FREQ_38_4_XO_MHZ ?					\
+		ALIF_XO_38_4_SCALED_HZ(scaled) :				\
+	 ALIF_CPU_CLK_HZ(cpu))
+
+#define ALIF_PSTATE_SCALE_OK(cpu, scaled)					\
+	(ALIF_CPU_IS_RC(cpu) ? ALIF_SCALED_IS_RC_ACTIVE(scaled) :		\
+	 ALIF_CPU_IS_XO(cpu) ? ALIF_SCALED_IS_XO(scaled) :			\
+	 (ALIF_SCALED_IS_RC_ACTIVE(scaled) || ALIF_SCALED_IS_XO(scaled)))
+
+BUILD_ASSERT(ALIF_PSTATE_SCALE_OK(DT_PROP(RUN_DEF, cpu_clk_freq),
+				  DT_PROP(RUN_DEF, scaled_clk_freq)),
+	     "aipm_run_default: cpu-clk-freq and scaled-clk-freq mismatch");
+BUILD_ASSERT(ALIF_RUN_CPU_HZ(DT_PROP(RUN_DEF, cpu_clk_freq),
+			     DT_PROP(RUN_DEF, scaled_clk_freq)) != 0,
+	     "aipm_run_default: unsupported EXTSYS Hertz");
 
 #if defined(CONFIG_SOC_FAMILY_BALLETTO)
 #define ALIF_CLKID_IS_CPU(id)							\
@@ -157,12 +210,9 @@ static const struct alif_clk_dep clk_deps[] = {
 		    (DT_PROP(node, scaled_clk_freq)),				\
 		    (DT_PROP(RUN_DEF, scaled_clk_freq)))
 
-/* HFRC/HFXO EXTSYS follows scaled-clk-freq. Enum 0 is 76.8 RC Active. */
 #define ALIF_PSTATE_CPU_HZ(node)						\
-	(((ALIF_PSTATE_RUN_CLK_SRC(node) != CLK_SRC_PLL) &&			\
-	  (ALIF_PSTATE_SCALED_FREQ(node) != 0)) ?				\
-	 ALIF_SCALED_CLK_HZ(ALIF_PSTATE_SCALED_FREQ(node)) :			\
-	 ALIF_CPU_CLK_HZ(DT_PROP(node, cpu_clk_freq)))
+	ALIF_RUN_CPU_HZ(DT_PROP(node, cpu_clk_freq),				\
+			ALIF_PSTATE_SCALED_FREQ(node))
 
 #define ALIF_PSTATE_PROFILE(node) {						\
 	.power_domains = DT_PROP(RUN_DEF, aipm_power_domains),			\
@@ -186,6 +236,12 @@ static const struct alif_clk_dep clk_deps[] = {
 }
 
 #define ALIF_DEFINE_PSTATE(node)						\
+	BUILD_ASSERT(ALIF_PSTATE_SCALE_OK(					\
+			     DT_PROP(node, cpu_clk_freq),			\
+			     ALIF_PSTATE_SCALED_FREQ(node)),			\
+		     "cpu-clk-freq and scaled-clk-freq family mismatch");	\
+	BUILD_ASSERT(ALIF_PSTATE_CPU_HZ(node) != 0,				\
+		     "unsupported cpu-clk-freq / scaled-clk-freq");		\
 	static const struct alif_pstate_cfg ALIF_PSTATE_CFG_SYM(node) = {	\
 		.profile = ALIF_PSTATE_PROFILE(node),				\
 		.cpu_hz = ALIF_PSTATE_CPU_HZ(node),				\
@@ -325,3 +381,56 @@ int cpu_freq_pstate_set(const struct pstate *state)
 		buses_move);
 	return 0;
 }
+
+/*
+ * Boot AIPM (PRE_KERNEL_1, SE_SERVICE_INIT_PRIORITY) applies
+ * aipm_run_default but does not drop the clock-driver Hertz cache
+ * or retune SysTick. Console UART (SERIAL_INIT_PRIORITY) programs
+ * baud from get_rate(); SysTick starts PRE_KERNEL_2 at the Kconfig
+ * Hertz. SYS_INIT prio is UTIL_INC(...) so it stays after SE / the
+ * timer when those values change (e.g. B1). Kconfig cannot do + 1.
+ */
+static uint32_t boot_cpu_hz(void)
+{
+	uint32_t hz = 0;
+	int err;
+
+#if defined(CONFIG_RTSS_HP)
+	err = se_service_clock_setting_get(CLOCK_SETTING_EXTSYS0_FREQ, &hz);
+#else
+	err = se_service_clock_setting_get(CLOCK_SETTING_EXTSYS1_FREQ, &hz);
+#endif
+	if ((err == 0) && (hz != 0U)) {
+		return hz;
+	}
+
+	return ALIF_PSTATE_CPU_HZ(RUN_DEF);
+}
+
+static int alif_cpu_freq_boot_cache(void)
+{
+	alif_clock_sys_clk_cache_invalidate();
+	return 0;
+}
+
+static int alif_cpu_freq_boot_systick(void)
+{
+	uint32_t hz = boot_cpu_hz();
+
+	if (hz != 0U) {
+		z_sys_clock_hw_cycles_per_sec_update(hz);
+	}
+
+	return 0;
+}
+
+#if defined(CONFIG_SERIAL_INIT_PRIORITY)
+BUILD_ASSERT(UTIL_INC(CONFIG_SE_SERVICE_INIT_PRIORITY) <
+	     CONFIG_SERIAL_INIT_PRIORITY,
+	     "boot cache SYS_INIT must run before UART get_rate()");
+#endif
+
+SYS_INIT(alif_cpu_freq_boot_cache, PRE_KERNEL_1,
+	 UTIL_INC(CONFIG_SE_SERVICE_INIT_PRIORITY));
+SYS_INIT(alif_cpu_freq_boot_systick, PRE_KERNEL_2,
+	 UTIL_INC(CONFIG_SYSTEM_CLOCK_INIT_PRIORITY));
